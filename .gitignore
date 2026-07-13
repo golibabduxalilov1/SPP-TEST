@@ -1,0 +1,5 @@
+.claude
+.env
+backend/.env
+frontend/.chrome-test-profile/
+frontend/dev-dist/

@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>frontend</title>
+    <script>
+      // Dev self-heal: a leftover PWA service worker breaks Vite module loading.
+      // On localhost, unregister any SW + drop its caches, then reload once.
+      (function () {
+        var h = location.hostname;
+        if ((h === "localhost" || h === "127.0.0.1") && "serviceWorker" in navigator) {
+          navigator.serviceWorker.getRegistrations().then(function (regs) {
+            if (!regs.length) return;
+            Promise.all(regs.map(function (r) { return r.unregister(); })).then(function () {
+              if (window.caches) caches.keys().then(function (ks) { ks.forEach(function (k) { caches.delete(k); }); });
+              if (!sessionStorage.getItem("__sw_cleared")) {
+                sessionStorage.setItem("__sw_cleared", "1");
+                location.reload();
+              }
+            });
+          });
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

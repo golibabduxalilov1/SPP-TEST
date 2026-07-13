@@ -1,0 +1,172 @@
+/* ============================================================================
+   SPP DESIGN TOKENS — premium wood workshop system
+   Warm walnut/oak ground, cream surfaces, walnut primary, bronze-gold accent.
+   Single source of truth for the whole app. Variable NAMES are kept stable so
+   every component inherits the new palette without edits.
+   ============================================================================ */
+
+@theme {
+  /* ---- Typography (self-hosted, variable, no external CDN) ---------------- */
+  --font-sans: "Geist Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: "Bricolage Grotesque Variable", "Geist Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono Variable", ui-monospace, "SF Mono", "JetBrains Mono", monospace;
+
+  /* ---- Motion ------------------------------------------------------------ */
+  --ease-reveal: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-hover: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* ---- Neutral scale: warm walnut (wood-* / bark-*) ---------------------- */
+  --color-wood-50: #FBF7F1;
+  --color-wood-100: #F3EBDF;
+  --color-wood-200: #E6D8C4;
+  --color-wood-300: #D4C0A3;
+  --color-wood-400: #B89B78;
+  --color-wood-500: #96754F;
+  --color-wood-600: #6B4423;
+  --color-wood-700: #4A3223;
+  --color-wood-800: #362417;
+  --color-wood-900: #241810;
+
+  --color-bark-50: #FBF7F1;
+  --color-bark-100: #F3EBDF;
+  --color-bark-200: #E6D8C4;
+  --color-bark-700: #4A3223;
+  --color-bark-800: #2E1F14;
+  --color-bark-900: #1F150D;
+
+  /* ---- Secondary wood tones: oak (forest-* / olive-*) -------------------- */
+  --color-forest-50: #F1EDE4;
+  --color-forest-100: #E4D8C4;
+  --color-forest-200: #D3BE9A;
+  --color-forest-500: #8B6544;
+  --color-forest-600: #7A5636;
+  --color-forest-700: #654428;
+  --color-forest-800: #4E351F;
+  --color-forest-900: #3A2717;
+
+  --color-olive-50: #F1EDE4;
+  --color-olive-200: #D3BE9A;
+  --color-olive-600: #7A5636;
+  --color-olive-800: #4E351F;
+
+  /* ---- Accent scale: bronze-gold (brass-*) ------------------------------- */
+  --color-brass-50: #F8F1E4;
+  --color-brass-100: #EFE0C7;
+  --color-brass-300: #D8BB86;
+  --color-brass-500: #B08D57;
+  --color-brass-600: #9A7847;
+  --color-brass-700: #7E6038;
+
+  /* ---- Brand aliases used by the app: walnut ----------------------------- */
+  --color-accent-50: #F7F0E7;
+  --color-accent-100: #EBD9C4;
+  --color-accent-200: #DABF9D;
+  --color-accent-300: #C29F70;
+  --color-accent-400: #9E7645;
+  --color-accent-500: #7A5230;
+  --color-accent-600: #6B4423;
+  --color-accent-700: #563620;
+  --color-accent-800: #43291A;
+  --color-accent-900: #331F14;
+
+  /* ---- Signal: bronze-gold (secondary accent) ---------------------------- */
+  --color-signal-50: #F8F1E4;
+  --color-signal-100: #EFE0C7;
+  --color-signal-300: #E0C89A;
+  --color-signal-400: #C6A473;
+  --color-signal-500: #B08D57;
+  --color-signal-600: #9A7847;
+  --color-signal-700: #7E6038;
+
+  /* ---- Semantic status: distinct standard hues (theme-independent) ------- */
+  --color-status-green: #2F7D45;
+  --color-status-green-bg: #DDF0E1;
+  --color-status-yellow: #B45309;
+  --color-status-yellow-bg: #FBEBCF;
+  --color-status-red: #C0392B;
+  --color-status-red-bg: #F7E1DD;
+  --color-status-gray: #6B5D52;
+  --color-status-gray-bg: #EFE7DA;
+  --color-status-blue: #2563EB;
+  --color-status-blue-bg: #DCE6FB;
+  --color-status-orange: #D2691E;
+  --color-status-orange-bg: #FBE7D2;
+}
+
+:root {
+  color-scheme: light;
+
+  /* ---- Ground & surfaces ------------------------------------------------- */
+  --canvas: #F7F1E8;
+  --canvas-tint: #F1E7D8;
+  --surface: #FDFBF7;
+  --surface-2: #F7F1E8;
+  --surface-raised: #FFFFFF;
+  --surface-muted: #F1E7D8;
+
+  /* ---- Ink --------------------------------------------------------------- */
+  --ink: #2A2220;
+  --ink-soft: #6B5D52;
+  --ink-faint: #A89B8C;
+
+  /* ---- Borders / rings --------------------------------------------------- */
+  --border: #E4D8C4;
+  --border-subtle: #EFE7DA;
+  --border-strong: #D8C6AC;
+  --ring-signal: #6B4423;
+
+  /* ---- Accent semantic: walnut ------------------------------------------- */
+  --accent: #6B4423;
+  --accent-bright: #855A34;
+  --accent-strong: #4A3223;
+  --accent-soft: #F1E7D8;
+  --accent-contrast: #FFFFFF;
+  --accent-2: #B08D57;
+  --accent-2-bright: #C6A473;
+  --accent-2-soft: #F6EDDD;
+
+  /* CTA aliases (kept for components that reference them) ------------------ */
+  --cta-bg: #6B4423;
+  --cta-text: #FFFFFF;
+  --cta-hover: #4A3223;
+
+  /* ---- Radii (compact, modern — inputs/buttons 8-10, cards 12-16) -------- */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --radius-xl: 14px;
+
+  /* ---- Shadows: warm walnut base, soft ----------------------------------- */
+  --shadow-color: 74 50 35;
+  --shadow-color-accent: 74 50 35;
+  --shadow-sm:
+    0 1px 2px rgb(var(--shadow-color) / 0.07),
+    0 1px 3px rgb(var(--shadow-color) / 0.05);
+  --shadow-md:
+    0 1px 2px rgb(var(--shadow-color) / 0.05),
+    0 8px 20px rgb(var(--shadow-color) / 0.08),
+    0 2px 6px rgb(var(--shadow-color) / 0.05);
+  --shadow-lg:
+    0 4px 10px rgb(var(--shadow-color) / 0.07),
+    0 16px 36px rgb(var(--shadow-color) / 0.12),
+    0 30px 60px rgb(var(--shadow-color) / 0.12);
+  --shadow-accent:
+    0 2px 8px rgb(var(--shadow-color-accent) / 0.18),
+    0 1px 2px rgb(var(--shadow-color-accent) / 0.12);
+
+  /* ---- Wood-grain texture (line-art SVG, opacity set per surface) -------- */
+  --wood-grain-url: url("/wood-grain.svg");
+  --wood-grain-dense-url: url("/wood-grain-dense.svg");
+  --wood-grain-main-url: url("/wood-grain-main.svg");
+
+  /* ---- Z-index scale ----------------------------------------------------- */
+  --z-canvas: 0;
+  --z-base: 10;
+  --z-raised: 20;
+  --z-sticky: 40;
+  --z-overlay: 100;
+  --z-modal: 1000;
+  --z-tutorial: 1100;
+  --z-cursor: 9999;
+}

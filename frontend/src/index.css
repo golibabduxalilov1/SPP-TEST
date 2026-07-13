@@ -1,0 +1,317 @@
+@import "tailwindcss";
+@import "./design/tokens.css";
+
+/* ============================================================================
+   BASE
+   ============================================================================ */
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-width: 320px;
+  background: var(--canvas);
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-feature-settings: "cv11", "ss01";
+  color: var(--ink);
+  /* Warm wood mesh: lighter at centre, deeper walnut/bronze toward the edges */
+  background:
+    radial-gradient(75rem 60rem at 50% 28%, #FCF8F2 0%, rgba(252, 248, 242, 0) 58%),
+    radial-gradient(46rem 38rem at 4% -8%, rgb(107 68 35 / 0.055), transparent 60%),
+    radial-gradient(42rem 34rem at 100% 2%, rgb(176 141 87 / 0.06), transparent 60%),
+    radial-gradient(50rem 42rem at 96% 104%, rgb(74 50 35 / 0.05), transparent 62%),
+    linear-gradient(165deg, #EFE3D2 0%, #F5EEE2 48%, #EADCC7 100%);
+  background-attachment: fixed;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Wood-grain fibre texture — confined to the primary <main> content area only
+   (never navbar/sidebar/footer/modals/forms). Opacity is pre-baked into the
+   SVG itself so this stays a plain background layer: it paints behind main's
+   children automatically, and background-attachment: local makes it scroll
+   and tile continuously with content of any length, never cutting off. */
+main {
+  background-image: var(--wood-grain-main-url);
+  background-repeat: repeat;
+  background-size: 240px 480px;
+  background-attachment: local;
+}
+
+a {
+  color: inherit;
+  text-underline-offset: 3px;
+}
+
+button,
+a,
+input,
+select,
+textarea {
+  touch-action: manipulation;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+input,
+select,
+textarea {
+  min-height: 44px;
+}
+
+input[type="checkbox"],
+input[type="radio"] {
+  min-height: 18px;
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+h1, h2, h3 {
+  font-family: var(--font-display);
+  letter-spacing: -0.02em;
+}
+
+::selection {
+  background: rgb(107 68 35 / 0.18);
+  color: var(--ink);
+}
+
+::placeholder {
+  color: var(--ink-faint);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ============================================================================
+   UTILITIES
+   ============================================================================ */
+@layer utilities {
+
+  /* Deep walnut shell for sidebars / auth / terminal chrome */
+  .brand-shell {
+    position: relative;
+    background:
+      radial-gradient(30rem 22rem at 12% -10%, rgb(176 141 87 / 0.22), transparent 60%),
+      radial-gradient(26rem 20rem at 100% 108%, rgb(107 68 35 / 0.30), transparent 62%),
+      linear-gradient(175deg, #3F2A1B 0%, #2A1D14 58%, #180F09 100%);
+  }
+  /* Wood-grain fibres over the dark shell */
+  .brand-shell::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background-image: var(--wood-grain-dense-url);
+    background-size: 200px 360px;
+    opacity: 0.06;
+    mix-blend-mode: screen;
+  }
+
+  /* Frosted glass panel */
+  .glass-panel {
+    background: color-mix(in srgb, var(--surface) 72%, transparent);
+    backdrop-filter: blur(20px) saturate(150%);
+    -webkit-backdrop-filter: blur(20px) saturate(150%);
+    border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  }
+
+  .glass-dark {
+    background: color-mix(in srgb, #2A1D14 64%, transparent);
+    backdrop-filter: blur(20px) saturate(140%);
+    -webkit-backdrop-filter: blur(20px) saturate(140%);
+    border: 1px solid rgb(255 255 255 / 0.08);
+  }
+
+  .surface-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow-md);
+  }
+
+  /* Fine technical grid grain — replaces flat panels with subtle texture */
+  .surface-noise {
+    background-image:
+      linear-gradient(rgb(74 50 35 / 0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgb(74 50 35 / 0.03) 1px, transparent 1px);
+    background-size: 26px 26px;
+  }
+
+  /* Wood-grain fibre accent for cards / panels — clipped to one edge so it
+     decorates without overpowering the content (8-12% opacity). */
+  .wood-panel {
+    position: relative;
+    isolation: isolate;
+  }
+  .wood-panel::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    border-radius: inherit;
+    background-image: var(--wood-grain-dense-url);
+    background-size: 200px 360px;
+    opacity: 0.09;
+    -webkit-mask-image: linear-gradient(105deg, #000 0%, rgba(0, 0, 0, 0.35) 34%, transparent 62%);
+    mask-image: linear-gradient(105deg, #000 0%, rgba(0, 0, 0, 0.35) 34%, transparent 62%);
+  }
+  /* Decorative knot mark for empty / loading states */
+  .wood-knot {
+    background-image: url("/wood-knot.svg");
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: contain;
+  }
+
+  .grain {
+    position: relative;
+  }
+  .grain::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    opacity: 0.4;
+    mix-blend-mode: overlay;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
+  }
+  .grain > * {
+    position: relative;
+    z-index: 1;
+  }
+
+  /* Organic decorative blobs (auth / hero moments) */
+  .blob-decor {
+    position: absolute;
+    border-radius: 42% 58% 63% 37% / 45% 41% 59% 55%;
+    filter: blur(6px);
+    pointer-events: none;
+  }
+  .blob-decor-amber { background: radial-gradient(circle at 35% 30%, rgb(176 141 87 / 0.40), transparent 70%); }
+  .blob-decor-orange { background: radial-gradient(circle at 60% 65%, rgb(107 68 35 / 0.34), transparent 70%); }
+  .blob-accent { background: radial-gradient(circle at 35% 30%, rgb(176 141 87 / 0.40), transparent 70%); }
+  .blob-signal { background: radial-gradient(circle at 60% 65%, rgb(107 68 35 / 0.34), transparent 70%); }
+
+  .elevation-sm { box-shadow: var(--shadow-sm); }
+  .elevation-md { box-shadow: var(--shadow-md); }
+  .elevation-lg { box-shadow: var(--shadow-lg); }
+  .elevation-accent { box-shadow: var(--shadow-accent); }
+
+  .page-title {
+    font-family: var(--font-display);
+    letter-spacing: -0.03em;
+  }
+
+  .text-gradient {
+    background: linear-gradient(100deg, var(--accent-strong) 0%, var(--accent) 48%, var(--accent-2) 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .tabular {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum";
+  }
+
+  .focus-ring { outline: none; }
+  .focus-ring:focus-visible {
+    box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent);
+  }
+
+  .field-shake { animation: field-shake 150ms ease-in-out; }
+  @keyframes field-shake {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-3px); }
+    75% { transform: translateX(3px); }
+  }
+
+  .check-pop { animation: check-pop 200ms cubic-bezier(0.34, 1.56, 0.64, 1); }
+  @keyframes check-pop {
+    0% { transform: scale(0); opacity: 0; }
+    100% { transform: scale(1); opacity: 1; }
+  }
+
+  .scrollbar-thin::-webkit-scrollbar { width: 8px; height: 8px; }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: rgb(107 68 35 / 0.35);
+    border-radius: 9999px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover { background-color: rgb(74 50 35 / 0.60); }
+  .scrollbar-thin::-webkit-scrollbar-track { background-color: transparent; }
+
+  /* Tutorial spotlight: box-shadow cutout dims the page, accent ring highlights the target */
+  .tutorial-spotlight {
+    animation: tutorial-pulse 2.4s ease-in-out infinite;
+    transition:
+      top 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+      left 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+      width 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+      height 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  @keyframes tutorial-pulse {
+    0%, 100% {
+      box-shadow:
+        0 0 0 9999px rgb(var(--shadow-color-accent) / 0.68),
+        0 0 0 3px var(--accent-2),
+        0 0 22px 3px rgb(var(--shadow-color-accent) / 0.32);
+    }
+    50% {
+      box-shadow:
+        0 0 0 9999px rgb(var(--shadow-color-accent) / 0.68),
+        0 0 0 3px var(--accent-2-bright),
+        0 0 30px 7px rgb(var(--shadow-color-accent) / 0.46);
+    }
+  }
+  .tutorial-tooltip {
+    transition:
+      opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+      top 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+      left 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+}
+
+/* Glove-friendly terminal targets */
+.terminal-tap {
+  min-height: 64px;
+  font-size: 1.125rem;
+}
+
+/* Custom cursor active → hide native pointer on desktop only */
+body.cursor-none,
+body.cursor-none * {
+  cursor: none !important;
+}
+
+/* ============================================================================
+   REDUCED MOTION — kill 3D/scroll choreography, keep plain fades
+   ============================================================================ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}
