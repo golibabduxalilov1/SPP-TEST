@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import { ArrowLeft, Plus, Printer } from "lucide-react";
+import { ArrowLeft, Plus, Printer, QrCode } from "lucide-react";
 import toast from "react-hot-toast";
+import { QRCodeCanvas } from "qrcode.react";
 import { adminApi } from "../../api/client";
 import { Card, CardBody, CardHeader } from "../../components/ui/Card";
 import { Table, Thead, Tbody, Th, Tr, Td, EmptyRow } from "../../components/ui/Table";
@@ -28,6 +29,7 @@ export default function OrderDetail() {
   const [selected, setSelected] = useState([]);
   const [loading, setLoading] = useState(true);
   const [partModalOpen, setPartModalOpen] = useState(false);
+  const [qrModalOpen, setQrModalOpen] = useState(false);
 
   async function load() {
     const { data } = await adminApi.get(`/orders/${id}/`);
@@ -64,7 +66,14 @@ export default function OrderDetail() {
         eyebrow="Buyurtma"
         title={`#${order.order_no}`}
         subtitle={order.product_name}
-        actions={<StatusBadge status={order.status} />}
+        actions={
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="secondary" onClick={() => setQrModalOpen(true)}>
+              <QrCode size={15} /> QR kodni ko'rish
+            </Button>
+            <StatusBadge status={order.status} />
+          </div>
+        }
       />
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -149,7 +158,56 @@ export default function OrderDetail() {
         onClose={() => setPartModalOpen(false)}
         onCreated={load}
       />
+      <OrderQRModal open={qrModalOpen} onClose={() => setQrModalOpen(false)} order={order} />
     </div>
+  );
+}
+
+function OrderQRModal({ open, onClose, order }) {
+  const canvasRef = useRef(null);
+
+  function download() {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const link = document.createElement("a");
+    link.href = canvas.toDataURL("image/png");
+    link.download = `buyurtma-${order.order_no}-qr.png`;
+    link.click();
+  }
+
+  function print() {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const dataUrl = canvas.toDataURL("image/png");
+    const win = window.open("", "_blank", "width=420,height=520");
+    if (!win) return;
+    win.document.write(
+      `<title>QR — ${order.order_no}</title>` +
+        `<body style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;margin:0;font-family:sans-serif;gap:12px;">` +
+        `<img src="${dataUrl}" style="width:280px;height:280px" onload="window.print()" />` +
+        `<p style="font-size:14px;color:#444;">#${order.order_no}</p>` +
+        `</body>`
+    );
+    win.document.close();
+  }
+
+  return (
+    <Modal open={open} onClose={onClose} title={`Buyurtma QR kodi — #${order.order_no}`} size="sm">
+      <div className="flex flex-col items-center gap-4">
+        <div className="rounded-2xl border border-[var(--border-subtle)] bg-white p-4">
+          <QRCodeCanvas ref={canvasRef} value={order.qr_token} size={200} level="M" />
+        </div>
+        <p className="text-xs text-[var(--ink-faint)] font-mono">{order.qr_token}</p>
+        <div className="flex w-full gap-2">
+          <Button className="flex-1" variant="secondary" onClick={download}>
+            Yuklab olish
+          </Button>
+          <Button className="flex-1" onClick={print}>
+            <Printer size={15} /> Chop etish
+          </Button>
+        </div>
+      </div>
+    </Modal>
   );
 }
 

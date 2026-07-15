@@ -18,9 +18,9 @@ export default function NotFound() {
         initial={{ opacity: 0, y: 24 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
-        className="glass-panel relative rounded-3xl px-10 py-9 text-center elevation-lg"
+        className="glass-panel relative rounded-3xl px-6 py-8 text-center elevation-lg sm:px-10 sm:py-9"
       >
-        <p className="page-title text-7xl font-bold leading-none text-gradient">404</p>
+        <p className="page-title text-6xl font-bold leading-none text-gradient sm:text-7xl">404</p>
         <p className="mb-6 mt-3 text-[var(--ink-soft)]">Sahifa topilmadi</p>
         <Button as={Link} to="/" magnetic={false}>
           <ArrowLeft size={16} /> Bosh sahifaga qaytish

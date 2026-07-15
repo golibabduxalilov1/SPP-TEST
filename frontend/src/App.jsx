@@ -17,6 +17,7 @@ import Conflicts from "./pages/admin/Conflicts";
 import WarehousePage from "./pages/admin/Warehouse";
 import Reports from "./pages/admin/Reports";
 import Labels from "./pages/admin/Labels";
+import Integrations from "./pages/admin/Integrations";
 import NotFound from "./pages/NotFound";
 
 import TerminalLogin from "./pages/terminal/TerminalLogin";
@@ -24,6 +25,7 @@ import TerminalLayout from "./layouts/TerminalLayout";
 import TerminalScan from "./pages/terminal/TerminalScan";
 import TerminalPackaging from "./pages/terminal/TerminalPackaging";
 import TerminalWarehouse from "./pages/terminal/TerminalWarehouse";
+import TerminalOrderStatus from "./pages/terminal/TerminalOrderStatus";
 
 export default function App() {
   const init = useAuthStore((s) => s.init);
@@ -73,6 +75,7 @@ export default function App() {
           <Route path="conflicts" element={<Conflicts />} />
           <Route path="warehouse" element={<WarehousePage />} />
           <Route path="reports" element={<Reports />} />
+          <Route path="integrations" element={<Integrations />} />
         </Route>
 
         <Route path="/terminal/login" element={<TerminalLogin />} />
@@ -81,6 +84,7 @@ export default function App() {
           <Route path="scan" element={<TerminalScan />} />
           <Route path="packaging" element={<TerminalPackaging />} />
           <Route path="warehouse" element={<TerminalWarehouse />} />
+          <Route path="order-status" element={<TerminalOrderStatus />} />
         </Route>
 
         <Route path="*" element={<NotFound />} />

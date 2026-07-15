@@ -116,7 +116,7 @@ export default function Dashboard() {
         </div>
       </section>
 
-      <div data-tutorial="dashboard-stats" className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+      <div data-tutorial="dashboard-stats" className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
         <StatCard
           index={0}
           icon={Gauge}
@@ -142,7 +142,7 @@ export default function Dashboard() {
         {machines.length === 0 ? (
           <EmptyState title="Aktiv stanok topilmadi" />
         ) : (
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
             {machines.map((m) => (
               <MachineCard key={m.id} machine={m} from={filters.from} to={filters.to} interval={filters.interval} indicator={filters.indicator} />
             ))}

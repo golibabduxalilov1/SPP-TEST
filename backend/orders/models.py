@@ -16,6 +16,11 @@ def generate_qr_token():
     return "SPP-P-" + "".join(random.choices(chars, k=6))
 
 
+def generate_order_qr_token():
+    chars = string.ascii_uppercase + string.digits
+    return "SPP-O-" + "".join(random.choices(chars, k=6))
+
+
 class Order(models.Model):
     class Status(models.TextChoices):
         DRAFT = "draft", "Yangi"
@@ -42,6 +47,7 @@ class Order(models.Model):
     deadline = models.DateField(null=True, blank=True)
     priority = models.CharField(max_length=16, choices=Priority.choices, default=Priority.NORMAL)
     status = models.CharField(max_length=24, choices=Status.choices, default=Status.DRAFT)
+    qr_token = models.CharField(max_length=64, unique=True, default=generate_order_qr_token, blank=True)
 
     # Odoo-ready fields (section 11.3)
     external_system = models.CharField(max_length=32, blank=True)

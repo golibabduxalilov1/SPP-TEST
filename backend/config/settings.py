@@ -15,6 +15,15 @@ SECRET_KEY = os.getenv("SECRET_KEY", "django-insecure-dev-key-change-in-producti
 DEBUG = os.getenv("DEBUG", "1") == "1"
 ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "*").split(",")
 
+# Odoo Cloud (SaaS) — read-only sale.order polling integration (section 11.3).
+# SPP never writes to Odoo; only search_read calls are made against sale.order.
+ODOO_URL = os.getenv("ODOO_URL", "")
+ODOO_DB = os.getenv("ODOO_DB", "")
+ODOO_API_KEY = os.getenv("ODOO_API_KEY", "")
+ODOO_USERNAME = os.getenv("ODOO_USERNAME", "")
+ODOO_SYNC_ENABLED = os.getenv("ODOO_SYNC_ENABLED", "True") == "True"
+ODOO_SYNC_INTERVAL_SECONDS = int(os.getenv("ODOO_SYNC_INTERVAL_SECONDS", "30"))
+
 INSTALLED_APPS = [
     "django.contrib.admin",
     "django.contrib.auth",
@@ -33,6 +42,7 @@ INSTALLED_APPS = [
     "packaging",
     "warehouse",
     "core",
+    "integrations.odoo",
 ]
 
 MIDDLEWARE = [

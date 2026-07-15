@@ -5,11 +5,12 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from accounts.permissions import IsMasterOrAbove
-from core.audit import log_action
+from accounts.permissions import CanScanOrderStatus, IsMasterOrAbove
+from core.audit import log_action, push_live_log
 from manufacturing.models import Machine, Operation, Workstation
-from orders.models import Part, PartRoute
+from orders.models import Order, Part, PartRoute
 from orders.serializers import PartSerializer
+from orders.status_flow import next_allowed_statuses
 
 from .models import Conflict, OfflineSyncBatch, ScanEvent
 from .serializers import ConflictSerializer, ScanEventSerializer, SingleScanSerializer, SyncBatchSerializer
@@ -218,3 +219,68 @@ class ConflictViewSet(viewsets.ReadOnlyModelViewSet):
         conflict.save()
         log_action(request.user, "conflict.resolve", "Conflict", conflict.id, {"resolution": resolution})
         return Response(ConflictSerializer(conflict).data)
+
+
+def _order_qr_summary(order):
+    return {
+        "id": order.id,
+        "order_no": order.order_no,
+        "product_name": order.product_name,
+        "customer_name": order.customer_name,
+        "status": order.status,
+        "status_display": order.get_status_display(),
+        "next_statuses": [
+            {"value": value, "label": Order.Status(value).label}
+            for value in next_allowed_statuses(order.status)
+        ],
+    }
+
+
+class OrderQRLookupView(APIView):
+    """Looks up an Order by its QR token and reports the status transitions a
+    QR scan may perform next (see orders.status_flow.next_allowed_statuses)."""
+
+    permission_classes = [IsAuthenticated, CanScanOrderStatus]
+
+    def post(self, request):
+        qr_token = request.data.get("qr_token", "").strip()
+        order = Order.objects.filter(qr_token=qr_token).first()
+        if not order:
+            return Response({"detail": "Bu QR kodga mos buyurtma topilmadi"}, status=status.HTTP_404_NOT_FOUND)
+        return Response(_order_qr_summary(order))
+
+
+class OrderQRStatusUpdateView(APIView):
+    """Applies a QR-scanned status transition to an Order and records it in
+    the audit log, same as every other status-changing action in the app."""
+
+    permission_classes = [IsAuthenticated, CanScanOrderStatus]
+
+    def post(self, request):
+        qr_token = request.data.get("qr_token", "").strip()
+        new_status = request.data.get("new_status")
+        order = Order.objects.filter(qr_token=qr_token).first()
+        if not order:
+            return Response({"detail": "Bu QR kodga mos buyurtma topilmadi"}, status=status.HTTP_404_NOT_FOUND)
+
+        allowed = {choice for choice in next_allowed_statuses(order.status)}
+        if new_status not in allowed:
+            return Response(
+                {"detail": "Bu statusga o'tish mumkin emas"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        old_status = order.status
+        order.status = new_status
+        order.save(update_fields=["status", "updated_at"])
+
+        log_action(
+            request.user, "order.qr_status_update", "Order", order.id,
+            {"from": old_status, "to": new_status, "method": "qr_scan"},
+        )
+        push_live_log(
+            "order",
+            f"QR skan: #{order.order_no} statusi {order.get_status_display()} ga o'tkazildi",
+            {"order_id": order.id, "from": old_status, "to": new_status},
+        )
+        return Response(_order_qr_summary(order))

@@ -23,7 +23,7 @@ export default function Modal({ open, onClose, title, children, footer, size = "
     <AnimatePresence>
       {open && (
         <motion.div
-          className="fixed inset-0 z-[var(--z-modal)] flex items-center justify-center p-4"
+          className="fixed inset-0 z-[var(--z-modal)] flex items-center justify-center p-3 sm:p-4"
           style={{ background: "rgba(42,29,20,0.34)", backdropFilter: "blur(3px)", WebkitBackdropFilter: "blur(3px)" }}
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -50,12 +50,12 @@ export default function Modal({ open, onClose, title, children, footer, size = "
                 magnetic={false}
                 onClick={onClose}
                 aria-label="Yopish"
-                className="!min-h-9 !min-w-9 !rounded-full !text-[var(--ink-soft)] hover:!text-[var(--ink)]"
+                className="!min-h-11 !min-w-11 !rounded-full !text-[var(--ink-soft)] hover:!text-[var(--ink)]"
               >
                 <X size={18} />
               </Button>
             </div>
-            <div className="p-5 max-h-[70vh] overflow-y-auto scrollbar-thin">{children}</div>
+            <div className="p-5 max-h-[75dvh] overflow-y-auto scrollbar-thin sm:max-h-[70vh]">{children}</div>
             {footer && (
               <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-[var(--border-subtle)]">
                 {footer}

@@ -101,7 +101,7 @@ function EmployeeModal({ open, onClose, onCreated }) {
   return (
     <Modal open={open} onClose={onClose} title="Yangi xodim">
       <form onSubmit={submit} className="space-y-4">
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field label="Ism"><Input required value={form.first_name} onChange={(e) => setForm({ ...form, first_name: e.target.value })} /></Field>
           <Field label="Familiya"><Input value={form.last_name} onChange={(e) => setForm({ ...form, last_name: e.target.value })} /></Field>
         </div>
@@ -111,7 +111,7 @@ function EmployeeModal({ open, onClose, onCreated }) {
             {ROLE_OPTIONS.map(([k, v]) => <option key={k} value={k}>{v}</option>)}
           </Select>
         </Field>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field label="PIN kod (terminal uchun)"><Input value={form.pin_code} onChange={(e) => setForm({ ...form, pin_code: e.target.value })} /></Field>
           <Field label="Telefon"><Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></Field>
         </div>

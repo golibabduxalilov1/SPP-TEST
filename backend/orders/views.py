@@ -1,3 +1,5 @@
+import logging
+
 from django.http import FileResponse
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
@@ -8,10 +10,13 @@ from rest_framework.views import APIView
 
 from accounts.permissions import IsTechnologistOrAbove
 from core.audit import log_action, push_live_log
+from .adapters import ManualOrderSource
 from .labels import render_labels_pdf
 from .models import Label, Order, Part
 from .serializers import LabelSerializer, OrderDetailSerializer, OrderListSerializer, PartSerializer
-from .services import import_parts_from_file
+from .services import create_order, import_parts_from_file
+
+logger = logging.getLogger(__name__)
 
 
 class OrderViewSet(viewsets.ModelViewSet):
@@ -31,7 +36,9 @@ class OrderViewSet(viewsets.ModelViewSet):
         return [IsAuthenticated()]
 
     def perform_create(self, serializer):
-        instance = serializer.save(created_by=self.request.user)
+        order_input = ManualOrderSource().parse(serializer.validated_data)
+        instance = create_order(order_input, created_by=self.request.user)
+        serializer.instance = instance
         log_action(self.request.user, "order.create", "Order", instance.id, {"order_no": instance.order_no})
         push_live_log("order", f"Yangi buyurtma qabul qilindi: #{instance.order_no}")
 
@@ -86,3 +93,20 @@ class LabelPrintView(APIView):
         pdf_buffer = render_labels_pdf(parts, width, height)
         log_action(request.user, "label.print", details={"count": len(parts)})
         return FileResponse(pdf_buffer, as_attachment=True, filename="spp-labels.pdf", content_type="application/pdf")
+
+
+class OdooWebhookView(APIView):
+    """Stub receiver for a future Odoo integration — not wired to anything yet.
+
+    Real Odoo order ingestion will implement OrderSource.parse() and call
+    services.create_order(), the same path ManualOrderSource already uses.
+    """
+
+    permission_classes = []
+
+    def post(self, request):
+        logger.info("Odoo webhook stub received payload: %s", request.data)
+        return Response(
+            {"detail": "Odoo integratsiyasi hali faollashtirilmagan"},
+            status=status.HTTP_501_NOT_IMPLEMENTED,
+        )

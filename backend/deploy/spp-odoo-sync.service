@@ -1,0 +1,19 @@
+[Unit]
+Description=SPP Odoo Sync — read-only polling of Odoo sale.order into SPP Orders
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=spp
+Group=spp
+WorkingDirectory=/opt/spp/backend
+EnvironmentFile=/opt/spp/backend/.env
+ExecStart=/opt/spp/backend/venv/bin/python manage.py sync_odoo_orders
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

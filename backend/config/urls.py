@@ -12,6 +12,7 @@ urlpatterns = [
     path("api/", include("packaging.urls")),
     path("api/", include("warehouse.urls")),
     path("api/", include("core.urls")),
+    path("api/", include("integrations.odoo.urls")),
 ]
 
 if settings.DEBUG:

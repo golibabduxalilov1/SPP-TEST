@@ -1,7 +1,8 @@
+import { useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard, ClipboardList, Table2, Factory, Users, AlertTriangle,
-  Warehouse, BarChart3, LogOut, Tags, Hexagon,
+  Warehouse, BarChart3, LogOut, Tags, Hexagon, Menu, X, Plug,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { useAuthStore } from "../store/authStore";
@@ -21,6 +22,7 @@ const NAV = [
   { to: "/conflicts", label: "Konfliktlar", icon: AlertTriangle, roles: ["super_admin", "director", "manager", "master"] },
   { to: "/warehouse", label: "Tayyor ombor", icon: Warehouse, extra: "Qadoqlash" },
   { to: "/reports", label: "Hisobotlar", icon: BarChart3 },
+  { to: "/integrations", label: "Integratsiyalar", icon: Plug, roles: ["super_admin"] },
 ];
 
 function initials(user) {
@@ -30,12 +32,47 @@ function initials(user) {
 export default function AdminLayout() {
   const { user, logout } = useAuthStore();
   const navigate = useNavigate();
+  const [navOpen, setNavOpen] = useState(false);
 
   return (
     <TutorialProvider>
     <div className="min-h-dvh bg-transparent lg:flex lg:h-dvh lg:items-stretch lg:overflow-hidden">
-      <aside className="brand-shell grain relative flex flex-col border-b border-white/8 elevation-lg lg:h-dvh lg:w-72 lg:shrink-0 lg:self-stretch lg:border-b-0 lg:border-r lg:border-r-white/8">
-        <div className="flex flex-col lg:h-dvh">
+      <header className="brand-shell grain flex items-center justify-between gap-4 border-b border-white/8 px-4 py-4 lg:hidden">
+        <div className="flex items-center gap-3">
+          <div className="rounded-2xl bg-[linear-gradient(135deg,var(--accent),var(--accent-bright))] p-2.5 text-white shadow-(--shadow-accent)">
+            <Hexagon size={20} />
+          </div>
+          <div>
+            <p className="font-display font-semibold leading-tight tracking-wide text-white">SPP</p>
+            <p className="text-[11px] leading-tight text-white/45">Silknode Production Platform</p>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => setNavOpen(true)}
+          aria-label="Menyuni ochish"
+          className="focus-ring flex min-h-11 min-w-11 items-center justify-center rounded-xl text-white/80 hover:text-white"
+        >
+          <Menu size={24} />
+        </button>
+      </header>
+
+      {navOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/50 lg:hidden"
+          onClick={() => setNavOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+
+      <aside
+        className={clsx(
+          "brand-shell grain fixed inset-y-0 left-0 z-50 flex w-72 max-w-[85vw] flex-col elevation-lg transition-transform duration-300 ease-in-out",
+          navOpen ? "translate-x-0" : "-translate-x-full",
+          "lg:static lg:h-dvh lg:w-72 lg:max-w-none lg:shrink-0 lg:translate-x-0 lg:self-stretch lg:border-r lg:border-r-white/8"
+        )}
+      >
+        <div className="flex h-full flex-col lg:h-dvh">
           <div className="flex items-center justify-between gap-4 border-b border-white/8 px-5 py-5">
             <div className="flex items-center gap-3">
               <div className="rounded-2xl bg-[linear-gradient(135deg,var(--accent),var(--accent-bright))] p-2.5 text-white shadow-(--shadow-accent)">
@@ -46,18 +83,27 @@ export default function AdminLayout() {
                 <p className="text-[11px] leading-tight text-white/45">Silknode Production Platform</p>
               </div>
             </div>
+            <button
+              type="button"
+              onClick={() => setNavOpen(false)}
+              aria-label="Menyuni yopish"
+              className="focus-ring flex min-h-11 min-w-11 items-center justify-center rounded-xl text-white/70 hover:text-white lg:hidden"
+            >
+              <X size={22} />
+            </button>
           </div>
 
-          <nav className="flex gap-2 overflow-x-auto scrollbar-thin px-3 py-3 lg:flex-1 lg:flex-col lg:gap-1 lg:overflow-visible">
+          <nav className="flex flex-1 flex-col gap-1 overflow-y-auto px-3 py-3">
             {NAV.filter((item) => !item.roles || user?.is_superuser || user?.role === "super_admin" || item.roles.includes(user?.role)).map(({ to, label, icon: Icon, end }) => (
               <NavLink
                 key={to}
                 to={to}
                 end={end}
+                onClick={() => setNavOpen(false)}
                 className={({ isActive }) =>
                   clsx(
                     "focus-ring group relative flex shrink-0 items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors duration-300",
-                    "min-h-11 lg:w-full",
+                    "min-h-11 w-full",
                     isActive ? "text-white!" : "text-white/80! hover:text-white!"
                   )
                 }

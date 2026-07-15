@@ -64,20 +64,20 @@ export default function Labels() {
             </div>
           </Field>
           <Field label="Kenglik (mm)">
-            <Select value={width} onChange={(e) => setWidth(Number(e.target.value))} className="w-28">
+            <Select value={width} onChange={(e) => setWidth(Number(e.target.value))} className="w-full sm:w-28">
               <option value={58}>58</option>
               <option value={70}>70</option>
               <option value={100}>100</option>
             </Select>
           </Field>
           <Field label="Balandlik (mm)">
-            <Select value={height} onChange={(e) => setHeight(Number(e.target.value))} className="w-28">
+            <Select value={height} onChange={(e) => setHeight(Number(e.target.value))} className="w-full sm:w-28">
               <option value={40}>40</option>
               <option value={50}>50</option>
               <option value={60}>60</option>
             </Select>
           </Field>
-          <Button onClick={find} disabled={loading}>Qidirish</Button>
+          <Button onClick={find} disabled={loading} className="w-full sm:w-auto">Qidirish</Button>
         </CardBody>
       </Card>
 
@@ -86,9 +86,9 @@ export default function Labels() {
           title="Natijalar"
           subtitle={`${parts.length} ta detal topildi`}
           actions={
-            <div data-tutorial="labels-select-print" className="flex gap-2">
-              <Button size="sm" variant="secondary" onClick={selectAll}>Barchasini tanlash</Button>
-              <Button size="sm" onClick={print}><Printer size={15} /> Chop etish ({selected.length})</Button>
+            <div data-tutorial="labels-select-print" className="flex flex-wrap gap-2">
+              <Button size="sm" variant="secondary" onClick={selectAll} className="w-full sm:w-auto">Barchasini tanlash</Button>
+              <Button size="sm" onClick={print} className="w-full sm:w-auto"><Printer size={15} /> Chop etish ({selected.length})</Button>
             </div>
           }
         />

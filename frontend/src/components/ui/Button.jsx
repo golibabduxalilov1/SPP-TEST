@@ -28,11 +28,11 @@ const VARIANTS = {
 };
 
 const SIZES = {
-  sm: "text-sm px-3.5 py-2 rounded-lg min-h-9",
-  md: "text-sm px-5 py-2.5 rounded-lg min-h-10",
+  sm: "text-sm px-3.5 py-2 rounded-lg min-h-11 sm:min-h-9",
+  md: "text-sm px-5 py-2.5 rounded-lg min-h-11 sm:min-h-10",
   lg: "text-[15px] px-6 py-3 rounded-lg min-h-11",
   xl: "text-lg px-8 py-4 rounded-xl terminal-tap",
-  icon: "min-h-10 min-w-10 rounded-lg p-0",
+  icon: "min-h-11 min-w-11 sm:min-h-10 sm:min-w-10 rounded-lg p-0",
 };
 
 export default function Button({

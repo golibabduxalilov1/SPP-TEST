@@ -11,7 +11,7 @@ export const Checkbox = forwardRef(function Checkbox({ className, label, checked
         className
       )}
     >
-      <span className="relative inline-flex h-5 w-5 shrink-0 items-center justify-center">
+      <span className="relative inline-flex h-11 w-11 shrink-0 items-center justify-center -m-3">
         <input
           ref={ref}
           type="checkbox"

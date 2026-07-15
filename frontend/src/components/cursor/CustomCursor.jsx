@@ -71,7 +71,13 @@ export default function CustomCursor() {
             backgroundColor: hovering ? "rgba(107,68,35,0.14)" : "rgba(107,68,35,0)",
           }}
           transition={{ type: "spring", stiffness: 260, damping: 22 }}
-          style={{ x: "-50%", y: "-50%", borderRadius: 9999, border: "1.5px solid rgba(107,68,35,0.7)" }}
+          style={{
+            x: "-50%",
+            y: "-50%",
+            borderRadius: 9999,
+            border: "1.5px solid rgba(107,68,35,0.85)",
+            boxShadow: "0 0 0 1px rgba(255,255,255,0.65), 0 1px 5px rgba(0,0,0,0.3)",
+          }}
         />
       </motion.div>
       <motion.div
@@ -82,7 +88,15 @@ export default function CustomCursor() {
         <motion.div
           animate={{ scale: hovering ? 0 : 1 }}
           transition={{ type: "spring", stiffness: 400, damping: 26 }}
-          style={{ x: "-50%", y: "-50%", width: 6, height: 6, borderRadius: 9999, background: "var(--accent)" }}
+          style={{
+            x: "-50%",
+            y: "-50%",
+            width: 6,
+            height: 6,
+            borderRadius: 9999,
+            background: "var(--accent)",
+            boxShadow: "0 0 0 1.5px rgba(255,255,255,0.85), 0 1px 3px rgba(0,0,0,0.35)",
+          }}
         />
       </motion.div>
     </>

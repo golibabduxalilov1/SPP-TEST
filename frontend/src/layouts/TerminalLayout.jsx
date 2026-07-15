@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { Navigate, Outlet, useNavigate } from "react-router-dom";
-import { LogOut, RefreshCw, Wifi, WifiOff } from "lucide-react";
+import { Navigate, NavLink, Outlet, useNavigate } from "react-router-dom";
+import { LogOut, QrCode, RefreshCw, Wifi, WifiOff } from "lucide-react";
 import toast from "react-hot-toast";
 import clsx from "clsx";
 import { useTerminalStore } from "../store/terminalStore";
@@ -8,6 +8,10 @@ import { PageLoader } from "../components/ui/Misc";
 import Button from "../components/ui/Button";
 
 const AUTO_SYNC_INTERVAL_MS = 15 * 60 * 1000;
+
+// Roles that may open /terminal/order-status — mirrors accounts.permissions.CanScanOrderStatus
+// on the backend, restricted here to the roles that actually log into the terminal.
+const ORDER_STATUS_ROLES = ["master", "packaging", "warehouse"];
 
 export default function TerminalLayout() {
   const { employee, workstation, ready, online, pendingCount, lastSyncAt, init, logout, sync, refreshPendingCount } = useTerminalStore();
@@ -64,6 +68,21 @@ export default function TerminalLayout() {
             <span className="min-h-8 rounded-full border border-status-orange/15 bg-status-orange-bg px-2.5 py-1 text-xs font-semibold text-status-orange">
               Pending: {pendingCount}
             </span>
+          )}
+          {ORDER_STATUS_ROLES.includes(employee.role) && (
+            <NavLink
+              to="/terminal/order-status"
+              className={({ isActive }) =>
+                clsx(
+                  "focus-ring flex min-h-9 items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors duration-200",
+                  isActive
+                    ? "border-transparent bg-[linear-gradient(120deg,var(--accent),var(--accent-bright))] text-white"
+                    : "border-white/15 bg-white/10 text-white/80 hover:bg-white/15 hover:text-white"
+                )
+              }
+            >
+              <QrCode size={14} /> Buyurtma statusi
+            </NavLink>
           )}
           <Button
             onClick={handleSync}

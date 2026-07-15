@@ -12,7 +12,7 @@ export default function Toggle({ checked, onChange, disabled, label, className, 
         className
       )}
     >
-      <span className="relative inline-flex h-6 w-11 shrink-0 items-center">
+      <span className="relative inline-flex h-11 w-11 shrink-0 items-center -my-2.5">
         <input
           type="checkbox"
           role="switch"

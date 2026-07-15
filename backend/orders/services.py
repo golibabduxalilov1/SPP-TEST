@@ -4,8 +4,25 @@ import io
 from django.db import transaction
 from manufacturing.models import Operation
 
+from .adapters import OrderInput
 from .constants import DEFAULT_ROUTE_KEY, ROUTE_TEMPLATES
 from .models import Order, Part, PartRoute, Product
+
+
+def create_order(order_input: OrderInput, created_by) -> Order:
+    """Creates an Order from a normalized OrderInput, regardless of which
+    OrderSource produced it (manual form today, Odoo webhook in the future)."""
+    return Order.objects.create(
+        customer_name=order_input.customer_name,
+        customer_phone=order_input.customer_phone,
+        product_name=order_input.product_name,
+        notes=order_input.notes,
+        deadline=order_input.deadline,
+        priority=order_input.priority,
+        external_system=order_input.source,
+        external_order_id=order_input.external_id,
+        created_by=created_by,
+    )
 
 
 def assign_route(part: Part, route_key: str):

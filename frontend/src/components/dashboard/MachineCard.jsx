@@ -46,7 +46,7 @@ export default function MachineCard({ machine, from, to, interval, indicator }) 
         actions={<Badge tone="blue">AKTIV</Badge>}
       />
       <CardBody className="space-y-4">
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
             <p className="text-xs font-medium uppercase tracking-wide text-[var(--ink-soft)]">Davr ichidagi o'rtacha samaradorlik</p>
             <p className="mt-1 text-2xl font-semibold text-[var(--ink)]">

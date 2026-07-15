@@ -1,9 +1,52 @@
 from rest_framework.test import APITestCase
 
 from accounts.models import Role, User
+from core.models import AuditLog
 from manufacturing.models import Operation
 
 from .models import Order, Part
+
+
+class OrderApiTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="order-creator",
+            password="secret-pass",
+            role=Role.SUPER_ADMIN,
+        )
+        self.client.force_authenticate(user=self.user)
+
+    def test_manual_order_create_goes_through_adapter_unchanged(self):
+        """Order creation was refactored to route through ManualOrderSource +
+        services.create_order — response shape, audit log and defaults must
+        stay identical to the pre-refactor behavior."""
+        response = self.client.post(
+            "/api/orders/",
+            {
+                "customer_name": "Aziz",
+                "customer_phone": "+998901112233",
+                "product_name": "Shkaf",
+                "notes": "Shoshilinch",
+                "priority": "high",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201, response.data)
+        order = Order.objects.get(id=response.data["id"])
+        self.assertTrue(order.order_no)
+        self.assertEqual(order.customer_name, "Aziz")
+        self.assertEqual(order.priority, "high")
+        self.assertEqual(order.status, Order.Status.DRAFT)
+        self.assertEqual(order.created_by, self.user)
+        self.assertEqual(order.external_system, "manual")
+        self.assertEqual(order.external_order_id, "")
+
+        self.assertTrue(AuditLog.objects.filter(action="order.create", entity_id=str(order.id)).exists())
+
+    def test_odoo_webhook_stub_returns_not_implemented(self):
+        response = self.client.post("/api/integrations/odoo/webhook", {"foo": "bar"}, format="json")
+        self.assertEqual(response.status_code, 501)
 
 
 class PartApiTests(APITestCase):

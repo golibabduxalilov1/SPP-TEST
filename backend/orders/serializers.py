@@ -78,9 +78,9 @@ class OrderDetailSerializer(serializers.ModelSerializer):
             "id", "order_no", "customer_name", "customer_phone", "product_name", "notes",
             "deadline", "priority", "status", "external_system", "external_order_id",
             "external_customer_id", "approved_price", "approved_deadline", "customer_confirmed_at",
-            "odoo_sync_status", "created_at", "updated_at", "products", "parts",
+            "odoo_sync_status", "qr_token", "created_at", "updated_at", "products", "parts",
         ]
-        read_only_fields = ["order_no", "created_at", "updated_at"]
+        read_only_fields = ["order_no", "qr_token", "created_at", "updated_at"]
 
 
 class LabelSerializer(serializers.ModelSerializer):

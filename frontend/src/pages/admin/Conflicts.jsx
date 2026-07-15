@@ -117,7 +117,7 @@ export default function Conflicts() {
                     <Td><StatusBadge status={c.status} labels={{ pending: "Kutilmoqda", resolved: "Hal qilingan" }} /></Td>
                     <Td>
                       {c.status === "pending" && (
-                        <div className="flex gap-1.5">
+                        <div className="flex flex-wrap gap-2 sm:gap-1.5">
                           <Button size="sm" variant="success" onClick={() => resolve(c.id, "accepted")}>Qabul qilish</Button>
                           <Button size="sm" variant="danger" onClick={() => resolve(c.id, "rejected")}>Rad etish</Button>
                         </div>

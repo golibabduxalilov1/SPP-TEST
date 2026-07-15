@@ -118,11 +118,13 @@ export default function TutorialOverlay() {
   const isFirst = stepIndex === 0;
   const isLast = stepIndex === steps.length - 1;
 
+  const spotlightTop = Math.max(0, rect.top - PADDING);
+  const spotlightLeft = Math.max(0, rect.left - PADDING);
   const spotlightStyle = {
-    top: rect.top - PADDING,
-    left: rect.left - PADDING,
-    width: rect.width + PADDING * 2,
-    height: rect.height + PADDING * 2,
+    top: spotlightTop,
+    left: spotlightLeft,
+    width: Math.min(rect.width + PADDING * 2, window.innerWidth - spotlightLeft),
+    height: Math.min(rect.height + PADDING * 2, window.innerHeight - spotlightTop),
   };
 
   const tooltipStyle = {
@@ -151,7 +153,7 @@ export default function TutorialOverlay() {
             type="button"
             onClick={skip}
             aria-label="Yopish"
-            className="focus-ring rounded-md p-1 text-[var(--ink-faint)] transition-colors hover:text-[var(--ink)]"
+            className="focus-ring -m-2.5 flex min-h-11 min-w-11 items-center justify-center rounded-md text-[var(--ink-faint)] transition-colors hover:text-[var(--ink)]"
           >
             <X size={16} />
           </button>
