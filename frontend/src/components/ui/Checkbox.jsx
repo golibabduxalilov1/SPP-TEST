@@ -16,13 +16,13 @@ export const Checkbox = forwardRef(function Checkbox({ className, label, checked
           ref={ref}
           type="checkbox"
           checked={checked}
-          className="peer absolute inset-0 h-full w-full cursor-pointer appearance-none focus:outline-none"
+          className="peer absolute inset-0 !h-full !w-full cursor-pointer appearance-none focus:outline-none"
           {...props}
         />
         <span
           aria-hidden
           className={clsx(
-            "pointer-events-none flex h-5 w-5 items-center justify-center rounded-md border transition-all duration-200",
+            "pointer-events-none flex h-5 w-5 items-center justify-center rounded-lg border transition-all duration-200",
             "shadow-[inset_0_1px_2px_rgba(74,50,35,0.05)]",
             "peer-focus-visible:shadow-[0_0_0_3px_color-mix(in_srgb,var(--accent)_25%,transparent)]",
             checked
@@ -47,12 +47,12 @@ export const Radio = forwardRef(function Radio({ className, label, checked, ...p
         className
       )}
     >
-      <span className="relative inline-flex h-5 w-5 shrink-0 items-center justify-center">
+      <span className="relative -m-3 inline-flex h-11 w-11 shrink-0 items-center justify-center">
         <input
           ref={ref}
           type="radio"
           checked={checked}
-          className="peer absolute inset-0 h-full w-full cursor-pointer appearance-none focus:outline-none"
+          className="peer absolute inset-0 !h-full !w-full cursor-pointer appearance-none focus:outline-none"
           {...props}
         />
         <span

@@ -61,7 +61,7 @@ export function CardHeader({ title, subtitle, actions, className, ...props }) {
   return (
     <div
       className={clsx(
-        "flex flex-col items-start justify-between gap-4 px-5 py-4 border-b border-[var(--border-subtle)] sm:flex-row sm:items-center",
+        "flex flex-col items-start justify-between gap-3 border-b border-[var(--border-subtle)] px-4 py-4 sm:flex-row sm:items-center sm:gap-4 sm:px-5",
         className
       )}
       {...props}
@@ -70,14 +70,14 @@ export function CardHeader({ title, subtitle, actions, className, ...props }) {
         <h2 className="font-display text-base font-semibold tracking-tight text-[var(--ink)]">{title}</h2>
         {subtitle && <p className="text-sm text-[var(--ink-soft)] mt-0.5">{subtitle}</p>}
       </div>
-      {actions && <div className="flex w-full items-center gap-2 sm:w-auto">{actions}</div>}
+      {actions && <div className="flex min-w-0 w-full flex-wrap items-center gap-2 sm:w-auto">{actions}</div>}
     </div>
   );
 }
 
 export function CardBody({ className, children, ...props }) {
   return (
-    <div className={clsx("p-5", className)} {...props}>
+    <div className={clsx("p-4 sm:p-5", className)} {...props}>
       {children}
     </div>
   );

@@ -32,13 +32,13 @@ export default function PageHeader({ eyebrow, title, subtitle, actions, classNam
           {title}
         </motion.h1>
         {subtitle && (
-          <motion.p {...anim(2)} className="mt-1.5 text-sm text-[var(--ink-soft)]">
+          <motion.p {...anim(2)} className="mt-1.5 max-w-2xl text-sm leading-6 text-[var(--ink-soft)]">
             {subtitle}
           </motion.p>
         )}
       </div>
       {actions && (
-        <motion.div {...anim(2)} className="flex shrink-0 flex-wrap items-center gap-2">
+        <motion.div {...anim(2)} className="flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto sm:shrink-0">
           {actions}
         </motion.div>
       )}

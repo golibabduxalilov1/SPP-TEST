@@ -1,9 +1,8 @@
 from rest_framework.routers import DefaultRouter
 
-from .views import DeviceViewSet, FactoryViewSet, MachineViewSet, OperationViewSet, PrinterViewSet, TsexViewSet, WorkstationViewSet
+from .views import DeviceViewSet, MachineViewSet, OperationViewSet, PrinterViewSet, TsexViewSet, WorkstationViewSet
 
 router = DefaultRouter()
-router.register("factories", FactoryViewSet)
 router.register("tsexes", TsexViewSet)
 router.register("workstations", WorkstationViewSet)
 router.register("machines", MachineViewSet)

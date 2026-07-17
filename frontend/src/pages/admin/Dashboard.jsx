@@ -19,7 +19,7 @@ const OUTPUT_UNITS = [
   { key: "m2", label: "kv.m" },
 ];
 
-function defaultFilters() {
+function defaultRange() {
   const now = new Date();
   const workdayStart = new Date(now);
   workdayStart.setHours(7, 0, 0, 0);
@@ -28,6 +28,21 @@ function defaultFilters() {
   return {
     from: format(workdayStart, "yyyy-MM-dd'T'HH:mm"),
     to: format(currentHour, "yyyy-MM-dd'T'HH:mm"),
+  };
+}
+
+function last4HoursRange() {
+  const now = new Date();
+  const start = new Date(now.getTime() - 4 * 60 * 60 * 1000);
+  return {
+    from: format(start, "yyyy-MM-dd'T'HH:mm"),
+    to: format(now, "yyyy-MM-dd'T'HH:mm"),
+  };
+}
+
+function defaultFilters() {
+  return {
+    ...defaultRange(),
     interval: 15,
     indicator: "volume",
     live: false,
@@ -82,18 +97,28 @@ export default function Dashboard() {
 
   useEffect(() => {
     load(filters);
+    // Also reloads whenever "live" is toggled, since handleFilterChange
+    // already swaps from/to to the relevant range before this fires.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [filters.live]);
 
   useEffect(() => {
     if (!filters.live) return undefined;
-    const id = setInterval(() => load(filters), 15000);
+    const id = setInterval(() => {
+      const range = last4HoursRange();
+      load({ ...filters, ...range });
+      setFilters((f) => ({ ...f, ...range }));
+    }, 15000);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filters.live, filters.from, filters.to, filters.interval]);
+  }, [filters.live, filters.interval]);
 
   function handleFilterChange(patch) {
-    setFilters((f) => ({ ...f, ...patch }));
+    setFilters((f) => {
+      if (patch.live === true) return { ...f, ...patch, ...last4HoursRange() };
+      if (patch.live === false) return { ...f, ...patch, ...defaultRange() };
+      return { ...f, ...patch };
+    });
   }
 
   function handleRefresh() {
@@ -116,7 +141,7 @@ export default function Dashboard() {
         </div>
       </section>
 
-      <div data-tutorial="dashboard-stats" className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+      <div data-tutorial="dashboard-stats" className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
         <StatCard
           index={0}
           icon={Gauge}
@@ -142,7 +167,7 @@ export default function Dashboard() {
         {machines.length === 0 ? (
           <EmptyState title="Aktiv stanok topilmadi" />
         ) : (
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
             {machines.map((m) => (
               <MachineCard key={m.id} machine={m} from={filters.from} to={filters.to} interval={filters.interval} indicator={filters.indicator} />
             ))}

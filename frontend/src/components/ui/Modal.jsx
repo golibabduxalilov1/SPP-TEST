@@ -39,10 +39,10 @@ export default function Modal({ open, onClose, title, children, footer, size = "
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, scale: 0.97, y: 8 }}
             transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
-            className={`wood-panel w-full ${widths[size]} rounded-[14px] border border-[var(--border)] bg-[var(--surface-raised)] elevation-lg`}
+            className={`wood-panel flex max-h-[calc(100dvh-1.5rem)] w-full flex-col ${widths[size]} rounded-[14px] border border-[var(--border)] bg-[var(--surface-raised)] elevation-lg sm:max-h-[calc(100dvh-2rem)]`}
           >
-            <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--border-subtle)]">
-              <h3 className="font-display text-base font-semibold tracking-tight text-[var(--ink)]">{title}</h3>
+            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--border-subtle)] px-4 py-3 sm:px-5 sm:py-4">
+              <h3 className="min-w-0 break-words font-display text-base font-semibold tracking-tight text-[var(--ink)]">{title}</h3>
               <Button
                 type="button"
                 variant="ghost"
@@ -50,14 +50,14 @@ export default function Modal({ open, onClose, title, children, footer, size = "
                 magnetic={false}
                 onClick={onClose}
                 aria-label="Yopish"
-                className="!min-h-11 !min-w-11 !rounded-full !text-[var(--ink-soft)] hover:!text-[var(--ink)]"
+                className="!min-h-11 !min-w-11 !rounded-lg !text-[var(--ink-soft)] hover:!text-[var(--ink)]"
               >
                 <X size={18} />
               </Button>
             </div>
-            <div className="p-5 max-h-[75dvh] overflow-y-auto scrollbar-thin sm:max-h-[70vh]">{children}</div>
+            <div className="min-h-0 flex-1 overflow-y-auto p-4 scrollbar-thin sm:p-5">{children}</div>
             {footer && (
-              <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-[var(--border-subtle)]">
+              <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-[var(--border-subtle)] px-4 py-3 sm:px-5 sm:py-4">
                 {footer}
               </div>
             )}

@@ -1,16 +1,19 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Hexagon, Lock, User, ArrowRight } from "lucide-react";
+import { Hexagon, Lock, Phone, ArrowRight, Eye, EyeOff } from "lucide-react";
 import { motion, useReducedMotion } from "framer-motion";
 import toast from "react-hot-toast";
 import { useAuthStore } from "../../store/authStore";
 import Button from "../../components/ui/Button";
+import { Input } from "../../components/ui/Input";
 import Hero3D from "../../three/Hero3D";
 import { fadeUp } from "../../motion/reveal";
+import { formatUzPhone, normalizeUzPhone } from "../../lib/phone";
 
 export default function Login() {
-  const [username, setUsername] = useState("");
+  const [phone, setPhone] = useState("+998 ");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const login = useAuthStore((s) => s.login);
   const navigate = useNavigate();
@@ -20,10 +23,10 @@ export default function Login() {
     e.preventDefault();
     setLoading(true);
     try {
-      await login(username, password);
+      await login(normalizeUzPhone(phone), password);
       navigate("/");
     } catch (err) {
-      toast.error(err.response?.data?.detail || "Login yoki parol noto'g'ri");
+      toast.error(err.response?.data?.detail || "Telefon raqam yoki parol noto'g'ri");
     } finally {
       setLoading(false);
     }
@@ -31,12 +34,6 @@ export default function Login() {
 
   const motionProps = (i) =>
     prefersReducedMotion ? {} : { custom: i, initial: "hidden", animate: "visible", variants: fadeUp };
-
-  const darkInput =
-    "w-full rounded-lg border border-white/10 bg-white/[0.06] pl-10 pr-3.5 py-3 text-[15px] text-white " +
-    "placeholder:text-white/35 transition-[border-color,box-shadow,background-color] duration-200 " +
-    "hover:border-white/20 focus:outline-none focus:border-[var(--accent-bright)] " +
-    "focus:shadow-[0_0_0_3px_rgba(99,102,241,0.30)]";
 
   return (
     <div className="brand-shell grain relative min-h-dvh overflow-hidden flex items-center justify-center px-4 py-10 lg:px-0">
@@ -84,25 +81,27 @@ export default function Login() {
           <motion.form
             {...motionProps(2)}
             onSubmit={handleSubmit}
-            className="glass-dark space-y-5 rounded-[28px] p-8 elevation-lg"
+            className="glass-dark space-y-5 rounded-[28px] p-6 elevation-lg sm:p-8"
           >
             <div className="mb-2 hidden lg:block">
               <h2 className="font-display text-2xl font-semibold text-white">
                 Xush kelibsiz <span className="text-gradient">qaytib</span>
               </h2>
-              <p className="mt-1 text-sm text-white/50">Admin sifatida tizimga kiring</p>
+              <p className="mt-1 text-sm text-white/50">Telefon raqamingiz bilan tizimga kiring</p>
             </div>
 
             <div>
-              <label className="mb-1.5 block text-sm font-semibold text-white/75">Login</label>
-              <div className="relative">
-                <User size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40" />
-                <input
-                  className={darkInput}
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  placeholder="admin"
-                  autoComplete="username"
+              <label className="mb-1.5 block text-sm font-semibold text-white/75">Telefon raqami</label>
+              <div>
+                <Input
+                  appearance="dark"
+                  leadingIcon={<Phone size={16} />}
+                  type="tel"
+                  inputMode="numeric"
+                  value={phone}
+                  onChange={(e) => setPhone(formatUzPhone(e.target.value))}
+                  placeholder="+998 90 123 45 67"
+                  autoComplete="tel"
                   autoFocus
                   required
                 />
@@ -111,11 +110,24 @@ export default function Login() {
 
             <div>
               <label className="mb-1.5 block text-sm font-semibold text-white/75">Parol</label>
-              <div className="relative">
-                <Lock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40" />
-                <input
-                  className={darkInput}
-                  type="password"
+              <div>
+                <Input
+                  appearance="dark"
+                  leadingIcon={<Lock size={16} />}
+                  trailing={
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      magnetic={false}
+                      onClick={() => setShowPassword((v) => !v)}
+                      aria-label={showPassword ? "Parolni yashirish" : "Parolni ko'rsatish"}
+                      className="!rounded-lg !border-transparent !bg-transparent !text-white/40 hover:!bg-transparent hover:!text-white/70"
+                    >
+                      {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </Button>
+                  }
+                  type={showPassword ? "text" : "password"}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
@@ -132,7 +144,7 @@ export default function Login() {
 
           <motion.p {...motionProps(3)} className="mt-6 text-center text-xs text-white/40">
             Tsex terminali kerakmi?{" "}
-            <a href="/terminal/login" className="font-semibold text-(--accent-bright) underline">
+            <a href="/terminal/login" className="-m-2 inline-flex min-h-11 items-center rounded-lg p-2 font-semibold text-(--accent-bright) underline">
               Terminal login
             </a>
           </motion.p>

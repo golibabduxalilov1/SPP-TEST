@@ -20,22 +20,12 @@ class Operation(models.Model):
         return self.name
 
 
-class Factory(models.Model):
+class Tsex(models.Model):
     name = models.CharField(max_length=150)
-    address = models.CharField(max_length=255, blank=True)
     is_active = models.BooleanField(default=True)
 
     def __str__(self):
         return self.name
-
-
-class Tsex(models.Model):
-    factory = models.ForeignKey(Factory, on_delete=models.CASCADE, related_name="tsexes")
-    name = models.CharField(max_length=150)
-    is_active = models.BooleanField(default=True)
-
-    def __str__(self):
-        return f"{self.name} ({self.factory.name})"
 
 
 class Workstation(models.Model):

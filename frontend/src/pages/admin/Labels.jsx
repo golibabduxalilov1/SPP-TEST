@@ -57,20 +57,20 @@ export default function Labels() {
 
       <Card>
         <CardBody data-tutorial="labels-search-card" className="flex flex-wrap items-end gap-3">
-          <Field label="Buyurtma raqami yoki detal kodi/nomi">
+          <Field label="Buyurtma raqami yoki detal kodi/nomi" className="w-full sm:w-auto">
             <div className="relative w-full sm:w-72">
               <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--ink-soft)]" />
               <Input className="pl-8" value={search} onChange={(e) => setSearch(e.target.value)} onKeyDown={(e) => e.key === "Enter" && find()} />
             </div>
           </Field>
-          <Field label="Kenglik (mm)">
+          <Field label="Kenglik (mm)" className="w-full sm:w-auto">
             <Select value={width} onChange={(e) => setWidth(Number(e.target.value))} className="w-full sm:w-28">
               <option value={58}>58</option>
               <option value={70}>70</option>
               <option value={100}>100</option>
             </Select>
           </Field>
-          <Field label="Balandlik (mm)">
+          <Field label="Balandlik (mm)" className="w-full sm:w-auto">
             <Select value={height} onChange={(e) => setHeight(Number(e.target.value))} className="w-full sm:w-28">
               <option value={40}>40</option>
               <option value={50}>50</option>

@@ -1,5 +1,3 @@
-import logging
-
 from django.http import FileResponse
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
@@ -10,13 +8,13 @@ from rest_framework.views import APIView
 
 from accounts.permissions import IsTechnologistOrAbove
 from core.audit import log_action, push_live_log
-from .adapters import ManualOrderSource
+from .export import render_orders_excel, render_orders_pdf
 from .labels import render_labels_pdf
-from .models import Label, Order, Part
-from .serializers import LabelSerializer, OrderDetailSerializer, OrderListSerializer, PartSerializer
-from .services import create_order, import_parts_from_file
-
-logger = logging.getLogger(__name__)
+from .models import Label, Order, OrderDetail, Part
+from .serializers import (
+    LabelSerializer, OrderDetailItemSerializer, OrderDetailSerializer, OrderListSerializer, PartSerializer,
+)
+from .services import import_parts_from_file
 
 
 class OrderViewSet(viewsets.ModelViewSet):
@@ -26,7 +24,7 @@ class OrderViewSet(viewsets.ModelViewSet):
     search_fields = ["order_no", "customer_name", "product_name"]
 
     def get_serializer_class(self):
-        if self.action in ("retrieve",):
+        if self.action in ("retrieve", "update", "partial_update"):
             return OrderDetailSerializer
         return OrderListSerializer
 
@@ -36,9 +34,7 @@ class OrderViewSet(viewsets.ModelViewSet):
         return [IsAuthenticated()]
 
     def perform_create(self, serializer):
-        order_input = ManualOrderSource().parse(serializer.validated_data)
-        instance = create_order(order_input, created_by=self.request.user)
-        serializer.instance = instance
+        instance = serializer.save(created_by=self.request.user)
         log_action(self.request.user, "order.create", "Order", instance.id, {"order_no": instance.order_no})
         push_live_log("order", f"Yangi buyurtma qabul qilindi: #{instance.order_no}")
 
@@ -55,6 +51,25 @@ class OrderViewSet(viewsets.ModelViewSet):
         log_action(request.user, "order.import", details=result)
         return Response(result)
 
+    @action(detail=False, methods=["get"])
+    def export(self, request):
+        orders = self.filter_queryset(self.get_queryset())
+        # NOTE: query param is named "file_type", not "format" -- DRF reserves "format" for its
+        # own content-negotiation (?format=json/api) and raises Http404 if that value doesn't
+        # match a registered renderer, before this view ever runs.
+        fmt = (request.query_params.get("file_type") or "pdf").lower()
+        if fmt in ("excel", "xlsx"):
+            buf = render_orders_excel(orders)
+            response = FileResponse(
+                buf, as_attachment=True, filename="buyurtmalar.xlsx",
+                content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+        else:
+            buf = render_orders_pdf(orders)
+            response = FileResponse(buf, as_attachment=True, filename="buyurtmalar.pdf", content_type="application/pdf")
+        log_action(request.user, "order.export", details={"format": fmt, "count": orders.count()})
+        return response
+
 
 class PartViewSet(viewsets.ModelViewSet):
     queryset = Part.objects.select_related("order", "current_operation").prefetch_related("routes__operation").all()
@@ -67,6 +82,24 @@ class PartViewSet(viewsets.ModelViewSet):
         if self.request.method not in ("GET", "HEAD", "OPTIONS"):
             return [IsAuthenticated(), IsTechnologistOrAbove()]
         return [IsAuthenticated()]
+
+
+class OrderDetailItemViewSet(viewsets.ModelViewSet):
+    queryset = OrderDetail.objects.select_related("order", "part").all()
+    serializer_class = OrderDetailItemSerializer
+    permission_classes = [IsAuthenticated]
+    filterset_fields = ["order"]
+
+    def get_permissions(self):
+        if self.request.method not in ("GET", "HEAD", "OPTIONS"):
+            return [IsAuthenticated(), IsTechnologistOrAbove()]
+        return [IsAuthenticated()]
+
+    def perform_destroy(self, instance):
+        part = instance.part
+        instance.delete()
+        if part:
+            part.delete()
 
 
 class LabelPreviewView(APIView):
@@ -93,20 +126,3 @@ class LabelPrintView(APIView):
         pdf_buffer = render_labels_pdf(parts, width, height)
         log_action(request.user, "label.print", details={"count": len(parts)})
         return FileResponse(pdf_buffer, as_attachment=True, filename="spp-labels.pdf", content_type="application/pdf")
-
-
-class OdooWebhookView(APIView):
-    """Stub receiver for a future Odoo integration — not wired to anything yet.
-
-    Real Odoo order ingestion will implement OrderSource.parse() and call
-    services.create_order(), the same path ManualOrderSource already uses.
-    """
-
-    permission_classes = []
-
-    def post(self, request):
-        logger.info("Odoo webhook stub received payload: %s", request.data)
-        return Response(
-            {"detail": "Odoo integratsiyasi hali faollashtirilmagan"},
-            status=status.HTTP_501_NOT_IMPLEMENTED,
-        )

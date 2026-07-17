@@ -2,7 +2,6 @@ import { useMemo } from "react";
 import clsx from "clsx";
 import { motion, useReducedMotion } from "framer-motion";
 import { Loader2 } from "lucide-react";
-import { useMagnetic } from "../../motion/useMagnetic";
 
 const motionComponentCache = new Map();
 function getMotionComponent(Component) {
@@ -28,11 +27,11 @@ const VARIANTS = {
 };
 
 const SIZES = {
-  sm: "text-sm px-3.5 py-2 rounded-lg min-h-11 sm:min-h-9",
-  md: "text-sm px-5 py-2.5 rounded-lg min-h-11 sm:min-h-10",
-  lg: "text-[15px] px-6 py-3 rounded-lg min-h-11",
-  xl: "text-lg px-8 py-4 rounded-xl terminal-tap",
-  icon: "min-h-11 min-w-11 sm:min-h-10 sm:min-w-10 rounded-lg p-0",
+  sm: "min-h-11 rounded-lg px-[18px] py-2.5 text-sm",
+  md: "min-h-11 rounded-lg px-5 py-2.5 text-sm",
+  lg: "min-h-11 rounded-[10px] px-5 py-3 text-[15px]",
+  xl: "min-h-14 rounded-[10px] px-5 py-3 text-[15px]",
+  icon: "min-h-11 min-w-11 rounded-lg p-0",
 };
 
 export default function Button({
@@ -40,7 +39,7 @@ export default function Button({
   size = "md",
   className,
   as: Component = "button",
-  magnetic = true,
+  magnetic: legacyMagnetic = false,
   loading = false,
   disabled = false,
   children,
@@ -48,24 +47,22 @@ export default function Button({
 }) {
   const prefersReducedMotion = useReducedMotion();
   const MotionComponent = useMemo(() => getMotionComponent(Component), [Component]);
-  const mag = useMagnetic(size === "sm" ? 0.12 : 0.2);
-  const useMag = magnetic && !prefersReducedMotion && size !== "sm" && !loading;
   const isDisabled = disabled || loading;
+  void legacyMagnetic;
 
   return (
     <MotionComponent
-      ref={useMag ? mag.ref : undefined}
-      onMouseMove={useMag ? mag.handlers.onMouseMove : undefined}
-      onMouseLeave={useMag ? mag.handlers.onMouseLeave : undefined}
-      style={useMag ? mag.style : undefined}
       whileHover={prefersReducedMotion || isDisabled ? undefined : { y: -1 }}
       whileTap={prefersReducedMotion || isDisabled ? undefined : { y: 0, scale: 0.98 }}
-      transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
+      transition={{
+        y: { duration: 0.28, ease: [0.4, 0, 0.2, 1] },
+        scale: { duration: 0.14, ease: [0.4, 0, 0.2, 1] },
+      }}
       disabled={isDisabled}
       aria-busy={loading || undefined}
       className={clsx(
         "group relative isolate inline-flex items-center justify-center gap-2 overflow-hidden border font-medium tracking-normal",
-        "transition-[background,border-color,color,box-shadow,filter] duration-200 ease-out",
+        "transition-[background,border-color,color,box-shadow,filter] duration-300 ease-out",
         "focus-ring disabled:pointer-events-none disabled:opacity-50 disabled:shadow-none",
         VARIANTS[variant],
         SIZES[size],

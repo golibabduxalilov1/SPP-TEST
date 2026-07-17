@@ -2,6 +2,7 @@ import { HelpCircle } from "lucide-react";
 import { useLocation } from "react-router-dom";
 import { useTutorial } from "./TutorialContext";
 import { TUTORIAL_PAGES, pageKeyForPath } from "./content";
+import Button from "../components/ui/Button";
 
 export default function HelpButton() {
   const location = useLocation();
@@ -12,14 +13,17 @@ export default function HelpButton() {
   if (!page) return null;
 
   return (
-    <button
+    <Button
       type="button"
+      variant="primary"
+      size="icon"
+      magnetic={false}
       onClick={() => start(pageKey, page.steps)}
       aria-label="Sahifa bo'yicha yordam"
       title="Sahifa bo'yicha yordam"
-      className="focus-ring fixed bottom-6 right-6 z-[var(--z-sticky)] flex h-12 w-12 items-center justify-center rounded-full border border-[color-mix(in_srgb,var(--accent-strong)_45%,transparent)] bg-[linear-gradient(135deg,var(--accent-bright),var(--accent))] text-white shadow-[var(--shadow-accent)] transition-transform duration-200 hover:scale-105 hover:bg-[linear-gradient(135deg,var(--accent),var(--accent-strong))]"
+      className="!fixed bottom-4 right-4 z-[var(--z-sticky)] !h-12 !w-12 !rounded-full !border-[color-mix(in_srgb,var(--accent-strong)_45%,transparent)] !bg-[linear-gradient(135deg,var(--accent-bright),var(--accent))] !text-white !shadow-[var(--shadow-accent)] hover:!bg-[linear-gradient(135deg,var(--accent),var(--accent-strong))] sm:bottom-6 sm:right-6"
     >
       <HelpCircle size={22} />
-    </button>
+    </Button>
   );
 }

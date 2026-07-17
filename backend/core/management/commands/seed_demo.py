@@ -2,14 +2,15 @@ from django.core.management.base import BaseCommand
 from django.db import transaction
 
 from accounts.models import Role, User
-from manufacturing.models import Factory, Machine, Operation, Tsex, Workstation
+from catalog.models import ProductType, ProductTypeDetail
+from manufacturing.models import Machine, Operation, Tsex, Workstation
 from orders.constants import OPERATION_SEEDS
 from orders.models import Order, Product
 from orders.services import assign_route
 
 
 class Command(BaseCommand):
-    help = "Seed SPP demo data: factory, tsex, workstations, machines, operations, users, sample order."
+    help = "Seed SPP demo data: tsex, workstations, machines, operations, users, sample order."
 
     @transaction.atomic
     def handle(self, *args, **options):
@@ -17,8 +18,7 @@ class Command(BaseCommand):
             Operation.objects.update_or_create(code=seed["code"], defaults=seed)
         self.stdout.write(self.style.SUCCESS(f"Operations: {Operation.objects.count()}"))
 
-        factory, _ = Factory.objects.get_or_create(name="OKKIN MEBEL zavodi", defaults={"address": "Toshkent"})
-        tsex, _ = Tsex.objects.get_or_create(factory=factory, name="Asosiy Tsex")
+        tsex, _ = Tsex.objects.get_or_create(name="Asosiy Tsex")
 
         workstations = {}
         for op in Operation.objects.all():
@@ -32,20 +32,21 @@ class Command(BaseCommand):
             )
 
         users = [
-            ("admin", Role.SUPER_ADMIN, "Admin", "Adminov", None),
-            ("direktor", Role.DIRECTOR, "Bekzod", "Rahbarov", None),
-            ("menejer", Role.MANAGER, "Sardor", "Menejerov", None),
-            ("master1", Role.MASTER, "Sherzod", "Masterov", "1001"),
-            ("texnolog1", Role.TECHNOLOGIST, "Nodir", "Texnologov", None),
-            ("usta1", Role.OPERATOR, "Alisher", "Ustaev", "1002"),
-            ("qadoqchi1", Role.PACKAGING, "Jasur", "Qadoqchiev", "1003"),
-            ("omborchi1", Role.WAREHOUSE, "Bahrom", "Omborchiev", "1004"),
+            ("admin", "+998901234501", Role.SUPER_ADMIN, "Admin", "Adminov", None),
+            ("direktor", "+998901234502", Role.DIRECTOR, "Bekzod", "Rahbarov", None),
+            ("menejer", "+998901234503", Role.MANAGER, "Sardor", "Menejerov", None),
+            ("master1", "+998901234504", Role.MASTER, "Sherzod", "Masterov", "1001"),
+            ("texnolog1", "+998901234505", Role.TECHNOLOGIST, "Nodir", "Texnologov", None),
+            ("usta1", "+998901234506", Role.OPERATOR, "Alisher", "Ustaev", "1002"),
+            ("qadoqchi1", "+998901234507", Role.PACKAGING, "Jasur", "Qadoqchiev", "1003"),
+            ("omborchi1", "+998901234508", Role.WAREHOUSE, "Bahrom", "Omborchiev", "1004"),
         ]
         default_password = "spp12345"
-        for username, role, first, last, pin in users:
-            user, created = User.objects.get_or_create(
-                username=username, defaults={"role": role, "first_name": first, "last_name": last}
-            )
+        for username, phone, role, first, last, pin in users:
+            user = User.objects.filter(phone=phone).first() or User.objects.filter(username=username).first()
+            created = user is None
+            if created:
+                user = User(username=username, phone=phone, first_name=first, last_name=last)
             if created:
                 user.set_password(default_password)
                 user.role = role
@@ -54,6 +55,23 @@ class Command(BaseCommand):
                 user.pin_code = pin or ""
                 user.save()
         self.stdout.write(self.style.SUCCESS(f"Users: {User.objects.count()} (default password: {default_password})"))
+
+        shkaf_type, _ = ProductType.objects.get_or_create(
+            name="Shkaf A12", defaults={"description": "Standart 2 eshikli shkaf"}
+        )
+        if not shkaf_type.details.exists():
+            demo_details = [
+                ("Yon devor", 480, 706, 18, 2, "LDSP"),
+                ("Orqa devor", 700, 480, 8, 1, "DVP"),
+                ("Tokcha", 400, 300, 16, 3, "LDSP"),
+                ("Fasad", 396, 596, 18, 2, "MDF"),
+            ]
+            for name, length, width, thickness, qty, material in demo_details:
+                ProductTypeDetail.objects.create(
+                    product_type=shkaf_type, name=name, length_mm=length, width_mm=width,
+                    thickness_mm=thickness, quantity=qty, material_type=material,
+                )
+        self.stdout.write(self.style.SUCCESS(f"Product types: {ProductType.objects.count()}"))
 
         if not Order.objects.exists():
             order = Order.objects.create(

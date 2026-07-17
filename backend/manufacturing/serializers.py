@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from .models import Device, Factory, Machine, Operation, Printer, Tsex, Workstation
+from .models import Device, Machine, Operation, Printer, Tsex, Workstation
 
 
 class OperationSerializer(serializers.ModelSerializer):
@@ -9,15 +9,7 @@ class OperationSerializer(serializers.ModelSerializer):
         fields = "__all__"
 
 
-class FactorySerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Factory
-        fields = "__all__"
-
-
 class TsexSerializer(serializers.ModelSerializer):
-    factory_name = serializers.CharField(source="factory.name", read_only=True)
-
     class Meta:
         model = Tsex
         fields = "__all__"

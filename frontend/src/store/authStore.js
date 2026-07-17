@@ -20,8 +20,8 @@ export const useAuthStore = create((set, get) => ({
     }
   },
 
-  async login(username, password) {
-    const { data } = await adminApi.post("/auth/login", { username, password });
+  async login(phone, password) {
+    const { data } = await adminApi.post("/auth/login", { phone, password });
     setTokens("admin", { access: data.access, refresh: data.refresh });
     set({ user: data.user });
     return data.user;

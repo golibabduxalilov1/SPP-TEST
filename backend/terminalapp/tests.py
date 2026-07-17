@@ -8,10 +8,10 @@ from orders.models import Order
 class OrderQRStatusTests(APITestCase):
     def setUp(self):
         self.warehouse_user = User.objects.create_user(
-            username="omborchi", password="secret-pass", role=Role.WAREHOUSE,
+            username="omborchi", phone="+998901113401", password="secret-pass", role=Role.WAREHOUSE,
         )
         self.operator_user = User.objects.create_user(
-            username="operator", password="secret-pass", role=Role.OPERATOR,
+            username="operator", phone="+998901113402", password="secret-pass", role=Role.OPERATOR,
         )
         self.order = Order.objects.create(product_name="Shkaf", status=Order.Status.DRAFT)
 

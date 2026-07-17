@@ -22,7 +22,7 @@ export default function NotFound() {
       >
         <p className="page-title text-6xl font-bold leading-none text-gradient sm:text-7xl">404</p>
         <p className="mb-6 mt-3 text-[var(--ink-soft)]">Sahifa topilmadi</p>
-        <Button as={Link} to="/" magnetic={false}>
+        <Button as={Link} to="/" magnetic={false} className="!text-white">
           <ArrowLeft size={16} /> Bosh sahifaga qaytish
         </Button>
       </motion.div>

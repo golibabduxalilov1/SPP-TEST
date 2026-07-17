@@ -6,3 +6,13 @@ export function getDeviceId() {
   }
   return id;
 }
+
+// A terminal device is physically mounted at one post — remembered locally so
+// operators only need to enter their PIN on every login, not reselect the post.
+export function getSavedWorkstationId() {
+  return localStorage.getItem("spp_terminal_workstation_id");
+}
+
+export function saveWorkstationId(id) {
+  if (id) localStorage.setItem("spp_terminal_workstation_id", String(id));
+}

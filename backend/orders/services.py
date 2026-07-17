@@ -4,25 +4,8 @@ import io
 from django.db import transaction
 from manufacturing.models import Operation
 
-from .adapters import OrderInput
 from .constants import DEFAULT_ROUTE_KEY, ROUTE_TEMPLATES
 from .models import Order, Part, PartRoute, Product
-
-
-def create_order(order_input: OrderInput, created_by) -> Order:
-    """Creates an Order from a normalized OrderInput, regardless of which
-    OrderSource produced it (manual form today, Odoo webhook in the future)."""
-    return Order.objects.create(
-        customer_name=order_input.customer_name,
-        customer_phone=order_input.customer_phone,
-        product_name=order_input.product_name,
-        notes=order_input.notes,
-        deadline=order_input.deadline,
-        priority=order_input.priority,
-        external_system=order_input.source,
-        external_order_id=order_input.external_id,
-        created_by=created_by,
-    )
 
 
 def assign_route(part: Part, route_key: str):
@@ -44,6 +27,37 @@ def assign_route(part: Part, route_key: str):
         )
     part.current_operation = first_operation
     part.save(update_fields=["current_operation"])
+
+
+def create_part_for_order_detail(detail):
+    """Every 'Mahsulot detallari' row gets its own trackable Part (unique QR + route)."""
+    part = Part.objects.create(
+        order=detail.order,
+        code=f"{detail.order.order_no}-{detail.id}",
+        name=detail.name,
+        material=detail.material_type,
+        length_mm=detail.length_mm,
+        width_mm=detail.width_mm,
+        thickness_mm=detail.thickness_mm,
+        quantity=detail.quantity,
+    )
+    assign_route(part, DEFAULT_ROUTE_KEY)
+    detail.part = part
+    detail.save(update_fields=["part"])
+    return part
+
+
+def sync_part_from_order_detail(detail):
+    if not detail.part_id:
+        return
+    Part.objects.filter(pk=detail.part_id).update(
+        name=detail.name,
+        material=detail.material_type,
+        length_mm=detail.length_mm,
+        width_mm=detail.width_mm,
+        thickness_mm=detail.thickness_mm,
+        quantity=detail.quantity,
+    )
 
 
 REQUIRED_IMPORT_COLUMNS = [

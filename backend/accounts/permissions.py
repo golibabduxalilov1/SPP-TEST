@@ -23,13 +23,13 @@ def roles_allowed(*roles):
     return _Perm
 
 
-IsSuperAdmin = roles_allowed(Role.SUPER_ADMIN)
-IsManagementRole = roles_allowed(Role.SUPER_ADMIN, Role.DIRECTOR, Role.MANAGER)
-IsMasterOrAbove = roles_allowed(Role.SUPER_ADMIN, Role.DIRECTOR, Role.MANAGER, Role.MASTER)
-IsTechnologistOrAbove = roles_allowed(Role.SUPER_ADMIN, Role.DIRECTOR, Role.MANAGER, Role.TECHNOLOGIST)
+IsSuperAdmin = roles_allowed(Role.SUPER_ADMIN, Role.ADMIN)
+IsManagementRole = roles_allowed(Role.SUPER_ADMIN, Role.ADMIN, Role.DIRECTOR, Role.MANAGER)
+IsMasterOrAbove = roles_allowed(Role.SUPER_ADMIN, Role.ADMIN, Role.DIRECTOR, Role.MANAGER, Role.MASTER)
+IsTechnologistOrAbove = roles_allowed(Role.SUPER_ADMIN, Role.ADMIN, Role.DIRECTOR, Role.MANAGER, Role.TECHNOLOGIST)
 
 # QR-based order status updates: management roles plus the terminal roles that
 # actually handle physical orders on the production/warehouse floor.
 CanScanOrderStatus = roles_allowed(
-    Role.SUPER_ADMIN, Role.DIRECTOR, Role.MANAGER, Role.MASTER, Role.PACKAGING, Role.WAREHOUSE,
+    Role.SUPER_ADMIN, Role.ADMIN, Role.DIRECTOR, Role.MANAGER, Role.MASTER, Role.PACKAGING, Role.WAREHOUSE,
 )

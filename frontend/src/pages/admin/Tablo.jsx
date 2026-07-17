@@ -4,6 +4,8 @@ import { Link } from "react-router-dom";
 import { CheckCircle2, Clock, Table2, Terminal } from "lucide-react";
 import { adminApi } from "../../api/client";
 import { Card, CardBody, CardHeader } from "../../components/ui/Card";
+import { Table } from "../../components/ui/Table";
+import Button from "../../components/ui/Button";
 import { PageLoader, EmptyState } from "../../components/ui/Misc";
 import SegmentedControl from "../../components/ui/SegmentedControl";
 import { format } from "date-fns";
@@ -94,12 +96,12 @@ export default function Tablo() {
     <div className="space-y-6">
       {/* Kiosk-style header panel — dark walnut shell, mirrors TerminalLayout's header idiom */}
       <div className="brand-shell relative isolate overflow-hidden rounded-2xl border border-white/8 px-4 py-4 elevation-lg sm:px-6">
-        <div className="relative z-1 flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
+        <div className="relative z-1 grid grid-cols-1 items-center gap-4 sm:grid-cols-[minmax(0,1fr)_auto] xl:grid-cols-[minmax(13rem,1fr)_auto_auto]">
+          <div className="flex min-w-0 items-center gap-3">
             <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[linear-gradient(135deg,var(--accent-2-bright),var(--accent-2))] text-[#2A1D14] shadow-(--shadow-accent)">
               <Table2 size={22} />
             </span>
-            <div>
+            <div className="min-w-0">
               <p className="font-display text-base font-semibold leading-tight text-white sm:text-lg">Ishlab chiqarish tablosi</p>
               <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-white/45">Miqdor nazorati</p>
             </div>
@@ -121,7 +123,7 @@ export default function Tablo() {
             )}
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3 sm:col-span-2 xl:col-span-1">
             <div data-tutorial="tablo-mode">
               <SegmentedControl
                 options={MODES.map((m) => ({ value: m.key, label: m.label }))}
@@ -129,13 +131,17 @@ export default function Tablo() {
                 onChange={setMode}
               />
             </div>
-            <Link
+            <Button
+              as={Link}
               to="/terminal/login"
-              className="focus-ring flex min-h-9 items-center gap-1.5 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-semibold text-white/80 transition-colors duration-200 hover:bg-white/15 hover:text-white"
+              variant="ghost"
+              size="sm"
+              magnetic={false}
+              className="!min-h-11 !rounded-lg !border-white/15 !bg-white/10 !text-sm !font-medium !text-white/80 hover:!bg-white/15 hover:!text-white"
             >
               <Terminal size={14} /> Terminal
-            </Link>
-            <span className="tabular flex min-h-9 items-center rounded-lg border border-white/12 bg-white/8 px-3 text-sm font-semibold text-white/85">
+            </Button>
+            <span className="tabular flex min-h-11 items-center rounded-lg border border-white/12 bg-white/8 px-3 text-sm font-semibold text-white/85">
               {format(now, "HH:mm:ss")}
             </span>
           </div>
@@ -154,8 +160,7 @@ export default function Tablo() {
           ) : data.rows.length === 0 ? (
             <EmptyState title="Aktiv buyurtma yo'q" />
           ) : (
-            <div className="overflow-x-auto scrollbar-thin">
-              <table className="w-full min-w-225 border-collapse text-sm">
+            <Table className="min-w-225!" label="Ishlab chiqarish tablosi">
                 <thead className="sticky top-0 bg-(--surface-muted) text-xs tracking-wide text-(--ink-soft) uppercase">
                   <tr>
                     <th className="sticky left-0 z-10 w-10 min-w-10 bg-(--surface-muted) px-3 py-3 text-left font-semibold">№</th>
@@ -225,8 +230,7 @@ export default function Tablo() {
                     </tr>
                   ))}
                 </tbody>
-              </table>
-            </div>
+            </Table>
           )}
         </CardBody>
       </Card>

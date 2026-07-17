@@ -296,11 +296,6 @@ h1, h2, h3 {
   font-size: 1.125rem;
 }
 
-/* Custom cursor active → hide native pointer on desktop only */
-body.cursor-none,
-body.cursor-none * {
-  cursor: none !important;
-}
 
 /* ============================================================================
    REDUCED MOTION — kill 3D/scroll choreography, keep plain fades

@@ -149,14 +149,17 @@ export default function TutorialOverlay() {
           <span className="text-xs font-semibold uppercase tracking-wide text-[var(--accent-strong)]">
             {stepIndex + 1}/{steps.length}
           </span>
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="icon"
+            magnetic={false}
             onClick={skip}
             aria-label="Yopish"
-            className="focus-ring -m-2.5 flex min-h-11 min-w-11 items-center justify-center rounded-md text-[var(--ink-faint)] transition-colors hover:text-[var(--ink)]"
+            className="!-m-2.5 !rounded-lg !border-transparent !bg-transparent !text-[var(--ink-faint)] hover:!bg-transparent hover:!text-[var(--ink)]"
           >
             <X size={16} />
-          </button>
+          </Button>
         </div>
 
         <h3 className="font-display text-base font-semibold text-[var(--ink)]">{step.title}</h3>
@@ -173,13 +176,16 @@ export default function TutorialOverlay() {
         </div>
 
         <div className="mt-4 flex items-center justify-between gap-2">
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="sm"
+            magnetic={false}
             onClick={skip}
-            className="focus-ring rounded-md text-xs font-medium text-[var(--ink-faint)] transition-colors hover:text-[var(--ink-soft)]"
+            className="!rounded-lg !border-transparent !bg-transparent !px-2 !text-xs !font-medium !text-[var(--ink-faint)] hover:!bg-transparent hover:!text-[var(--ink-soft)]"
           >
             O'tkazib yuborish
-          </button>
+          </Button>
           <div className="flex items-center gap-2">
             {!isFirst && (
               <Button size="sm" variant="outline" magnetic={false} onClick={prev}>

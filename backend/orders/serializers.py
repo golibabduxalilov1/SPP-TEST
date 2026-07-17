@@ -1,8 +1,10 @@
 from rest_framework import serializers
 
+from customers.models import Customer
+
 from .constants import DEFAULT_ROUTE_KEY, ROUTE_TEMPLATES
-from .models import Label, Order, Part, PartRoute, Product
-from .services import assign_route
+from .models import Label, Order, OrderDetail, Part, PartRoute, Product
+from .services import assign_route, create_part_for_order_detail, sync_part_from_order_detail
 
 
 class PartRouteSerializer(serializers.ModelSerializer):
@@ -50,15 +52,55 @@ class ProductSerializer(serializers.ModelSerializer):
         fields = ["id", "order", "name", "notes", "parts"]
 
 
+class OrderDetailItemSerializer(serializers.ModelSerializer):
+    qr_token = serializers.SerializerMethodField()
+    part_code = serializers.SerializerMethodField()
+
+    def get_qr_token(self, obj):
+        return obj.part.qr_token if obj.part_id else None
+
+    def get_part_code(self, obj):
+        return obj.part.code if obj.part_id else None
+
+    class Meta:
+        model = OrderDetail
+        fields = [
+            "id", "order", "name", "length_mm", "width_mm", "thickness_mm", "quantity", "material_type",
+            "part", "part_code", "qr_token",
+        ]
+        read_only_fields = ["part"]
+
+    def create(self, validated_data):
+        detail = super().create(validated_data)
+        create_part_for_order_detail(detail)
+        return detail
+
+    def update(self, instance, validated_data):
+        detail = super().update(instance, validated_data)
+        sync_part_from_order_detail(detail)
+        return detail
+
+
+class OrderDetailItemCreateSerializer(serializers.ModelSerializer):
+    """Nested input-only shape for details passed alongside order creation (no `order` yet)."""
+
+    class Meta:
+        model = OrderDetail
+        fields = ["name", "length_mm", "width_mm", "thickness_mm", "quantity", "material_type"]
+
+
 class OrderListSerializer(serializers.ModelSerializer):
     parts_total = serializers.SerializerMethodField()
     parts_completed = serializers.SerializerMethodField()
+    product_type_name = serializers.CharField(source="product_type.name", read_only=True)
+    details = OrderDetailItemCreateSerializer(many=True, write_only=True, required=False)
 
     class Meta:
         model = Order
         fields = [
-            "id", "order_no", "customer_name", "customer_phone", "product_name", "deadline",
-            "priority", "status", "created_at", "parts_total", "parts_completed",
+            "id", "order_no", "customer_name", "customer_phone", "product_name", "product_type",
+            "product_type_name", "deadline", "priority", "status", "created_at",
+            "parts_total", "parts_completed", "details",
         ]
 
     def get_parts_total(self, obj):
@@ -67,18 +109,30 @@ class OrderListSerializer(serializers.ModelSerializer):
     def get_parts_completed(self, obj):
         return obj.parts.filter(status="completed").count()
 
+    def create(self, validated_data):
+        details_data = validated_data.pop("details", [])
+        order = super().create(validated_data)
+        for detail_data in details_data:
+            detail = OrderDetail.objects.create(order=order, **detail_data)
+            create_part_for_order_detail(detail)
+        phone = (order.customer_phone or "").strip()
+        if phone:
+            Customer.objects.get_or_create(phone=phone, defaults={"name": order.customer_name or ""})
+        return order
+
 
 class OrderDetailSerializer(serializers.ModelSerializer):
     products = ProductSerializer(many=True, read_only=True)
     parts = PartSerializer(many=True, read_only=True)
+    details = OrderDetailItemSerializer(many=True, read_only=True)
+    product_type_name = serializers.CharField(source="product_type.name", read_only=True)
 
     class Meta:
         model = Order
         fields = [
             "id", "order_no", "customer_name", "customer_phone", "product_name", "notes",
-            "deadline", "priority", "status", "external_system", "external_order_id",
-            "external_customer_id", "approved_price", "approved_deadline", "customer_confirmed_at",
-            "odoo_sync_status", "qr_token", "created_at", "updated_at", "products", "parts",
+            "product_type", "product_type_name", "deadline", "priority", "status", "qr_token",
+            "created_at", "updated_at", "products", "parts", "details",
         ]
         read_only_fields = ["order_no", "qr_token", "created_at", "updated_at"]
 

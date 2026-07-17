@@ -46,7 +46,18 @@ export default function TerminalOrderStatus() {
 
     return () => {
       cancelled = true;
-      scanner.stop().then(() => scanner.clear()).catch(() => {});
+      try {
+        Promise.resolve(scanner.stop())
+          .then(() => scanner.clear())
+          .catch(() => {});
+      } catch {
+        // In StrictMode cleanup may run before camera startup has completed.
+        try {
+          scanner.clear();
+        } catch {
+          // The reader may already be cleared; nothing else to release.
+        }
+      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -144,14 +155,15 @@ export default function TerminalOrderStatus() {
 
           {cameraError && <p className="mt-3 text-center text-sm text-status-red">{cameraError}</p>}
 
-          <form onSubmit={submitManual} className="mt-4 flex gap-2">
+          <form onSubmit={submitManual} className="mt-4 flex flex-col gap-2 sm:flex-row">
             <Input
               value={manualToken}
               onChange={(e) => setManualToken(e.target.value)}
               placeholder="Yoki QR tokenni qo'lda kiriting..."
-              className="flex-1"
+              containerClassName="min-w-0 flex-1"
+              className="min-w-0"
             />
-            <Button type="submit" size="lg" variant="secondary" disabled={busy || !manualToken.trim()}>
+            <Button type="submit" size="lg" variant="secondary" disabled={busy || !manualToken.trim()} className="w-full sm:w-auto">
               Qidirish
             </Button>
           </form>
@@ -193,6 +205,7 @@ export default function TerminalOrderStatus() {
                     size="lg"
                     variant={opt.value === "cancelled" ? "danger" : "primary"}
                     loading={busy}
+                    className="w-full sm:w-auto"
                     onClick={() => (opt.value === "cancelled" ? setConfirmingCancel(true) : applyStatus(opt.value))}
                   >
                     {opt.value === "cancelled" ? "Bekor qilish" : opt.label}

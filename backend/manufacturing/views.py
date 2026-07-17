@@ -2,9 +2,9 @@ from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticated
 
 from accounts.permissions import IsTechnologistOrAbove
-from .models import Device, Factory, Machine, Operation, Printer, Tsex, Workstation
+from .models import Device, Machine, Operation, Printer, Tsex, Workstation
 from .serializers import (
-    DeviceSerializer, FactorySerializer, MachineSerializer, OperationSerializer,
+    DeviceSerializer, MachineSerializer, OperationSerializer,
     PrinterSerializer, TsexSerializer, WorkstationSerializer,
 )
 
@@ -15,17 +15,10 @@ class OperationViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
 
-class FactoryViewSet(viewsets.ModelViewSet):
-    queryset = Factory.objects.all()
-    serializer_class = FactorySerializer
-    permission_classes = [IsAuthenticated]
-
-
 class TsexViewSet(viewsets.ModelViewSet):
-    queryset = Tsex.objects.select_related("factory").all()
+    queryset = Tsex.objects.all()
     serializer_class = TsexSerializer
     permission_classes = [IsAuthenticated]
-    filterset_fields = ["factory"]
 
 
 class WorkstationViewSet(viewsets.ModelViewSet):

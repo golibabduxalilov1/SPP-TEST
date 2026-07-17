@@ -30,6 +30,11 @@ export const useTerminalStore = create((set, get) => ({
     set({ ready: true });
   },
 
+  async lookupPin(pinCode) {
+    const { data } = await terminalApi.post("/auth/terminal-pin-lookup", { pin_code: pinCode });
+    return data;
+  },
+
   async loginWithPin(pinCode, workstation) {
     const deviceId = getDeviceId();
     const { data } = await terminalApi.post("/auth/terminal-login", {

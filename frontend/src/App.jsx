@@ -9,15 +9,17 @@ import AdminLayout from "./layouts/AdminLayout";
 import Login from "./pages/admin/Login";
 import Dashboard from "./pages/admin/Dashboard";
 import Orders from "./pages/admin/Orders";
+import NewOrder from "./pages/admin/NewOrder";
 import OrderDetail from "./pages/admin/OrderDetail";
+import Customers from "./pages/admin/Customers";
 import Tablo from "./pages/admin/Tablo";
 import Machines from "./pages/admin/Machines";
+import References from "./pages/admin/References";
 import Employees from "./pages/admin/Employees";
 import Conflicts from "./pages/admin/Conflicts";
 import WarehousePage from "./pages/admin/Warehouse";
 import Reports from "./pages/admin/Reports";
 import Labels from "./pages/admin/Labels";
-import Integrations from "./pages/admin/Integrations";
 import NotFound from "./pages/NotFound";
 
 import TerminalLogin from "./pages/terminal/TerminalLogin";
@@ -67,15 +69,17 @@ export default function App() {
         >
           <Route index element={<Dashboard />} />
           <Route path="orders" element={<Orders />} />
+          <Route path="orders/new" element={<NewOrder />} />
           <Route path="orders/:id" element={<OrderDetail />} />
+          <Route path="customers" element={<Customers />} />
           <Route path="tablo" element={<Tablo />} />
           <Route path="labels" element={<Labels />} />
           <Route path="machines" element={<Machines />} />
+          <Route path="references" element={<References />} />
           <Route path="employees" element={<Employees />} />
           <Route path="conflicts" element={<Conflicts />} />
           <Route path="warehouse" element={<WarehousePage />} />
           <Route path="reports" element={<Reports />} />
-          <Route path="integrations" element={<Integrations />} />
         </Route>
 
         <Route path="/terminal/login" element={<TerminalLogin />} />

@@ -1,6 +1,7 @@
 import { useId } from "react";
 import clsx from "clsx";
 import { motion } from "framer-motion";
+import Button from "./Button";
 
 export default function SegmentedControl({ options, value, onChange, className }) {
   const groupId = useId();
@@ -16,14 +17,19 @@ export default function SegmentedControl({ options, value, onChange, className }
       {options.map((opt) => {
         const active = opt.value === value;
         return (
-          <button
+          <Button
             key={opt.value}
             type="button"
+            variant="ghost"
+            size="sm"
+            magnetic={false}
             onClick={() => onChange(opt.value)}
             aria-pressed={active}
             className={clsx(
-              "focus-ring relative min-h-9 rounded-lg px-4 py-1.5 text-sm font-medium transition-colors duration-200",
-              active ? "text-[var(--ink)]" : "text-[var(--ink-soft)] hover:bg-black/[0.03] hover:text-[var(--ink)]"
+              "relative !min-h-11 !rounded-lg !border-transparent !px-[18px] !py-2.5 !text-sm !font-medium",
+              active
+                ? "!text-[var(--ink)] hover:!bg-transparent"
+                : "!text-[var(--ink-soft)] hover:!bg-black/[0.03] hover:!text-[var(--ink)]"
             )}
           >
             {active && (
@@ -34,7 +40,7 @@ export default function SegmentedControl({ options, value, onChange, className }
               />
             )}
             <span className="relative z-10">{opt.label}</span>
-          </button>
+          </Button>
         );
       })}
     </div>

@@ -20,7 +20,7 @@ export default function Toggle({ checked, onChange, disabled, label, className, 
           checked={checked}
           onChange={onChange}
           disabled={disabled}
-          className="peer absolute inset-0 h-full w-full cursor-pointer appearance-none focus:outline-none"
+          className="peer absolute inset-0 !h-full !w-full cursor-pointer appearance-none focus:outline-none"
           {...props}
         />
         <span

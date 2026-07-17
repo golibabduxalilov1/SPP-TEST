@@ -43,24 +43,14 @@ class Order(models.Model):
     customer_name = models.CharField(max_length=200, blank=True)
     customer_phone = models.CharField(max_length=32, blank=True)
     product_name = models.CharField(max_length=200, blank=True)
+    product_type = models.ForeignKey(
+        "catalog.ProductType", on_delete=models.SET_NULL, null=True, blank=True, related_name="orders"
+    )
     notes = models.TextField(blank=True)
     deadline = models.DateField(null=True, blank=True)
     priority = models.CharField(max_length=16, choices=Priority.choices, default=Priority.NORMAL)
     status = models.CharField(max_length=24, choices=Status.choices, default=Status.DRAFT)
     qr_token = models.CharField(max_length=64, unique=True, default=generate_order_qr_token, blank=True)
-
-    # Odoo-ready fields (section 11.3)
-    external_system = models.CharField(max_length=32, blank=True)
-    external_order_id = models.CharField(max_length=64, blank=True)
-    external_customer_id = models.CharField(max_length=64, blank=True)
-    approved_price = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
-    approved_deadline = models.DateField(null=True, blank=True)
-    customer_confirmed_at = models.DateTimeField(null=True, blank=True)
-    odoo_sync_status = models.CharField(
-        max_length=16,
-        choices=[("not_connected", "not_connected"), ("pending", "pending"), ("synced", "synced"), ("failed", "failed")],
-        default="not_connected",
-    )
 
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name="orders_created")
     created_at = models.DateTimeField(auto_now_add=True)
@@ -161,6 +151,32 @@ class PartRoute(models.Model):
 
     def __str__(self):
         return f"{self.part.code} -> {self.operation.code}"
+
+
+class OrderDetail(models.Model):
+    """Buyurtma detali — a concrete detail row belonging to one Order.
+
+    Populated as an independent copy from the chosen ProductType's
+    ProductTypeDetail rows at order-creation time (not FK-linked), so later
+    edits to the standard template or to this row never affect the other.
+    """
+
+    order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name="details")
+    name = models.CharField(max_length=200)
+    length_mm = models.DecimalField(max_digits=10, decimal_places=1, null=True, blank=True)
+    width_mm = models.DecimalField(max_digits=10, decimal_places=1, null=True, blank=True)
+    thickness_mm = models.DecimalField(max_digits=10, decimal_places=1, null=True, blank=True)
+    quantity = models.PositiveIntegerField(default=1)
+    material_type = models.CharField(max_length=100, blank=True)
+    part = models.OneToOneField(
+        Part, on_delete=models.SET_NULL, null=True, blank=True, related_name="order_detail"
+    )
+
+    class Meta:
+        ordering = ["id"]
+
+    def __str__(self):
+        return f"{self.name} ({self.order.order_no})"
 
 
 class Label(models.Model):

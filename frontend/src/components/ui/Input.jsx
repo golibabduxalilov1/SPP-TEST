@@ -2,11 +2,22 @@ import { forwardRef, isValidElement, cloneElement } from "react";
 import clsx from "clsx";
 import { Check, AlertCircle, ChevronDown } from "lucide-react";
 
-const FIELD_BASE =
-  "w-full rounded-lg border bg-[var(--surface)] px-3.5 py-2.5 text-sm text-[var(--ink)] " +
+const FIELD_STRUCTURE =
+  "w-full rounded-lg border transition-[border-color,box-shadow,background-color] duration-[220ms] ease-out " +
+  "focus:outline-none disabled:cursor-not-allowed disabled:opacity-50";
+
+const FIELD_LIGHT =
+  "bg-[var(--surface)] px-3.5 py-2.5 text-sm text-[var(--ink)] " +
   "shadow-[inset_0_1px_2px_rgba(74,50,35,0.05)] " +
   "placeholder:text-[var(--ink-faint)] transition-[border-color,box-shadow,background-color] duration-[220ms] ease-out " +
-  "focus:outline-none disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:!border-[var(--border-strong)]";
+  "disabled:hover:!border-[var(--border-strong)]";
+
+const FIELD_DARK =
+  "border-white/10 bg-white/[0.06] px-3.5 py-3 text-[15px] text-white " +
+  "placeholder:text-white/35 hover:border-white/20 focus:border-[var(--accent-bright)] " +
+  "focus:shadow-[0_0_0_3px_rgba(99,102,241,0.30)]";
+
+const FIELD_BASE = `${FIELD_STRUCTURE} ${FIELD_LIGHT}`;
 
 const STATE_CLASSES = {
   default:
@@ -44,24 +55,48 @@ export function Label({ children, className, required }) {
   );
 }
 
-export const Input = forwardRef(function Input({ className, state = "default", ...props }, ref) {
+export const Input = forwardRef(function Input({
+  className,
+  containerClassName,
+  state = "default",
+  appearance = "light",
+  leadingIcon,
+  trailing,
+  ...props
+}, ref) {
   const showIcon = state === "error" || state === "success";
+  const appearanceClasses = appearance === "dark" ? `${FIELD_STRUCTURE} ${FIELD_DARK}` : FIELD_BASE;
   return (
-    <div className="relative">
+    <div className={clsx("relative", containerClassName)}>
       <input
         ref={ref}
         aria-invalid={state === "error" || undefined}
-        className={clsx(FIELD_BASE, STATE_CLASSES[state] || STATE_CLASSES.default, showIcon && "pr-10", className)}
+        className={clsx(
+          appearanceClasses,
+          appearance === "dark" ? state !== "default" && STATE_CLASSES[state] : STATE_CLASSES[state] || STATE_CLASSES.default,
+          leadingIcon && "pl-10",
+          (showIcon || trailing) && "pr-11",
+          className
+        )}
         {...props}
       />
-      <StateIcon state={state} />
+      {leadingIcon && (
+        <span aria-hidden className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-white/40">
+          {leadingIcon}
+        </span>
+      )}
+      {trailing ? (
+        <span className="absolute right-0 top-1/2 -translate-y-1/2">{trailing}</span>
+      ) : (
+        <StateIcon state={state} />
+      )}
     </div>
   );
 });
 
-export function Select({ className, children, state = "default", ...props }) {
+export function Select({ className, containerClassName, children, state = "default", ...props }) {
   return (
-    <div className="relative">
+    <div className={clsx("relative", containerClassName)}>
       <select
         aria-invalid={state === "error" || undefined}
         className={clsx(
@@ -83,9 +118,9 @@ export function Select({ className, children, state = "default", ...props }) {
   );
 }
 
-export function Textarea({ className, state = "default", ...props }) {
+export function Textarea({ className, containerClassName, state = "default", ...props }) {
   return (
-    <div className="relative">
+    <div className={clsx("relative", containerClassName)}>
       <textarea
         aria-invalid={state === "error" || undefined}
         className={clsx(FIELD_BASE, STATE_CLASSES[state] || STATE_CLASSES.default, className)}
@@ -95,12 +130,12 @@ export function Textarea({ className, state = "default", ...props }) {
   );
 }
 
-export function Field({ label, children, hint, error, success, required }) {
+export function Field({ label, children, hint, error, success, required, className }) {
   const state = error ? "error" : success ? "success" : "default";
   const child = isValidElement(children) && state !== "default" ? cloneElement(children, { state }) : children;
 
   return (
-    <div>
+    <div className={clsx("min-w-0", className)}>
       {label && <Label required={required}>{label}</Label>}
       {child}
       {error ? (

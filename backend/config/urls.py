@@ -6,13 +6,14 @@ from django.urls import include, path
 urlpatterns = [
     path("superadmin/", admin.site.urls),
     path("api/", include("accounts.urls")),
+    path("api/", include("customers.urls")),
     path("api/", include("manufacturing.urls")),
+    path("api/", include("catalog.urls")),
     path("api/", include("orders.urls")),
     path("api/", include("terminalapp.urls")),
     path("api/", include("packaging.urls")),
     path("api/", include("warehouse.urls")),
     path("api/", include("core.urls")),
-    path("api/", include("integrations.odoo.urls")),
 ]
 
 if settings.DEBUG:

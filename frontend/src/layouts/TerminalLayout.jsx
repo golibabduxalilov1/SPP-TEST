@@ -8,6 +8,8 @@ import { PageLoader } from "../components/ui/Misc";
 import Button from "../components/ui/Button";
 
 const AUTO_SYNC_INTERVAL_MS = 15 * 60 * 1000;
+const IDLE_TIMEOUT_MS = 5 * 60 * 1000;
+const IDLE_EVENTS = ["pointerdown", "keydown", "touchstart"];
 
 // Roles that may open /terminal/order-status — mirrors accounts.permissions.CanScanOrderStatus
 // on the backend, restricted here to the roles that actually log into the terminal.
@@ -34,6 +36,27 @@ export default function TerminalLayout() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Idle-timeout: after inactivity, drop back to the PIN screen so the next
+  // employee at this terminal doesn't inherit the previous session.
+  useEffect(() => {
+    if (!employee) return undefined;
+    let timer;
+    const reset = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        logout();
+        navigate("/terminal/login");
+      }, IDLE_TIMEOUT_MS);
+    };
+    IDLE_EVENTS.forEach((evt) => window.addEventListener(evt, reset));
+    reset();
+    return () => {
+      clearTimeout(timer);
+      IDLE_EVENTS.forEach((evt) => window.removeEventListener(evt, reset));
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [employee]);
+
   async function handleSync() {
     setSyncing(true);
     try {
@@ -55,12 +78,12 @@ export default function TerminalLayout() {
 
   return (
     <div className="min-h-screen bg-(--canvas) flex flex-col">
-      <header className="brand-shell text-white px-4 py-3 flex items-center justify-between flex-wrap gap-3 border-b border-white/8 elevation-lg sm:px-6">
-        <div>
-          <p className="font-display font-semibold text-sm tracking-wide">{workstation?.name || "Post"}</p>
-          <p className="text-xs text-white/50">{employee.first_name} {employee.last_name} — {employee.role_display}</p>
+      <header className="brand-shell flex flex-wrap items-center justify-between gap-3 border-b border-white/8 px-4 py-3 text-white elevation-lg sm:px-6">
+        <div className="min-w-0">
+          <p className="truncate font-display text-sm font-semibold tracking-wide">{workstation?.name || "Post"}</p>
+          <p className="truncate text-xs text-white/50">{employee.first_name} {employee.last_name} — {employee.role_display}</p>
         </div>
-        <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:gap-3">
           <span className={clsx("flex min-h-8 items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold", online ? "bg-status-green-bg text-status-green border-status-green/15" : "bg-status-red-bg text-status-red border-status-red/15")}>
             {online ? <Wifi size={13} /> : <WifiOff size={13} />} {online ? "Online" : "Offline"}
           </span>
@@ -74,7 +97,7 @@ export default function TerminalLayout() {
               to="/terminal/order-status"
               className={({ isActive }) =>
                 clsx(
-                  "focus-ring flex min-h-9 items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors duration-200",
+                  "focus-ring flex min-h-11 items-center gap-2 rounded-lg border px-3 py-2.5 text-sm font-medium transition-colors duration-300",
                   isActive
                     ? "border-transparent bg-[linear-gradient(120deg,var(--accent),var(--accent-bright))] text-white"
                     : "border-white/15 bg-white/10 text-white/80 hover:bg-white/15 hover:text-white"
@@ -89,7 +112,7 @@ export default function TerminalLayout() {
             loading={syncing}
             magnetic={false}
             size="sm"
-            className="min-h-9!"
+            className="min-h-11!"
           >
             <RefreshCw size={13} /> Sinxronizatsiya
           </Button>
@@ -102,7 +125,7 @@ export default function TerminalLayout() {
               navigate("/terminal/login");
             }}
             aria-label="Chiqish"
-            className="min-h-9! min-w-9! border-transparent! bg-transparent! text-white/55! hover:bg-white/8! hover:text-white!"
+            className="min-h-11! min-w-11! border-transparent! bg-transparent! text-white/55! hover:bg-white/8! hover:text-white!"
           >
             <LogOut size={16} />
           </Button>
