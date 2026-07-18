@@ -260,7 +260,7 @@ function ProductTypeDetailsModal({ productType, onClose, onChanged }) {
   }
 
   return (
-    <Modal open={Boolean(productType)} onClose={onClose} title={`Standart detallar — ${productType?.name || ""}`} size="lg">
+    <Modal open={Boolean(productType)} onClose={onClose} title={`Standart detallar — ${productType?.name || ""}`} size="xl">
       {loading ? (
         <PageLoader />
       ) : (
