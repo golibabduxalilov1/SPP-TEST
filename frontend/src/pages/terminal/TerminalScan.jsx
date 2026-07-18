@@ -9,6 +9,7 @@ import { Card, CardBody, CardHeader } from "../../components/ui/Card";
 import { Input } from "../../components/ui/Input";
 import Badge from "../../components/ui/Badge";
 import { EmptyState } from "../../components/ui/Misc";
+import QrCameraScanner from "../../components/terminal/QrCameraScanner";
 
 const ERROR_MESSAGES = {
   invalid_qr: "QR topilmadi",
@@ -24,18 +25,22 @@ export default function TerminalScan() {
   const { workstation, parts, online, refreshBootstrap, refreshPendingCount } = useTerminalStore();
   const [value, setValue] = useState("");
   const [lastResult, setLastResult] = useState(null);
+  const [cameraError, setCameraError] = useState("");
   const inputRef = useRef(null);
 
   useEffect(() => {
     inputRef.current?.focus();
   }, [lastResult]);
 
-  async function handleScan(e) {
+  async function handleManualSubmit(e) {
     e.preventDefault();
     const qrToken = value.trim();
     if (!qrToken) return;
     setValue("");
+    await processToken(qrToken);
+  }
 
+  async function processToken(qrToken) {
     const clientScanId = uuid();
     const scannedAtClient = new Date().toISOString();
     const operationCode = workstation.operation_code;
@@ -78,7 +83,12 @@ export default function TerminalScan() {
       <Card>
         <CardHeader title={workstation?.name} subtitle={`Bosqich: ${workstation?.operation_name}`} />
         <CardBody>
-          <form onSubmit={handleScan}>
+          <div className="relative mx-auto aspect-square w-full max-w-xs overflow-hidden rounded-2xl border-2 border-[var(--border-strong)] bg-black [&>div>video]:h-full [&>div>video]:w-full [&>div>video]:object-cover">
+            <QrCameraScanner onDecode={processToken} onError={() => setCameraError("Kameraga ruxsat berilmadi yoki kamera topilmadi. QR tokenni qo'lda kiriting.")} className="h-full w-full" />
+          </div>
+          {cameraError && <p className="mt-3 text-center text-sm text-status-red">{cameraError}</p>}
+
+          <form onSubmit={handleManualSubmit} className="mt-4">
             <div className="relative">
               <ScanLine size={20} className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--ink-soft)]" />
               <Input

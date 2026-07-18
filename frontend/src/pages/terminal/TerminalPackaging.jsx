@@ -9,6 +9,7 @@ import { uuid } from "../../lib/uuid";
 import { Card, CardBody, CardHeader } from "../../components/ui/Card";
 import { Input, Field } from "../../components/ui/Input";
 import Button from "../../components/ui/Button";
+import QrCameraScanner from "../../components/terminal/QrCameraScanner";
 
 const ERROR_MESSAGES = {
   invalid_qr: "QR topilmadi",
@@ -23,6 +24,7 @@ export default function TerminalPackaging() {
   const [pkg, setPkg] = useState(null);
   const [value, setValue] = useState("");
   const [lastResult, setLastResult] = useState(null);
+  const [cameraError, setCameraError] = useState("");
   const inputRef = useRef(null);
 
   useEffect(() => {
@@ -42,11 +44,15 @@ export default function TerminalPackaging() {
     }
   }
 
-  async function scan(e) {
+  async function handleManualSubmit(e) {
     e.preventDefault();
     const qrToken = value.trim();
     if (!qrToken) return;
     setValue("");
+    await processToken(qrToken);
+  }
+
+  async function processToken(qrToken) {
     const clientScanId = uuid();
 
     if (online) {
@@ -109,7 +115,12 @@ export default function TerminalPackaging() {
       <Card>
         <CardHeader title={`Qadoq: ${pkg.package_no}`} subtitle={`Buyurtma #${pkg.order_no} — ${pkg.items_count} ta detal skanerlangan`} />
         <CardBody>
-          <form onSubmit={scan}>
+          <div className="relative mx-auto aspect-square w-full max-w-xs overflow-hidden rounded-2xl border-2 border-[var(--border-strong)] bg-black [&>div>video]:h-full [&>div>video]:w-full [&>div>video]:object-cover">
+            <QrCameraScanner onDecode={processToken} onError={() => setCameraError("Kameraga ruxsat berilmadi yoki kamera topilmadi. QR tokenni qo'lda kiriting.")} className="h-full w-full" />
+          </div>
+          {cameraError && <p className="mt-3 text-center text-sm text-status-red">{cameraError}</p>}
+
+          <form onSubmit={handleManualSubmit} className="mt-4">
             <div className="relative">
               <ScanLine size={20} className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--ink-soft)]" />
               <Input ref={inputRef} autoFocus value={value} onChange={(e) => setValue(e.target.value)} placeholder="Detal QR kodini skanerlang..." className="pl-11 text-lg py-4 terminal-tap" />
