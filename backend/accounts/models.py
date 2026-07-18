@@ -10,6 +10,11 @@ phone_validator = RegexValidator(
     message="Telefon raqam +998XXXXXXXXX formatida bo'lishi kerak.",
 )
 
+pin_code_validator = RegexValidator(
+    regex=r"^[0-9]{4}$",
+    message="PIN kod aynan 4 ta raqamdan iborat bo'lishi kerak.",
+)
+
 
 class Role(models.TextChoices):
     SUPER_ADMIN = "super_admin", "Super Admin"
@@ -59,7 +64,10 @@ class User(AbstractUser):
 
     role = models.CharField(max_length=20, choices=Role.choices, default=Role.OPERATOR)
     phone = models.CharField(max_length=17, unique=True, validators=[phone_validator])
-    pin_code = models.CharField(max_length=8, blank=True, null=True, unique=True, help_text="Terminal PIN kodi")
+    pin_code = models.CharField(
+        max_length=4, blank=True, null=True, unique=True,
+        validators=[pin_code_validator], help_text="Terminal PIN kodi (4 ta raqam)",
+    )
     badge_token = models.CharField(max_length=64, blank=True, unique=False, help_text="QR badge token")
     is_active_employee = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)

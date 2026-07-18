@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Download, ExternalLink, FileSpreadsheet, FileText, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { Check, Download, ExternalLink, FileSpreadsheet, FileText, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import toast from "react-hot-toast";
 import { adminApi } from "../../api/client";
+import { useAuthStore } from "../../store/authStore";
 import { Card, CardBody, CardHeader } from "../../components/ui/Card";
 import { Table, Thead, Tbody, Th, Tr, Td, EmptyRow } from "../../components/ui/Table";
 import Button from "../../components/ui/Button";
@@ -33,8 +34,10 @@ export default function Orders() {
   const [exportOpen, setExportOpen] = useState(false);
   const [deletingOrder, setDeletingOrder] = useState(null);
   const [editingOrder, setEditingOrder] = useState(null);
+  const [approvingId, setApprovingId] = useState(null);
   const navigate = useNavigate();
   const { registerAndAutoStart } = useTutorial();
+  const hasRole = useAuthStore((s) => s.hasRole);
 
   useEffect(() => registerAndAutoStart("orders", ordersSteps), [registerAndAutoStart]);
 
@@ -43,6 +46,19 @@ export default function Orders() {
     const { data } = await adminApi.get("/orders/", { params: { search: search || undefined, status: status || undefined } });
     setOrders(data.results || data);
     setLoading(false);
+  }
+
+  async function approve(order) {
+    setApprovingId(order.id);
+    try {
+      await adminApi.post(`/orders/${order.id}/approve/`);
+      toast.success(`#${order.order_no} tasdiqlandi`);
+      await load();
+    } catch {
+      toast.error("Tasdiqlashda xatolik yuz berdi");
+    } finally {
+      setApprovingId(null);
+    }
   }
 
   useEffect(() => {
@@ -75,7 +91,7 @@ export default function Orders() {
           actions={
             <div data-tutorial="orders-filters" className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
               <div className="relative w-full sm:w-auto">
-                <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--ink-soft)]" />
+                <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-(--ink-soft)" />
                 <Input className="pl-8 w-full sm:w-56" placeholder="Qidirish..." value={search} onChange={(e) => setSearch(e.target.value)} />
               </div>
               <Select containerClassName="w-full sm:w-auto" className="w-full sm:w-44" value={status} onChange={(e) => setStatus(e.target.value)}>
@@ -109,7 +125,7 @@ export default function Orders() {
                   <Tr key={o.id}>
                     <Td>
                       <p className="font-semibold">#{o.order_no}</p>
-                      <p className="text-xs text-[var(--ink-faint)]">{o.product_name}</p>
+                      <p className="text-xs text-(--ink-faint)">{o.product_name}</p>
                     </Td>
                     <Td>{o.customer_name || "—"}</Td>
                     <Td>{o.deadline ? format(new Date(o.deadline), "dd.MM.yyyy") : "—"}</Td>
@@ -124,6 +140,21 @@ export default function Orders() {
                     </Td>
                     <Td>
                       <div className="ml-auto flex w-fit items-center gap-1.5">
+                        {o.status === "draft" && hasRole("super_admin") && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            magnetic={false}
+                            onClick={() => approve(o)}
+                            loading={approvingId === o.id}
+                            aria-label={`#${o.order_no} buyurtmasini tasdiqlash`}
+                            title="Tasdiqlash"
+                            className="min-h-9! min-w-9! rounded-lg! border! border-(--border-strong)! px-0! text-status-green! hover:bg-status-green-bg!"
+                          >
+                            <Check size={14} strokeWidth={2.2} />
+                          </Button>
+                        )}
                         <Button
                           as={Link}
                           to={`/orders/${o.id}`}
@@ -132,7 +163,7 @@ export default function Orders() {
                           magnetic={false}
                           aria-label={`#${o.order_no} buyurtmasini ochish`}
                           title="Batafsil"
-                          className="!min-h-9 !min-w-9 !rounded-lg !border !border-[var(--border-strong)] !px-0 !text-[var(--ink-soft)] hover:!bg-[var(--surface-muted)] hover:!text-[var(--ink)]"
+                          className="min-h-9! min-w-9! rounded-lg! border! border-(--border-strong)! px-0! text-(--ink-soft)! hover:bg-(--surface-muted)! hover:text-(--ink)!"
                         >
                           <ExternalLink size={14} strokeWidth={2.2} />
                         </Button>
@@ -144,7 +175,7 @@ export default function Orders() {
                           onClick={() => setEditingOrder(o)}
                           aria-label={`#${o.order_no} buyurtmasini tahrirlash`}
                           title="Tahrirlash"
-                          className="!min-h-9 !min-w-9 !rounded-lg !border !border-[var(--border-strong)] !px-0 !text-[var(--ink-soft)] hover:!bg-[var(--surface-muted)] hover:!text-[var(--ink)]"
+                          className="min-h-9! min-w-9! rounded-lg! border! border-(--border-strong)! px-0! text-(--ink-soft)! hover:bg-(--surface-muted)! hover:text-(--ink)!"
                         >
                           <Pencil size={14} strokeWidth={2.2} />
                         </Button>
@@ -156,7 +187,7 @@ export default function Orders() {
                           onClick={() => setDeletingOrder(o)}
                           aria-label={`#${o.order_no} buyurtmasini o'chirish`}
                           title="O'chirish"
-                          className="!min-h-9 !min-w-9 !rounded-lg !border !border-[var(--border-strong)] !px-0 !text-status-red hover:!bg-[var(--color-status-red-bg)]"
+                          className="min-h-9! min-w-9! rounded-lg! border! border-(--border-strong)! px-0! text-status-red! hover:bg-status-red-bg!"
                         >
                           <Trash2 size={14} strokeWidth={2.2} />
                         </Button>
@@ -201,8 +232,8 @@ function DeleteOrderModal({ order, onClose, onDeleted }) {
 
   return (
     <Modal open={Boolean(order)} onClose={onClose} title="Buyurtmani o'chirish" size="sm">
-      <p className="text-sm leading-6 text-[var(--ink-soft)]">
-        <strong className="font-semibold text-[var(--ink)]">#{order?.order_no}</strong> buyurtmasini o'chirmoqchimisiz?
+      <p className="text-sm leading-6 text-(--ink-soft)">
+        <strong className="font-semibold text-(--ink)">#{order?.order_no}</strong> buyurtmasini o'chirmoqchimisiz?
         Bu amalni ortga qaytarib bo'lmaydi.
       </p>
       <div className="mt-5 flex justify-end gap-2">
@@ -241,13 +272,13 @@ function ExportModal({ open, onClose, search, status }) {
 
   return (
     <Modal open={open} onClose={onClose} title="Yuklab olish" size="sm">
-      <p className="mb-4 text-sm text-[var(--ink-soft)]">Buyurtmalar ro'yxatini qaysi ko'rinishda yuklab olasiz?</p>
+      <p className="mb-4 text-sm text-(--ink-soft)">Buyurtmalar ro'yxatini qaysi ko'rinishda yuklab olasiz?</p>
       <div className="grid grid-cols-2 gap-3">
         <button
           type="button"
           onClick={() => download("pdf")}
           disabled={downloading !== null}
-          className="focus-ring flex flex-col items-center gap-2 rounded-xl border border-[var(--border-strong)] bg-[var(--surface)] px-4 py-5 text-sm font-semibold text-[var(--ink)] transition-colors duration-200 hover:border-[var(--accent)] hover:bg-[var(--accent-soft)] disabled:pointer-events-none disabled:opacity-50"
+          className="focus-ring flex flex-col items-center gap-2 rounded-xl border border-(--border-strong) bg-(--surface) px-4 py-5 text-sm font-semibold text-(--ink) transition-colors duration-200 hover:border-(--accent) hover:bg-(--accent-soft) disabled:pointer-events-none disabled:opacity-50"
         >
           <FileText size={22} className="text-status-red" />
           {downloading === "pdf" ? "Tayyorlanmoqda..." : "PDF"}
@@ -256,7 +287,7 @@ function ExportModal({ open, onClose, search, status }) {
           type="button"
           onClick={() => download("excel")}
           disabled={downloading !== null}
-          className="focus-ring flex flex-col items-center gap-2 rounded-xl border border-[var(--border-strong)] bg-[var(--surface)] px-4 py-5 text-sm font-semibold text-[var(--ink)] transition-colors duration-200 hover:border-[var(--accent)] hover:bg-[var(--accent-soft)] disabled:pointer-events-none disabled:opacity-50"
+          className="focus-ring flex flex-col items-center gap-2 rounded-xl border border-(--border-strong) bg-(--surface) px-4 py-5 text-sm font-semibold text-(--ink) transition-colors duration-200 hover:border-(--accent) hover:bg-(--accent-soft) disabled:pointer-events-none disabled:opacity-50"
         >
           <FileSpreadsheet size={22} className="text-status-green" />
           {downloading === "excel" ? "Tayyorlanmoqda..." : "Excel"}

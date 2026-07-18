@@ -3,7 +3,7 @@ from django.utils.crypto import get_random_string
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
-from .models import SUPER_ADMIN_LEVEL_ROLES, User
+from .models import SUPER_ADMIN_LEVEL_ROLES, User, pin_code_validator
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -68,11 +68,11 @@ class AdminLoginSerializer(TokenObtainPairSerializer):
 
 
 class TerminalPinLookupSerializer(serializers.Serializer):
-    pin_code = serializers.CharField(max_length=8)
+    pin_code = serializers.CharField(max_length=4, validators=[pin_code_validator])
 
 
 class TerminalLoginSerializer(serializers.Serializer):
-    pin_code = serializers.CharField(max_length=8, required=False)
+    pin_code = serializers.CharField(max_length=4, required=False, validators=[pin_code_validator])
     badge_token = serializers.CharField(max_length=64, required=False)
     device_id = serializers.CharField(max_length=128)
     workstation_id = serializers.IntegerField(required=False, allow_null=True)

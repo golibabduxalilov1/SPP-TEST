@@ -43,8 +43,7 @@ export default function TerminalLogin() {
   function press(key) {
     if (key === "back") return setPin((p) => p.slice(0, -1));
     if (key === "") return;
-    if (pin.length >= 8) return;
-    setPin((p) => p + key);
+    setPin((p) => (p.length >= 4 ? p : p + key));
   }
 
   async function goToWorkstation(ws) {
@@ -124,7 +123,7 @@ export default function TerminalLogin() {
         <div className="glass-dark relative w-full max-w-xs rounded-3xl p-6 elevation-lg">
           <div className="my-1 text-center">
             <div className="flex items-center justify-center gap-2.5">
-              {Array.from({ length: 6 }).map((_, i) => (
+              {Array.from({ length: 4 }).map((_, i) => (
                 <span
                   key={i}
                   className={clsx(
@@ -160,7 +159,7 @@ export default function TerminalLogin() {
             ))}
           </div>
 
-          <Button className="mt-4 w-full" size="xl" magnetic={false} disabled={pin.length < 4 || loading} loading={loading} onClick={submitPin}>
+          <Button className="mt-4 w-full" size="xl" magnetic={false} disabled={pin.length !== 4 || loading} loading={loading} onClick={submitPin}>
             Kirish
           </Button>
         </div>

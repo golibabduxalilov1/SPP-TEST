@@ -6,7 +6,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from accounts.permissions import IsTechnologistOrAbove
+from accounts.permissions import IsSuperAdmin, IsTechnologistOrAbove
 from core.audit import log_action, push_live_log
 from .export import render_orders_excel, render_orders_pdf
 from .labels import render_labels_pdf
@@ -41,6 +41,20 @@ class OrderViewSet(viewsets.ModelViewSet):
     def perform_update(self, serializer):
         instance = serializer.save()
         log_action(self.request.user, "order.update", "Order", instance.id, {"status": instance.status})
+
+    @action(detail=True, methods=["post"], permission_classes=[IsAuthenticated, IsSuperAdmin])
+    def approve(self, request, pk=None):
+        order = self.get_object()
+        if order.status != Order.Status.DRAFT:
+            return Response(
+                {"detail": "Faqat yangi (tasdiqlanmagan) buyurtmalarni tasdiqlash mumkin"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        order.status = Order.Status.APPROVED
+        order.save(update_fields=["status", "updated_at"])
+        log_action(request.user, "order.approve", "Order", order.id, {"order_no": order.order_no})
+        push_live_log("order", f"Buyurtma tasdiqlandi: #{order.order_no}", {"order_id": order.id})
+        return Response(OrderDetailSerializer(order).data)
 
     @action(detail=False, methods=["post"], parser_classes=[MultiPartParser])
     def import_file(self, request):

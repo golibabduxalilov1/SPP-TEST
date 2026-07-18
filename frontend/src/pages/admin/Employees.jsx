@@ -314,7 +314,17 @@ function EmployeeModal({ open, employee, currentUser, onClose, onSaved }) {
           </Select>
         </Field>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <Field label="PIN kod (terminal uchun)"><Input value={form.pin_code} onChange={(e) => setForm({ ...form, pin_code: e.target.value })} /></Field>
+          <Field label="PIN kod (terminal uchun)" hint="4 ta raqam kiriting">
+            <Input
+              value={form.pin_code}
+              onChange={(e) => setForm({ ...form, pin_code: e.target.value.replace(/\D/g, "").slice(0, 4) })}
+              inputMode="numeric"
+              maxLength={4}
+              pattern="[0-9]{4}"
+              placeholder="0000"
+              title="PIN kod 4 ta raqamdan iborat bo'lishi kerak"
+            />
+          </Field>
           <Field label="Telefon" required hint={isEditingSelf ? "O'zingizning raqamingizni o'zgartira olmaysiz" : undefined}>
             <Input
               required

@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import { ArrowLeft, Pencil, Printer, QrCode } from "lucide-react";
+import { ArrowLeft, Check, Pencil, Printer, QrCode } from "lucide-react";
 import { QRCodeCanvas } from "qrcode.react";
+import toast from "react-hot-toast";
 import { adminApi } from "../../api/client";
+import { useAuthStore } from "../../store/authStore";
 import { Card, CardBody, CardHeader } from "../../components/ui/Card";
 import Button from "../../components/ui/Button";
 import PageHeader from "../../components/ui/PageHeader";
@@ -20,11 +22,26 @@ export default function OrderDetail() {
   const [qrModalOpen, setQrModalOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [qrDetail, setQrDetail] = useState(null);
+  const [approving, setApproving] = useState(false);
+  const hasRole = useAuthStore((s) => s.hasRole);
 
   async function load() {
     const { data } = await adminApi.get(`/orders/${id}/`);
     setOrder(data);
     setLoading(false);
+  }
+
+  async function approve() {
+    setApproving(true);
+    try {
+      await adminApi.post(`/orders/${id}/approve/`);
+      toast.success("Buyurtma tasdiqlandi");
+      await load();
+    } catch {
+      toast.error("Tasdiqlashda xatolik yuz berdi");
+    } finally {
+      setApproving(false);
+    }
   }
 
   useEffect(() => {
@@ -51,7 +68,7 @@ export default function OrderDetail() {
 
   return (
     <div className="space-y-6">
-      <Link to="/orders" className="focus-ring inline-flex min-h-11 items-center gap-2 rounded-lg text-sm font-semibold text-[var(--accent-strong)] hover:text-[var(--ink)]">
+      <Link to="/orders" className="focus-ring inline-flex min-h-11 items-center gap-2 rounded-lg text-sm font-semibold text-(--accent-strong) hover:text-(--ink)">
         <ArrowLeft size={15} /> Buyurtmalarga qaytish
       </Link>
 
@@ -61,6 +78,11 @@ export default function OrderDetail() {
         subtitle={order.product_name}
         actions={
           <div className="flex items-center gap-2">
+            {order.status === "draft" && hasRole("super_admin") && (
+              <Button size="sm" onClick={approve} loading={approving}>
+                <Check size={15} /> Tasdiqlash
+              </Button>
+            )}
             <Button size="sm" variant="secondary" onClick={() => setEditModalOpen(true)}>
               <Pencil size={15} /> Tahrirlash
             </Button>
@@ -74,16 +96,16 @@ export default function OrderDetail() {
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
         <Card className="p-5">
-          <p className="text-xs text-[var(--ink-soft)] uppercase font-semibold">Mijoz</p>
+          <p className="text-xs text-(--ink-soft) uppercase font-semibold">Mijoz</p>
           <p className="mt-1 font-medium">{order.customer_name || "—"}</p>
-          <p className="text-sm text-[var(--ink-soft)]">{order.customer_phone}</p>
+          <p className="text-sm text-(--ink-soft)">{order.customer_phone}</p>
         </Card>
         <Card className="p-5">
-          <p className="text-xs text-[var(--ink-soft)] uppercase font-semibold">Muddat</p>
+          <p className="text-xs text-(--ink-soft) uppercase font-semibold">Muddat</p>
           <p className="mt-1 font-medium">{order.deadline ? format(new Date(order.deadline), "dd.MM.yyyy") : "Belgilanmagan"}</p>
         </Card>
         <Card className="p-5 md:col-span-2 xl:col-span-1">
-          <p className="text-xs text-[var(--ink-soft)] uppercase font-semibold">Izoh</p>
+          <p className="text-xs text-(--ink-soft) uppercase font-semibold">Izoh</p>
           <p className="mt-1 text-sm">{order.notes || "—"}</p>
         </Card>
       </div>
@@ -145,10 +167,10 @@ function OrderQRModal({ open, onClose, order }) {
   return (
     <Modal open={open} onClose={onClose} title={`Buyurtma QR kodi — #${order.order_no}`} size="sm">
       <div className="flex flex-col items-center gap-4">
-        <div className="rounded-2xl border border-[var(--border-subtle)] bg-white p-4">
+        <div className="rounded-2xl border border-(--border-subtle) bg-white p-4">
           <QRCodeCanvas ref={canvasRef} value={order.qr_token} size={200} level="M" />
         </div>
-        <p className="max-w-full break-all text-center font-mono text-xs text-[var(--ink-faint)]">{order.qr_token}</p>
+        <p className="max-w-full break-all text-center font-mono text-xs text-(--ink-faint)">{order.qr_token}</p>
         <div className="flex w-full flex-col gap-2 sm:flex-row">
           <Button className="flex-1" variant="secondary" onClick={download}>
             Yuklab olish
@@ -204,15 +226,15 @@ function DetailQRModal({ detail, order, onClose }) {
   return (
     <Modal open={Boolean(detail)} onClose={onClose} title={`Detal QR kodi — ${detail.name}`} size="sm">
       <div className="flex flex-col items-center gap-4">
-        <div className="rounded-2xl border border-[var(--border-subtle)] bg-white p-4">
+        <div className="rounded-2xl border border-(--border-subtle) bg-white p-4">
           <QRCodeCanvas ref={canvasRef} value={detail.qr_token} size={200} level="M" />
         </div>
         <div className="text-center">
-          <p className="font-medium text-[var(--ink)]">{detail.name}</p>
-          {size && <p className="text-sm text-[var(--ink-soft)]">{size} mm</p>}
-          <p className="text-sm text-[var(--ink-soft)]">#{order.order_no}</p>
+          <p className="font-medium text-(--ink)">{detail.name}</p>
+          {size && <p className="text-sm text-(--ink-soft)">{size} mm</p>}
+          <p className="text-sm text-(--ink-soft)">#{order.order_no}</p>
         </div>
-        <p className="max-w-full break-all text-center font-mono text-xs text-[var(--ink-faint)]">{detail.qr_token}</p>
+        <p className="max-w-full break-all text-center font-mono text-xs text-(--ink-faint)">{detail.qr_token}</p>
         <div className="flex w-full flex-col gap-2 sm:flex-row">
           <Button className="flex-1" variant="secondary" onClick={download}>
             Yuklab olish

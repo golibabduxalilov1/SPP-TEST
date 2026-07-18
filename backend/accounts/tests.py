@@ -118,6 +118,42 @@ class LoginTests(APITestCase):
         self.assertTrue(user.is_superuser)
 
 
+class TerminalPinValidationTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="terminal-user",
+            phone="+998901112208",
+            password="secret-pass",
+            role=Role.OPERATOR,
+            pin_code="0123",
+        )
+
+    def test_four_digit_pin_is_accepted(self):
+        response = self.client.post(
+            "/api/auth/terminal-pin-lookup", {"pin_code": "0123"}, format="json"
+        )
+
+        self.assertEqual(response.status_code, 200, response.data)
+
+    def test_lookup_rejects_pin_that_is_not_exactly_four_digits(self):
+        for pin_code in ("123", "12345", "12a4", "١٢٣٤"):
+            with self.subTest(pin_code=pin_code):
+                response = self.client.post(
+                    "/api/auth/terminal-pin-lookup", {"pin_code": pin_code}, format="json"
+                )
+                self.assertEqual(response.status_code, 400, response.data)
+
+    def test_login_rejects_pin_that_is_not_exactly_four_digits(self):
+        for pin_code in ("123", "12345", "12a4", "١٢٣٤"):
+            with self.subTest(pin_code=pin_code):
+                response = self.client.post(
+                    "/api/auth/terminal-login",
+                    {"pin_code": pin_code, "device_id": "test-device"},
+                    format="json",
+                )
+                self.assertEqual(response.status_code, 400, response.data)
+
+
 class SuperAdminMutualProtectionTests(APITestCase):
     """One super admin must not be able to update, deactivate, or delete another
     super admin's account via the /api/employees/ management endpoint."""
