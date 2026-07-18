@@ -4,6 +4,7 @@ import clsx from "clsx";
 import { terminalApi } from "../../api/client";
 import { useTerminalStore } from "../../store/terminalStore";
 import { addPendingScan } from "../../lib/db";
+import { uuid } from "../../lib/uuid";
 import { Card, CardBody, CardHeader } from "../../components/ui/Card";
 import { Input } from "../../components/ui/Input";
 
@@ -22,7 +23,7 @@ export default function TerminalWarehouse() {
     const qrToken = value.trim();
     if (!qrToken) return;
     setValue("");
-    const clientScanId = crypto.randomUUID();
+    const clientScanId = uuid();
 
     if (online) {
       try {

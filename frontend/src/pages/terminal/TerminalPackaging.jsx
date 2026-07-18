@@ -5,6 +5,7 @@ import toast from "react-hot-toast";
 import { terminalApi } from "../../api/client";
 import { useTerminalStore } from "../../store/terminalStore";
 import { addPendingScan } from "../../lib/db";
+import { uuid } from "../../lib/uuid";
 import { Card, CardBody, CardHeader } from "../../components/ui/Card";
 import { Input, Field } from "../../components/ui/Input";
 import Button from "../../components/ui/Button";
@@ -46,7 +47,7 @@ export default function TerminalPackaging() {
     const qrToken = value.trim();
     if (!qrToken) return;
     setValue("");
-    const clientScanId = crypto.randomUUID();
+    const clientScanId = uuid();
 
     if (online) {
       try {

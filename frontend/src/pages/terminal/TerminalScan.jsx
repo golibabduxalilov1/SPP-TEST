@@ -4,6 +4,7 @@ import clsx from "clsx";
 import { terminalApi } from "../../api/client";
 import { useTerminalStore } from "../../store/terminalStore";
 import { addPendingScan } from "../../lib/db";
+import { uuid } from "../../lib/uuid";
 import { Card, CardBody, CardHeader } from "../../components/ui/Card";
 import { Input } from "../../components/ui/Input";
 import Badge from "../../components/ui/Badge";
@@ -35,7 +36,7 @@ export default function TerminalScan() {
     if (!qrToken) return;
     setValue("");
 
-    const clientScanId = crypto.randomUUID();
+    const clientScanId = uuid();
     const scannedAtClient = new Date().toISOString();
     const operationCode = workstation.operation_code;
 
