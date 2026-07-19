@@ -9,13 +9,108 @@ from orders.models import Order, Product
 from orders.services import assign_route
 
 
+PRODUCT_TYPE_SEEDS = [
+    {
+        "name": "Shkaf Istanbul 1800",
+        "description": "Uch eshikli zamonaviy kiyim shkafi",
+        "details": [
+            ("Yon devor", 1800, 550, 18, 2, "LDSP"),
+            ("Tokcha", 864, 500, 18, 4, "LDSP"),
+            ("Fasad", 1796, 596, 18, 3, "MDF"),
+        ],
+    },
+    {
+        "name": "Oshxona shkafi Modern",
+        "description": "Oshxona uchun osma modul shkaf",
+        "details": [
+            ("Yon panel", 720, 300, 18, 2, "LDSP"),
+            ("Yuqori va pastki panel", 764, 300, 18, 2, "LDSP"),
+            ("Fasad", 716, 396, 18, 2, "MDF"),
+        ],
+    },
+    {
+        "name": "Komod Classic",
+        "description": "To'rt tortmali klassik komod",
+        "details": [
+            ("Yon devor", 850, 450, 18, 2, "LDSP"),
+            ("Tortma fasadi", 196, 796, 18, 4, "MDF"),
+            ("Ustki panel", 836, 470, 18, 1, "LDSP"),
+        ],
+    },
+    {
+        "name": "Yozuv stoli Loft",
+        "description": "Ish va o'qish uchun loft uslubidagi stol",
+        "details": [
+            ("Stol usti", 1200, 600, 25, 1, "LDSP"),
+            ("Yon tayanch", 720, 550, 18, 2, "LDSP"),
+            ("Old bog'lama", 1100, 250, 18, 1, "LDSP"),
+        ],
+    },
+    {
+        "name": "Kompyuter stoli Corner",
+        "description": "Burchak uchun ixcham kompyuter stoli",
+        "details": [
+            ("Burchak stol usti", 1400, 900, 25, 1, "LDSP"),
+            ("Yon tayanch", 720, 500, 18, 2, "LDSP"),
+            ("Klaviatura tokchasi", 600, 300, 18, 1, "LDSP"),
+        ],
+    },
+    {
+        "name": "Kitob javoni Oxford",
+        "description": "Besh qavatli ochiq kitob javoni",
+        "details": [
+            ("Yon devor", 1900, 300, 18, 2, "LDSP"),
+            ("Tokcha", 764, 280, 18, 5, "LDSP"),
+            ("Orqa devor", 1900, 800, 4, 1, "DVP"),
+        ],
+    },
+    {
+        "name": "TV tumba Minimal",
+        "description": "Minimal uslubdagi past TV tumbasi",
+        "details": [
+            ("Ustki panel", 1600, 420, 18, 1, "LDSP"),
+            ("Yon devor", 400, 400, 18, 2, "LDSP"),
+            ("Fasad", 396, 796, 18, 2, "MDF"),
+        ],
+    },
+    {
+        "name": "Krovat Comfort 1600",
+        "description": "Ikki kishilik yumshoq boshli krovat",
+        "details": [
+            ("Bosh panel", 1800, 1000, 25, 1, "MDF"),
+            ("Yon bog'lama", 2000, 300, 25, 2, "LDSP"),
+            ("Oyoq panel", 1800, 400, 25, 1, "MDF"),
+        ],
+    },
+    {
+        "name": "Tungi tumba Nova",
+        "description": "Yotoqxona uchun ikki tortmali tumba",
+        "details": [
+            ("Yon devor", 500, 400, 18, 2, "LDSP"),
+            ("Tortma fasadi", 196, 446, 18, 2, "MDF"),
+            ("Ustki panel", 500, 420, 18, 1, "LDSP"),
+        ],
+    },
+    {
+        "name": "Kiyim ilgich Hall",
+        "description": "Dahliz uchun devoriy kiyim ilgich",
+        "details": [
+            ("Asosiy panel", 1200, 600, 18, 1, "LDSP"),
+            ("Yuqori tokcha", 600, 300, 18, 1, "LDSP"),
+            ("Pastki tumba fasadi", 396, 596, 18, 2, "MDF"),
+        ],
+    },
+]
+
+
 class Command(BaseCommand):
     help = "Seed SPP demo data: tsex, workstations, machines, operations, users, sample order."
 
     @transaction.atomic
     def handle(self, *args, **options):
         for seed in OPERATION_SEEDS:
-            Operation.objects.update_or_create(code=seed["code"], defaults=seed)
+            # Do not overwrite names/order changed by Super Admin when demo data is re-seeded.
+            Operation.objects.get_or_create(code=seed["code"], defaults=seed)
         self.stdout.write(self.style.SUCCESS(f"Operations: {Operation.objects.count()}"))
 
         tsex, _ = Tsex.objects.get_or_create(name="Asosiy Tsex")
@@ -56,20 +151,22 @@ class Command(BaseCommand):
                 user.save()
         self.stdout.write(self.style.SUCCESS(f"Users: {User.objects.count()} (default password: {default_password})"))
 
-        shkaf_type, _ = ProductType.objects.get_or_create(
-            name="Shkaf A12", defaults={"description": "Standart 2 eshikli shkaf"}
-        )
-        if not shkaf_type.details.exists():
-            demo_details = [
-                ("Yon devor", 480, 706, 18, 2, "LDSP"),
-                ("Orqa devor", 700, 480, 8, 1, "DVP"),
-                ("Tokcha", 400, 300, 16, 3, "LDSP"),
-                ("Fasad", 396, 596, 18, 2, "MDF"),
-            ]
-            for name, length, width, thickness, qty, material in demo_details:
-                ProductTypeDetail.objects.create(
-                    product_type=shkaf_type, name=name, length_mm=length, width_mm=width,
-                    thickness_mm=thickness, quantity=qty, material_type=material,
+        for product_seed in PRODUCT_TYPE_SEEDS:
+            product_type, _ = ProductType.objects.get_or_create(
+                name=product_seed["name"],
+                defaults={"description": product_seed["description"]},
+            )
+            for name, length, width, thickness, qty, material in product_seed["details"]:
+                ProductTypeDetail.objects.get_or_create(
+                    product_type=product_type,
+                    name=name,
+                    defaults={
+                        "length_mm": length,
+                        "width_mm": width,
+                        "thickness_mm": thickness,
+                        "quantity": qty,
+                        "material_type": material,
+                    },
                 )
         self.stdout.write(self.style.SUCCESS(f"Product types: {ProductType.objects.count()}"))
 

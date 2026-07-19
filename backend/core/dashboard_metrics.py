@@ -2,14 +2,15 @@ from collections import defaultdict
 from datetime import timedelta
 from decimal import Decimal
 
-from django.db.models import Sum
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
 from manufacturing.models import Machine
+from orders.models import PartRoute
 from terminalapp.models import ScanEvent
 
-UNIT_FIELD = {"m2": "area_m2", "meter": "edge_meter", "piece": "quantity", "package": "quantity"}
+from .tablo import detail_contribution, part_contribution
+
 UNIT_LABEL = {"m2": "kv.m", "meter": "metr", "piece": "dona", "package": "dona"}
 
 
@@ -40,23 +41,49 @@ def _window_hours(date_from, date_to):
     return hours if hours > 0 else 1.0
 
 
-def _sum_by_unit(accepted_scans, unit_key):
-    field = UNIT_FIELD[unit_key]
-    total = accepted_scans.filter(operation__measure_unit=unit_key).aggregate(total=Sum(f"part__{field}"))["total"]
-    return total or Decimal("0")
+def _completed_routes(date_from, date_to):
+    """Every detail/part finished at any stage in the window — via an
+    individual QR scan or a bulk "Bosqichni yakunlash" click, both of which
+    mark PartRoute COMPLETED with a completed_at/completed_by. This is the
+    same ground truth Tablo reads (core.tablo), so board and stats can never
+    drift apart the way a separate ScanEvent-only read did."""
+    return (
+        PartRoute.objects.filter(
+            status=PartRoute.Status.COMPLETED,
+            completed_at__gte=date_from,
+            completed_at__lte=date_to,
+        )
+        .select_related("operation", "part", "part__order_detail", "completed_by")
+    )
+
+
+def _route_value(route, unit):
+    part = route.part
+    detail = getattr(part, "order_detail", None)
+    quantity, area, edge = detail_contribution(detail) if detail is not None else part_contribution(part)
+    if unit == "m2":
+        return area
+    if unit == "meter":
+        return edge
+    return quantity
 
 
 def overview(date_from, date_to):
     scans = ScanEvent.objects.filter(received_at_server__gte=date_from, received_at_server__lte=date_to)
-    accepted = scans.filter(status=ScanEvent.Status.ACCEPTED)
-    accepted_count = accepted.count()
+    accepted_count = scans.filter(status=ScanEvent.Status.ACCEPTED).count()
     conflict_count = scans.filter(status=ScanEvent.Status.CONFLICT).count()
     total = accepted_count + conflict_count
+    # Scan-quality ratio (accepted vs rejected QR scans) — distinct from the
+    # capacity-based efficiency below, kept as-is since bulk stage
+    # completions have no scan attempt to accept/reject in the first place.
     oee = round((accepted_count / total) * 100, 1) if total else 100.0
 
-    m2_total = _sum_by_unit(accepted, "m2")
-    meter_total = _sum_by_unit(accepted, "meter")
-    piece_total = _sum_by_unit(accepted, "piece") + _sum_by_unit(accepted, "package")
+    routes = list(_completed_routes(date_from, date_to))
+    m2_total = sum((_route_value(r, "m2") for r in routes if r.operation.measure_unit == "m2"), Decimal("0"))
+    meter_total = sum((_route_value(r, "meter") for r in routes if r.operation.measure_unit == "meter"), Decimal("0"))
+    piece_total = sum(
+        (_route_value(r, "piece") for r in routes if r.operation.measure_unit in ("piece", "package")), Decimal("0")
+    )
 
     return {
         "oee": oee,
@@ -70,18 +97,18 @@ def machines_summary(date_from, date_to):
     window_hours = _window_hours(date_from, date_to)
     machines = Machine.objects.select_related("operation", "workstation").filter(status="active").order_by("machine_id")
 
+    routes_by_operation = defaultdict(list)
+    for route in _completed_routes(date_from, date_to):
+        routes_by_operation[route.operation_id].append(route)
+
     results = []
     for machine in machines:
         unit = machine.operation.measure_unit
-        field = UNIT_FIELD.get(unit, "quantity")
-        volume = (
-            ScanEvent.objects.filter(
-                machine=machine,
-                status=ScanEvent.Status.ACCEPTED,
-                received_at_server__gte=date_from,
-                received_at_server__lte=date_to,
-            ).aggregate(total=Sum(f"part__{field}"))["total"]
-            or Decimal("0")
+        # Completion is tracked per stage (operation), not per physical
+        # machine unit, so machines sharing one operation share its total —
+        # true today since every operation has exactly one machine.
+        volume = sum(
+            (_route_value(r, unit) for r in routes_by_operation.get(machine.operation_id, [])), Decimal("0")
         )
         efficiency = None
         if machine.capacity_per_hour:
@@ -109,7 +136,6 @@ def machines_summary(date_from, date_to):
 
 def machine_series(machine, date_from, date_to, interval_minutes):
     unit = machine.operation.measure_unit
-    field = UNIT_FIELD.get(unit, "quantity")
     interval = timedelta(minutes=interval_minutes)
 
     buckets = []
@@ -121,18 +147,12 @@ def machine_series(machine, date_from, date_to, interval_minutes):
         buckets = [date_from]
 
     bucket_values = [Decimal("0") for _ in buckets]
-    scans = ScanEvent.objects.filter(
-        machine=machine,
-        status=ScanEvent.Status.ACCEPTED,
-        received_at_server__gte=date_from,
-        received_at_server__lte=date_to,
-    ).values("received_at_server", f"part__{field}")
+    routes = _completed_routes(date_from, date_to).filter(operation=machine.operation)
 
     interval_seconds = interval_minutes * 60
-    for row in scans:
-        ts = row["received_at_server"]
-        value = row[f"part__{field}"] or Decimal("0")
-        idx = int((ts - date_from).total_seconds() // interval_seconds)
+    for route in routes:
+        value = _route_value(route, unit)
+        idx = int((route.completed_at - date_from).total_seconds() // interval_seconds)
         idx = min(max(idx, 0), len(buckets) - 1)
         bucket_values[idx] += value
 
@@ -163,30 +183,33 @@ def machine_series(machine, date_from, date_to, interval_minutes):
 
 def leaderboard(date_from, date_to, limit=10):
     window_hours = _window_hours(date_from, date_to)
-    scans = ScanEvent.objects.filter(
-        status=ScanEvent.Status.ACCEPTED,
-        received_at_server__gte=date_from,
-        received_at_server__lte=date_to,
-        employee__isnull=False,
-    ).select_related("employee", "machine", "machine__operation", "part")
+    routes = (
+        _completed_routes(date_from, date_to)
+        .filter(completed_by__isnull=False)
+        .order_by("id")
+    )
 
-    agg = defaultdict(lambda: {"employee": None, "output": 0, "machine_volumes": defaultdict(Decimal), "machine_caps": {}})
-    for scan in scans.iterator():
-        entry = agg[scan.employee_id]
-        entry["employee"] = scan.employee
+    machine_by_operation = {
+        machine.operation_id: machine
+        for machine in Machine.objects.select_related("operation").filter(status="active")
+    }
+
+    agg = defaultdict(lambda: {"employee": None, "output": 0, "operation_volumes": defaultdict(Decimal), "operation_caps": {}})
+    for route in routes.iterator():
+        entry = agg[route.completed_by_id]
+        entry["employee"] = route.completed_by
         entry["output"] += 1
-        if scan.machine and scan.part:
-            unit = scan.machine.operation.measure_unit
-            field = UNIT_FIELD.get(unit, "quantity")
-            value = getattr(scan.part, field, None) or Decimal("0")
-            entry["machine_volumes"][scan.machine_id] += value
-            entry["machine_caps"][scan.machine_id] = scan.machine.capacity_per_hour
+        machine = machine_by_operation.get(route.operation_id)
+        if machine:
+            value = _route_value(route, machine.operation.measure_unit)
+            entry["operation_volumes"][route.operation_id] += value
+            entry["operation_caps"][route.operation_id] = machine.capacity_per_hour
 
     rows = []
     for entry in agg.values():
         machine_effs = []
-        for machine_id, volume in entry["machine_volumes"].items():
-            capacity = entry["machine_caps"].get(machine_id)
+        for operation_id, volume in entry["operation_volumes"].items():
+            capacity = entry["operation_caps"].get(operation_id)
             if capacity:
                 capacity_total = float(capacity) * window_hours
                 if capacity_total:
@@ -199,7 +222,7 @@ def leaderboard(date_from, date_to, limit=10):
                 "name": employee.get_full_name() or employee.username,
                 "role": employee.role,
                 "output": entry["output"],
-                "machines": len(entry["machine_volumes"]),
+                "machines": len(entry["operation_volumes"]),
                 "efficiency": efficiency,
             }
         )

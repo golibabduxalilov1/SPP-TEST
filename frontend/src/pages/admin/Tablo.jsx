@@ -2,7 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import clsx from "clsx";
 import { Link } from "react-router-dom";
 import { CheckCircle2, Clock, Table2, Terminal } from "lucide-react";
+import toast from "react-hot-toast";
 import { adminApi } from "../../api/client";
+import { useAuthStore } from "../../store/authStore";
 import { Card, CardBody, CardHeader } from "../../components/ui/Card";
 import { Table } from "../../components/ui/Table";
 import Button from "../../components/ui/Button";
@@ -20,8 +22,12 @@ const MODES = [
 
 const STATUS_LABEL = {
   in_progress: "Jarayonda",
+  pending: "Kutilmoqda",
+  completed: "Bajarilgan",
   blocked: "Bloklangan",
 };
+
+const COMPLETE_STAGE_ROLES = ["super_admin", "admin", "director", "manager", "master", "technologist"];
 
 const UNIT_LABEL = {
   m2: "m²",
@@ -69,28 +75,56 @@ export default function Tablo() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState(null);
+  const [completingId, setCompletingId] = useState(null);
+  const user = useAuthStore((state) => state.user);
   const { registerAndAutoStart } = useTutorial();
   const now = useLiveClock();
 
   useEffect(() => registerAndAutoStart("tablo", tabloSteps), [registerAndAutoStart]);
 
-  async function load(m) {
-    setLoading(true);
-    const { data } = await adminApi.get("/production/table", { params: { mode: m } });
-    setData(data);
-    setLoading(false);
-    setLastUpdated(new Date());
+  const canCompleteStage = Boolean(
+    user?.is_superuser || user?.role === "super_admin" || COMPLETE_STAGE_ROLES.includes(user?.role)
+  );
+
+  async function load(m, showLoader = true) {
+    if (showLoader) setLoading(true);
+    try {
+      const { data } = await adminApi.get("/production/table", { params: { mode: m } });
+      setData(data);
+      setLastUpdated(new Date());
+    } catch (error) {
+      if (showLoader) toast.error(error.response?.data?.detail || "Tabloni yuklashda xatolik yuz berdi");
+    } finally {
+      if (showLoader) setLoading(false);
+    }
+  }
+
+  async function completeStage(row) {
+    setCompletingId(row.order_id);
+    try {
+      const { data: order } = await adminApi.post(`/orders/${row.order_id}/complete-current-stage/`);
+      toast.success(
+        order.current_stage_name
+          ? `Keyingi bosqich: ${order.current_stage_name}`
+          : `#${row.order_no} ishlab chiqarishi tugallandi`
+      );
+      await load(mode, false);
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Bosqichni yakunlashda xatolik yuz berdi");
+    } finally {
+      setCompletingId(null);
+    }
   }
 
   useEffect(() => {
     load(mode);
-    const interval = setInterval(() => load(mode), 20000);
+    const interval = setInterval(() => load(mode, false), 20000);
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode]);
 
   const totals = useMemo(() => computeTotals(data, mode), [data, mode]);
-  const activeOrders = data?.rows?.length ?? 0;
+  const activeOrders = data?.rows?.filter((row) => row.stage_status === "in_progress").length ?? 0;
 
   return (
     <div className="space-y-6">
@@ -152,7 +186,7 @@ export default function Tablo() {
         <CardHeader
           data-tutorial="tablo-legend"
           title="Tablo"
-          subtitle="Yashil — bajarilgan, sariq — jarayonda, qizil — bloklangan, kulrang — kerak emas"
+          subtitle="Yashil — bajarilgan, sariq — jarayonda, kulrang — kutilmoqda yoki hali boshlanmagan"
         />
         <CardBody data-tutorial="tablo-table" className="p-0">
           {loading || !data ? (
@@ -167,7 +201,7 @@ export default function Tablo() {
                     <th className="sticky left-10 z-10 min-w-55 bg-(--surface-muted) px-3 py-3 text-left font-semibold">Buyurtma</th>
                     <th className="px-3 py-3 text-left font-semibold">Muddat</th>
                     {data.operations.map((op) => (
-                      <th key={op.code} className="min-w-25 px-3 py-3 text-center font-semibold">{op.name}</th>
+                      <th key={op.code} className="min-w-32 px-3 py-3 text-center font-semibold">{op.name}</th>
                     ))}
                   </tr>
                 </thead>
@@ -202,12 +236,17 @@ export default function Tablo() {
                         return (
                           <td key={op.code} className="p-1.5 text-center">
                             {cell.status === "completed" ? (
-                              <div className="flex min-h-12 items-center justify-center rounded-lg bg-status-green text-white">
-                                <CheckCircle2 size={18} />
+                              <div className="flex min-h-12 flex-col items-center justify-center gap-0.5 rounded-lg bg-status-green px-2 py-1.5 text-white">
+                                <div className="flex items-center gap-1.5">
+                                  <CheckCircle2 size={15} />
+                                  <p className="tabular text-sm font-bold">{formatCell(cell, mode)}</p>
+                                </div>
+                                <p className="text-[10px] font-medium text-white/80">{STATUS_LABEL.completed}</p>
                               </div>
-                            ) : cell.status === "not_required" ? (
-                              <div className="flex min-h-12 items-center justify-center rounded-lg bg-(--surface-muted) text-(--ink-faint)">
-                                —
+                            ) : cell.status === "not_required" || cell.status === "pending" ? (
+                              <div className="flex min-h-12 flex-col items-center justify-center rounded-lg bg-(--surface-muted) text-(--ink-faint)">
+                                <span>—</span>
+                                {cell.status === "pending" && <span className="text-[10px] font-medium">{STATUS_LABEL.pending}</span>}
                               </div>
                             ) : (
                               <div
@@ -222,6 +261,16 @@ export default function Tablo() {
                                 <p className={clsx("text-[10px] font-medium opacity-70", cell.status === "in_progress" ? "text-status-yellow" : "text-status-red")}>
                                   {STATUS_LABEL[cell.status]}
                                 </p>
+                                {cell.status === "in_progress" && canCompleteStage && (
+                                  <button
+                                    type="button"
+                                    onClick={() => completeStage(row)}
+                                    disabled={completingId === row.order_id}
+                                    className="focus-ring mt-1 min-h-7 rounded-md border border-status-yellow/25 bg-white/70 px-2 text-[10px] font-semibold text-status-yellow transition-colors hover:bg-white disabled:pointer-events-none disabled:opacity-50"
+                                  >
+                                    {completingId === row.order_id ? "Yakunlanmoqda..." : "Bosqichni yakunlash"}
+                                  </button>
+                                )}
                               </div>
                             )}
                           </td>

@@ -27,6 +27,9 @@ IsSuperAdmin = roles_allowed(Role.SUPER_ADMIN, Role.ADMIN)
 IsManagementRole = roles_allowed(Role.SUPER_ADMIN, Role.ADMIN, Role.DIRECTOR, Role.MANAGER)
 IsMasterOrAbove = roles_allowed(Role.SUPER_ADMIN, Role.ADMIN, Role.DIRECTOR, Role.MANAGER, Role.MASTER)
 IsTechnologistOrAbove = roles_allowed(Role.SUPER_ADMIN, Role.ADMIN, Role.DIRECTOR, Role.MANAGER, Role.TECHNOLOGIST)
+CanCompleteProductionStage = roles_allowed(
+    Role.SUPER_ADMIN, Role.ADMIN, Role.DIRECTOR, Role.MANAGER, Role.MASTER, Role.TECHNOLOGIST,
+)
 
 # QR-based order status updates: management roles plus the terminal roles that
 # actually handle physical orders on the production/warehouse floor.

@@ -10,7 +10,7 @@ from .models import Order, Part, PartRoute, Product
 
 def assign_route(part: Part, route_key: str):
     codes = ROUTE_TEMPLATES.get(route_key, ROUTE_TEMPLATES[DEFAULT_ROUTE_KEY])
-    operations = {op.code: op for op in Operation.objects.filter(code__in=codes)}
+    operations = {op.code: op for op in Operation.objects.filter(code__in=codes, is_active=True)}
     part.routes.all().delete()
     first_operation = None
     for index, code in enumerate(codes, start=1):

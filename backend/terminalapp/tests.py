@@ -2,7 +2,9 @@ from rest_framework.test import APITestCase
 
 from accounts.models import Role, User
 from core.models import AuditLog
-from orders.models import Order
+from manufacturing.models import Operation
+from orders.models import Order, Part, PartRoute
+from orders.production_workflow import approve_order
 
 
 class OrderQRStatusTests(APITestCase):
@@ -81,3 +83,78 @@ class OrderQRStatusTests(APITestCase):
         next_values = [opt["value"] for opt in response.data["next_statuses"]]
         self.assertIn(Order.Status.CANCELLED, next_values)
         self.assertIn(Order.Status.PARTIALLY_READY, next_values)
+
+
+class ScanAdvancesBoardStageTests(APITestCase):
+    """Scanning a part is per-detail; the production board tracks whole-order
+    stages separately. A scan that finishes the last detail the board is
+    waiting on for its current stage should push the board forward too —
+    the same effect as clicking "Bosqichni yakunlash" in Tablo."""
+
+    def setUp(self):
+        Operation.objects.all().delete()
+        self.stage1 = Operation.objects.create(code="ARRA", name="Arra", measure_unit="m2", order_index=1, is_active=True)
+        self.stage2 = Operation.objects.create(code="QADOQLASH", name="Qadoqlash", measure_unit="package", order_index=2, is_active=True)
+        self.employee = User.objects.create_user(
+            username="usta-scan", phone="+998901113501", password="secret-pass", role=Role.OPERATOR,
+        )
+        self.order = Order.objects.create(order_no="T-200", product_name="Scan test", created_by=self.employee)
+        self.client.force_authenticate(user=self.employee)
+
+    def _make_part(self, code):
+        part = Part.objects.create(order=self.order, code=code, name="Panel", quantity=1)
+        PartRoute.objects.create(part=part, operation=self.stage1, sequence_index=1, status=PartRoute.Status.PENDING)
+        PartRoute.objects.create(part=part, operation=self.stage2, sequence_index=2, status=PartRoute.Status.PENDING)
+        part.current_operation = self.stage1
+        part.save(update_fields=["current_operation"])
+        return part
+
+    def _scan(self, part, scan_id):
+        return self.client.post(
+            "/api/terminal/scan",
+            {"client_scan_id": scan_id, "qr_token": part.qr_token, "operation_code": self.stage1.code},
+            format="json",
+        )
+
+    def test_scanning_the_only_part_advances_order_to_next_stage(self):
+        part = self._make_part("T-200-1")
+        approve_order(self.order.id)
+        self.order.refresh_from_db()
+        self.assertEqual(self.order.current_stage, self.stage1)
+
+        response = self._scan(part, "scan-1")
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.order.refresh_from_db()
+        self.assertEqual(self.order.current_stage, self.stage2)
+        self.assertEqual(self.order.stage_status, Order.StageStatus.IN_PROGRESS)
+
+    def test_stage_only_advances_once_every_part_is_scanned(self):
+        part_a = self._make_part("T-200-1")
+        part_b = self._make_part("T-200-2")
+        approve_order(self.order.id)
+
+        self._scan(part_a, "scan-a")
+        self.order.refresh_from_db()
+        self.assertEqual(self.order.current_stage, self.stage1, "should still wait on part_b")
+
+        response = self._scan(part_b, "scan-b")
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.order.refresh_from_db()
+        self.assertEqual(self.order.current_stage, self.stage2)
+
+    def test_scanning_last_stage_completes_the_order(self):
+        Operation.objects.filter(id=self.stage2.id).delete()
+        part = Part.objects.create(order=self.order, code="T-200-1", name="Panel", quantity=1)
+        PartRoute.objects.create(part=part, operation=self.stage1, sequence_index=1, status=PartRoute.Status.PENDING)
+        part.current_operation = self.stage1
+        part.save(update_fields=["current_operation"])
+        approve_order(self.order.id)
+
+        response = self._scan(part, "scan-1")
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.order.refresh_from_db()
+        self.assertIsNone(self.order.current_stage)
+        self.assertEqual(self.order.status, Order.Status.COMPLETED)

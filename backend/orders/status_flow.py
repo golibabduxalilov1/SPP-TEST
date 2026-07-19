@@ -17,6 +17,7 @@ ORDER_STATUS_SEQUENCE = [
     Order.Status.READY_FOR_PACKAGING,
     Order.Status.PACKAGING,
     Order.Status.WAREHOUSE,
+    Order.Status.COMPLETED,
     Order.Status.DELIVERED,
 ]
 

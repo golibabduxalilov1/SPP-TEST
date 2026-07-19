@@ -87,7 +87,7 @@ export default function Machines() {
         adminApi.get("/tsexes/"),
         adminApi.get("/workstations/"),
         adminApi.get("/machines/"),
-        adminApi.get("/operations/"),
+        adminApi.get("/operations/", { params: { is_active: true } }),
       ]);
       setTsexes(t.data.results || t.data);
       setWorkstations(w.data.results || w.data);

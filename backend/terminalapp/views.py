@@ -1,3 +1,4 @@
+from django.db import transaction
 from django.utils import timezone
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
@@ -9,6 +10,7 @@ from accounts.permissions import CanScanOrderStatus, IsMasterOrAbove
 from core.audit import log_action, push_live_log
 from manufacturing.models import Machine, Operation, Workstation
 from orders.models import Order, Part, PartRoute
+from orders.production_workflow import ProductionWorkflowError, start_production_workflow
 from orders.serializers import PartSerializer
 from orders.status_flow import next_allowed_statuses
 
@@ -23,7 +25,7 @@ class TerminalWorkstationsView(APIView):
     permission_classes = []
 
     def get(self, request):
-        workstations = Workstation.objects.filter(status="active").select_related("tsex", "operation")
+        workstations = Workstation.objects.filter(status="active", operation__is_active=True).select_related("tsex", "operation")
         return Response(
             [
                 {
@@ -42,7 +44,11 @@ class TerminalBootstrapView(APIView):
     def get(self, request):
         workstation_id = request.query_params.get("workstation_id")
         workstation = Workstation.objects.filter(id=workstation_id).select_related("tsex", "operation").first()
-        operations = list(Operation.objects.all().values("code", "name", "measure_unit", "qr_scan_required", "order_index"))
+        operations = list(
+            Operation.objects.filter(is_active=True)
+            .order_by("order_index", "id")
+            .values("code", "name", "measure_unit", "qr_scan_required", "order_index")
+        )
 
         parts_qs = Part.objects.none()
         if workstation:
@@ -271,8 +277,14 @@ class OrderQRStatusUpdateView(APIView):
             )
 
         old_status = order.status
-        order.status = new_status
-        order.save(update_fields=["status", "updated_at"])
+        try:
+            with transaction.atomic():
+                order.status = new_status
+                order.save(update_fields=["status", "updated_at"])
+                if new_status == Order.Status.APPROVED:
+                    order = start_production_workflow(order.id)
+        except ProductionWorkflowError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
         log_action(
             request.user, "order.qr_status_update", "Order", order.id,

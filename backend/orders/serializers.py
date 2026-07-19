@@ -3,7 +3,7 @@ from rest_framework import serializers
 from customers.models import Customer
 
 from .constants import DEFAULT_ROUTE_KEY, ROUTE_TEMPLATES
-from .models import Label, Order, OrderDetail, Part, PartRoute, Product
+from .models import Label, Order, OrderDetail, OrderStageProgress, Part, PartRoute, Product
 from .services import assign_route, create_part_for_order_detail, sync_part_from_order_detail
 
 
@@ -89,10 +89,29 @@ class OrderDetailItemCreateSerializer(serializers.ModelSerializer):
         fields = ["name", "length_mm", "width_mm", "thickness_mm", "quantity", "material_type"]
 
 
+class OrderStageProgressSerializer(serializers.ModelSerializer):
+    stage_code = serializers.CharField(source="stage.code", read_only=True)
+    stage_name = serializers.CharField(source="stage.name", read_only=True)
+    completed_by_name = serializers.SerializerMethodField()
+
+    def get_completed_by_name(self, obj):
+        if not obj.completed_by:
+            return None
+        return obj.completed_by.get_full_name() or obj.completed_by.phone
+
+    class Meta:
+        model = OrderStageProgress
+        fields = [
+            "id", "stage", "stage_code", "stage_name", "status",
+            "started_at", "completed_at", "completed_by", "completed_by_name",
+        ]
+
+
 class OrderListSerializer(serializers.ModelSerializer):
     parts_total = serializers.SerializerMethodField()
     parts_completed = serializers.SerializerMethodField()
     product_type_name = serializers.CharField(source="product_type.name", read_only=True)
+    current_stage_name = serializers.CharField(source="current_stage.name", read_only=True)
     details = OrderDetailItemCreateSerializer(many=True, write_only=True, required=False)
 
     class Meta:
@@ -100,8 +119,9 @@ class OrderListSerializer(serializers.ModelSerializer):
         fields = [
             "id", "order_no", "customer_name", "customer_phone", "product_name", "product_type",
             "product_type_name", "deadline", "priority", "status", "created_at",
-            "parts_total", "parts_completed", "details",
+            "parts_total", "parts_completed", "details", "current_stage", "current_stage_name", "stage_status",
         ]
+        read_only_fields = ["current_stage", "stage_status"]
 
     def get_parts_total(self, obj):
         return obj.parts.count()
@@ -126,6 +146,8 @@ class OrderDetailSerializer(serializers.ModelSerializer):
     parts = PartSerializer(many=True, read_only=True)
     details = OrderDetailItemSerializer(many=True, read_only=True)
     product_type_name = serializers.CharField(source="product_type.name", read_only=True)
+    current_stage_name = serializers.CharField(source="current_stage.name", read_only=True)
+    stage_progress = OrderStageProgressSerializer(many=True, read_only=True)
 
     class Meta:
         model = Order
@@ -133,8 +155,11 @@ class OrderDetailSerializer(serializers.ModelSerializer):
             "id", "order_no", "customer_name", "customer_phone", "product_name", "notes",
             "product_type", "product_type_name", "deadline", "priority", "status", "qr_token",
             "created_at", "updated_at", "products", "parts", "details",
+            "current_stage", "current_stage_name", "stage_status", "stage_progress",
         ]
-        read_only_fields = ["order_no", "qr_token", "created_at", "updated_at"]
+        read_only_fields = [
+            "order_no", "qr_token", "created_at", "updated_at", "current_stage", "stage_status",
+        ]
 
 
 class LabelSerializer(serializers.ModelSerializer):

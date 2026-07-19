@@ -12,9 +12,10 @@ class Operation(models.Model):
     )
     qr_scan_required = models.BooleanField(default=True)
     order_index = models.PositiveSmallIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
 
     class Meta:
-        ordering = ["order_index"]
+        ordering = ["order_index", "id"]
 
     def __str__(self):
         return self.name

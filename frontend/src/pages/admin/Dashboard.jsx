@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Activity, Boxes, Gauge } from "lucide-react";
 import { format } from "date-fns";
 import { adminApi } from "../../api/client";
+import { toApiInstant } from "../../lib/datetime";
 import StatCard from "../../components/ui/StatCard";
 import { Card } from "../../components/ui/Card";
 import PageHeader from "../../components/ui/PageHeader";
@@ -83,11 +84,16 @@ export default function Dashboard() {
   useEffect(() => registerAndAutoStart("dashboard", dashboardSteps), [registerAndAutoStart]);
 
   async function load(f) {
-    const params = { from: f.from, to: f.to, interval: f.interval };
+    // f.from/f.to are naive <input type="datetime-local"> values (the
+    // browser's own local wall clock) — convert to unambiguous UTC instants
+    // so the backend never has to guess which timezone they're in.
+    const from = toApiInstant(f.from);
+    const to = toApiInstant(f.to);
+    const params = { from, to, interval: f.interval };
     const [o, m, l] = await Promise.all([
       adminApi.get("/dashboard/overview", { params }),
       adminApi.get("/dashboard/machines", { params }),
-      adminApi.get("/dashboard/leaderboard", { params: { from: f.from, to: f.to } }),
+      adminApi.get("/dashboard/leaderboard", { params: { from, to } }),
     ]);
     setOverview(o.data);
     setMachines(m.data);

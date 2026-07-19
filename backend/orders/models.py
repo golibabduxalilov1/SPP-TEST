@@ -30,8 +30,14 @@ class Order(models.Model):
         READY_FOR_PACKAGING = "ready_for_packaging", "Qadoqlashga tayyor"
         PACKAGING = "packaging", "Qadoqlanmoqda"
         WAREHOUSE = "warehouse", "Tayyor omborda"
+        COMPLETED = "completed", "Tugallangan"
         DELIVERED = "delivered", "Mijozga topshirildi"
         CANCELLED = "cancelled", "Bekor qilingan"
+
+    class StageStatus(models.TextChoices):
+        NOT_STARTED = "not_started", "Boshlanmagan"
+        IN_PROGRESS = "in_progress", "Jarayonda"
+        COMPLETED = "completed", "Bajarilgan"
 
     class Priority(models.TextChoices):
         LOW = "low", "Past"
@@ -50,6 +56,18 @@ class Order(models.Model):
     deadline = models.DateField(null=True, blank=True)
     priority = models.CharField(max_length=16, choices=Priority.choices, default=Priority.NORMAL)
     status = models.CharField(max_length=24, choices=Status.choices, default=Status.DRAFT)
+    current_stage = models.ForeignKey(
+        "manufacturing.Operation",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="current_orders",
+    )
+    stage_status = models.CharField(
+        max_length=16,
+        choices=StageStatus.choices,
+        default=StageStatus.NOT_STARTED,
+    )
     qr_token = models.CharField(max_length=64, unique=True, default=generate_order_qr_token, blank=True)
 
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name="orders_created")
@@ -64,7 +82,7 @@ class Order(models.Model):
 
     def recalculate_status(self):
         """Auto-derive order status from part completion, per spec section 5.4."""
-        if self.status in (self.Status.CANCELLED, self.Status.DELIVERED):
+        if self.status in (self.Status.CANCELLED, self.Status.COMPLETED, self.Status.DELIVERED):
             return
         parts = list(self.parts.all())
         if not parts:
@@ -81,6 +99,43 @@ class Order(models.Model):
         if new_status != self.status:
             self.status = new_status
             self.save(update_fields=["status", "updated_at"])
+
+
+class OrderStageProgress(models.Model):
+    """Order-level production history.
+
+    Detail routes remain available to the QR/terminal workflow, while this
+    model records the deliberately simpler whole-order production flow used
+    by the production board.
+    """
+
+    class Status(models.TextChoices):
+        IN_PROGRESS = "in_progress", "Jarayonda"
+        COMPLETED = "completed", "Bajarilgan"
+
+    order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name="stage_progress")
+    stage = models.ForeignKey(
+        "manufacturing.Operation",
+        on_delete=models.PROTECT,
+        related_name="order_stage_progress",
+    )
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.IN_PROGRESS)
+    started_at = models.DateTimeField(auto_now_add=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    completed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="completed_order_stages",
+    )
+
+    class Meta:
+        ordering = ["started_at", "id"]
+        unique_together = ["order", "stage"]
+
+    def __str__(self):
+        return f"{self.order.order_no} -> {self.stage.name} ({self.status})"
 
 
 class Product(models.Model):

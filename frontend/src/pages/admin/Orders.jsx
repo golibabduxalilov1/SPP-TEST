@@ -20,7 +20,7 @@ import { ordersSteps } from "../../tutorial/content/orders";
 const STATUS_LABELS = {
   draft: "Yangi", approved: "Tasdiqlangan", in_production: "Jarayonda", partially_ready: "Qisman tayyor",
   ready_for_packaging: "Qadoqlashga tayyor", packaging: "Qadoqlanmoqda", warehouse: "Omborda",
-  delivered: "Topshirildi", cancelled: "Bekor qilingan",
+  completed: "Tugallangan", delivered: "Topshirildi", cancelled: "Bekor qilingan",
 };
 
 const PRIORITY_LABELS = { low: "Past", normal: "Oddiy", high: "Yuqori", urgent: "Shoshilinch" };

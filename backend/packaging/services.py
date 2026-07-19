@@ -1,7 +1,8 @@
 from django.utils import timezone
 
 from core.audit import push_live_log
-from orders.models import Part, PartRoute
+from orders.models import Order, Part, PartRoute
+from orders.production_workflow import ProductionWorkflowError, complete_current_stage
 
 from .models import Package, PackageItem
 
@@ -38,7 +39,20 @@ def packaging_scan(package: Package, qr_token: str, employee):
         part.current_operation = next_step.operation if next_step else None
         part.status = Part.Status.COMPLETED if not next_step else Part.Status.IN_PROGRESS
         part.save(update_fields=["current_operation", "status"])
-        part.order.recalculate_status()
+        order = part.order
+        order.recalculate_status()
+
+        # Same auto-advance as the terminal scan flow: if packaging this part
+        # finished the board's current stage, move it to the next one.
+        if route_step.operation_id == order.current_stage_id and order.stage_status == Order.StageStatus.IN_PROGRESS:
+            stage_incomplete = PartRoute.objects.filter(
+                part__order=order, operation=route_step.operation,
+            ).exclude(status__in=[PartRoute.Status.COMPLETED, PartRoute.Status.NOT_REQUIRED]).exists()
+            if not stage_incomplete:
+                try:
+                    complete_current_stage(order.id, completed_by=employee)
+                except ProductionWorkflowError:
+                    pass
 
     push_live_log("packaging", f"Qadoqlash: {part.code} -> {package.package_no}")
     return {"status": "ok", "part_id": part.id, "part_code": part.code}

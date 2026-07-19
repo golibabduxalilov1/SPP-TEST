@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ListTree, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { Factory, ListTree, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import toast from "react-hot-toast";
 import { adminApi } from "../../api/client";
 import { Card, CardBody, CardHeader } from "../../components/ui/Card";
@@ -11,8 +11,14 @@ import { PageLoader } from "../../components/ui/Misc";
 import Modal from "../../components/ui/Modal";
 import SegmentedControl from "../../components/ui/SegmentedControl";
 import EditableDetailsTable from "../../components/admin/EditableDetailsTable";
+import Badge from "../../components/ui/Badge";
+import Toggle from "../../components/ui/Toggle";
+import { useAuthStore } from "../../store/authStore";
 
-const TABS = [{ value: "product-types", label: "Mahsulot turlari" }];
+const TABS = [
+  { value: "product-types", label: "Mahsulot turlari" },
+  { value: "production-stages", label: "Ishlab chiqarish bosqichlari" },
+];
 
 function getErrorMessage(error) {
   const data = error.response?.data;
@@ -26,13 +32,296 @@ function getErrorMessage(error) {
 
 export default function References() {
   const [tab, setTab] = useState(TABS[0].value);
+  const user = useAuthStore((state) => state.user);
+  const canManageStages = Boolean(user?.is_superuser || ["super_admin", "admin"].includes(user?.role));
 
   return (
     <div className="space-y-6">
-      <PageHeader eyebrow="Справочники" title="Справочники" subtitle="Mahsulot turlari va standart detallar" />
+      <PageHeader eyebrow="Справочники" title="Справочники" subtitle="Mahsulot turlari, standart detallar va ishlab chiqarish bosqichlari" />
       <SegmentedControl options={TABS} value={tab} onChange={setTab} />
       {tab === "product-types" && <ProductTypesTab />}
+      {tab === "production-stages" && <ProductionStagesTab canManage={canManageStages} />}
     </div>
+  );
+}
+
+function ProductionStagesTab({ canManage }) {
+  const [stages, setStages] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editingStage, setEditingStage] = useState(null);
+  const [deletingStage, setDeletingStage] = useState(null);
+  const [togglingId, setTogglingId] = useState(null);
+
+  async function load() {
+    setLoading(true);
+    try {
+      const { data } = await adminApi.get("/operations/", { params: { ordering: "order_index" } });
+      setStages(data.results || data);
+    } catch (error) {
+      toast.error(getErrorMessage(error));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  function openCreateModal() {
+    setEditingStage(null);
+    setModalOpen(true);
+  }
+
+  function openEditModal(stage) {
+    setEditingStage(stage);
+    setModalOpen(true);
+  }
+
+  async function toggleStage(stage) {
+    setTogglingId(stage.id);
+    try {
+      await adminApi.patch(`/operations/${stage.id}/`, { is_active: !stage.is_active });
+      toast.success(stage.is_active ? "Bosqich nofaol qilindi" : "Bosqich faollashtirildi");
+      await load();
+    } catch (error) {
+      toast.error(getErrorMessage(error));
+    } finally {
+      setTogglingId(null);
+    }
+  }
+
+  const nextOrderIndex = stages.reduce((max, stage) => Math.max(max, Number(stage.order_index) || 0), 0) + 1;
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader
+          title="Ishlab chiqarish bosqichlari"
+          subtitle={`${stages.length} ta bosqich · tablo ustunlari faol bosqichlar tartibida chiqadi`}
+          actions={canManage ? (
+            <Button onClick={openCreateModal} className="w-full sm:w-auto">
+              <Plus size={16} /> Bosqich qo'shish
+            </Button>
+          ) : null}
+        />
+        <CardBody className="p-0">
+          {loading ? (
+            <PageLoader />
+          ) : (
+            <Table label="Ishlab chiqarish bosqichlari">
+              <Thead>
+                <tr>
+                  <Th className="w-24">Tartib</Th>
+                  <Th>Nomi</Th>
+                  <Th>Holati</Th>
+                  {canManage && <Th className="text-right">Amallar</Th>}
+                </tr>
+              </Thead>
+              <Tbody>
+                {stages.length === 0 && <EmptyRow colSpan={canManage ? 4 : 3} message="Ishlab chiqarish bosqichlari yo'q" />}
+                {stages.map((stage) => (
+                  <Tr key={stage.id}>
+                    <Td>
+                      <span className="tabular inline-flex min-w-9 items-center justify-center rounded-lg bg-[var(--surface-muted)] px-2.5 py-1.5 font-semibold text-[var(--ink-soft)]">
+                        {stage.order_index}
+                      </span>
+                    </Td>
+                    <Td>
+                      <div className="flex items-center gap-3">
+                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--accent-soft)] text-[var(--accent-strong)]">
+                          <Factory size={16} />
+                        </span>
+                        <div className="min-w-0">
+                          <p className="font-semibold text-[var(--ink)]">{stage.name}</p>
+                          {stage.is_default && <p className="text-xs text-[var(--ink-faint)]">Default bosqich</p>}
+                        </div>
+                      </div>
+                    </Td>
+                    <Td>
+                      <div className="flex items-center gap-3">
+                        <Badge tone={stage.is_active ? "green" : "gray"} dot>
+                          {stage.is_active ? "Faol" : "Nofaol"}
+                        </Badge>
+                        {canManage && (
+                          <Toggle
+                            checked={stage.is_active}
+                            onChange={() => toggleStage(stage)}
+                            disabled={togglingId === stage.id}
+                            aria-label={`${stage.name} holatini o'zgartirish`}
+                          />
+                        )}
+                      </div>
+                    </Td>
+                    {canManage && (
+                      <Td>
+                        <div className="ml-auto flex w-fit items-center gap-1.5">
+                          <Button
+                            type="button" variant="ghost" size="sm" magnetic={false}
+                            onClick={() => openEditModal(stage)}
+                            aria-label={`${stage.name} tahrirlash`} title="Tahrirlash"
+                            className="!min-h-9 !min-w-9 !rounded-lg !border-[var(--border-strong)] !px-0 !text-[var(--accent-strong)] hover:!bg-[var(--accent-soft)]"
+                          >
+                            <Pencil size={14} strokeWidth={2.2} />
+                          </Button>
+                          <Button
+                            type="button" variant="ghost" size="sm" magnetic={false}
+                            onClick={() => setDeletingStage(stage)}
+                            disabled={stage.is_default}
+                            aria-label={`${stage.name} o'chirish`}
+                            title={stage.is_default ? "Default bosqichni o'chirib bo'lmaydi" : "O'chirish"}
+                            className="!min-h-9 !min-w-9 !rounded-lg !border-[var(--border-strong)] !px-0 !text-status-red hover:!bg-[var(--color-status-red-bg)]"
+                          >
+                            <Trash2 size={14} strokeWidth={2.2} />
+                          </Button>
+                        </div>
+                      </Td>
+                    )}
+                  </Tr>
+                ))}
+              </Tbody>
+            </Table>
+          )}
+        </CardBody>
+      </Card>
+
+      <ProductionStageModal
+        open={modalOpen}
+        stage={editingStage}
+        nextOrderIndex={nextOrderIndex}
+        onClose={() => setModalOpen(false)}
+        onSaved={load}
+      />
+      <DeleteProductionStageModal
+        stage={deletingStage}
+        onClose={() => setDeletingStage(null)}
+        onChanged={load}
+      />
+    </div>
+  );
+}
+
+function ProductionStageModal({ open, stage, nextOrderIndex, onClose, onSaved }) {
+  const [form, setForm] = useState({ name: "", order_index: 1, is_active: true });
+  const [saving, setSaving] = useState(false);
+  const isEditing = Boolean(stage);
+
+  useEffect(() => {
+    if (!open) return;
+    setForm(stage ? {
+      name: stage.name,
+      order_index: stage.order_index,
+      is_active: stage.is_active,
+    } : {
+      name: "",
+      order_index: nextOrderIndex,
+      is_active: true,
+    });
+  }, [stage, open, nextOrderIndex]);
+
+  async function submit(e) {
+    e.preventDefault();
+    setSaving(true);
+    const payload = { ...form, order_index: Number(form.order_index) };
+    try {
+      if (isEditing) {
+        await adminApi.patch(`/operations/${stage.id}/`, payload);
+        toast.success("Ishlab chiqarish bosqichi yangilandi");
+      } else {
+        await adminApi.post("/operations/", payload);
+        toast.success("Ishlab chiqarish bosqichi yaratildi");
+      }
+      await onSaved();
+      onClose();
+    } catch (error) {
+      toast.error(getErrorMessage(error));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Modal open={open} onClose={onClose} title={isEditing ? "Bosqichni tahrirlash" : "Yangi ishlab chiqarish bosqichi"}>
+      <form onSubmit={submit} className="space-y-4">
+        <Field label="Nomi" required>
+          <Input
+            required maxLength={100} autoFocus
+            value={form.name}
+            onChange={(e) => setForm({ ...form, name: e.target.value })}
+            placeholder="Masalan: Silliqlash"
+          />
+        </Field>
+        <Field label="Tartib raqami" required hint="Tablo ustunlari kichik raqamdan katta raqamga qarab joylashadi.">
+          <Input
+            required type="number" min="1" step="1"
+            value={form.order_index}
+            onChange={(e) => setForm({ ...form, order_index: e.target.value })}
+          />
+        </Field>
+        <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-muted)] px-4 py-3">
+          <Toggle
+            checked={form.is_active}
+            onChange={(e) => setForm({ ...form, is_active: e.target.checked })}
+            label="Faol bosqich"
+          />
+          <p className="mt-1 text-xs leading-5 text-[var(--ink-soft)]">Faqat faol bosqichlar ishlab chiqarish tablosida ko'rinadi.</p>
+        </div>
+        <Button type="submit" className="w-full" loading={saving}>{isEditing ? "Saqlash" : "Yaratish"}</Button>
+      </form>
+    </Modal>
+  );
+}
+
+function DeleteProductionStageModal({ stage, onClose, onChanged }) {
+  const [deleting, setDeleting] = useState(false);
+  const [deactivating, setDeactivating] = useState(false);
+
+  async function remove() {
+    setDeleting(true);
+    try {
+      await adminApi.delete(`/operations/${stage.id}/`);
+      toast.success("Ishlab chiqarish bosqichi o'chirildi");
+      await onChanged();
+      onClose();
+    } catch (error) {
+      toast.error(getErrorMessage(error));
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  async function deactivate() {
+    setDeactivating(true);
+    try {
+      await adminApi.patch(`/operations/${stage.id}/`, { is_active: false });
+      toast.success("Bosqich nofaol qilindi");
+      await onChanged();
+      onClose();
+    } catch (error) {
+      toast.error(getErrorMessage(error));
+    } finally {
+      setDeactivating(false);
+    }
+  }
+
+  return (
+    <Modal open={Boolean(stage)} onClose={onClose} title="Bosqichni o'chirish" size="sm">
+      <p className="text-sm leading-6 text-[var(--ink-soft)]">
+        <strong className="font-semibold text-[var(--ink)]">{stage?.name}</strong> bosqichini o'chirmoqchimisiz?
+        Agar unga faol yoki tarixiy buyurtma detallari bog'langan bo'lsa, o'chirish bloklanadi.
+      </p>
+      <p className="mt-3 rounded-lg bg-[var(--accent-soft)] px-3 py-2.5 text-xs leading-5 text-[var(--accent-strong)]">
+        Ma'lumotlarni saqlab qolish uchun bosqichni nofaol qilish tavsiya etiladi.
+      </p>
+      <div className="mt-5 flex flex-wrap justify-end gap-2">
+        <Button type="button" variant="secondary" onClick={onClose} disabled={deleting || deactivating}>Bekor qilish</Button>
+        {stage?.is_active && (
+          <Button type="button" variant="secondary" onClick={deactivate} loading={deactivating} disabled={deleting}>Nofaol qilish</Button>
+        )}
+        <Button type="button" variant="danger" onClick={remove} loading={deleting} disabled={deactivating}>O'chirish</Button>
+      </div>
+    </Modal>
   );
 }
 

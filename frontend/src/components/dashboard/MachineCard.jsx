@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { format } from "date-fns";
 import { Area, AreaChart, CartesianGrid, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { adminApi } from "../../api/client";
+import { toApiInstant } from "../../lib/datetime";
 import { Card, CardBody, CardHeader } from "../ui/Card";
 import Badge from "../ui/Badge";
 import { CHART, tooltipStyle } from "../ui/chartTheme";
@@ -14,7 +15,9 @@ export default function MachineCard({ machine, from, to, interval, indicator }) 
     let cancelled = false;
     setLoadingSeries(true);
     adminApi
-      .get(`/dashboard/machines/${machine.id}/series`, { params: { from, to, interval } })
+      .get(`/dashboard/machines/${machine.id}/series`, {
+        params: { from: toApiInstant(from), to: toApiInstant(to), interval },
+      })
       .then(({ data }) => {
         if (!cancelled) setSeries(data);
       })

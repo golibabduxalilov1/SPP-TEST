@@ -6,6 +6,7 @@ from django.utils.dateparse import parse_datetime
 from core.audit import push_live_log
 from manufacturing.models import Operation
 from orders.models import Order, Part, PartRoute
+from orders.production_workflow import ProductionWorkflowError, complete_current_stage
 
 from .models import Conflict, ScanEvent
 
@@ -83,6 +84,20 @@ def process_scan(*, client_scan_id, qr_token, operation_code, employee, device_i
     part.status = Part.Status.COMPLETED if not next_step else Part.Status.IN_PROGRESS
     part.save(update_fields=["current_operation", "status"])
     order.recalculate_status()
+
+    # If this scan finished the last detail the whole-order board is waiting
+    # on for its current stage, advance the board the same way the manual
+    # "Bosqichni yakunlash" action does — same underlying operation, so it
+    # can't leave stage_progress in an inconsistent state.
+    if operation.id == order.current_stage_id and order.stage_status == Order.StageStatus.IN_PROGRESS:
+        stage_incomplete = PartRoute.objects.filter(
+            part__order=order, operation=operation,
+        ).exclude(status__in=[PartRoute.Status.COMPLETED, PartRoute.Status.NOT_REQUIRED]).exists()
+        if not stage_incomplete:
+            try:
+                complete_current_stage(order.id, completed_by=employee)
+            except ProductionWorkflowError:
+                pass  # leave it for the manual admin action if something's off
 
     scan = ScanEvent.objects.create(
         client_scan_id=client_scan_id,
