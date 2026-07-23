@@ -25,10 +25,8 @@ class Order(models.Model):
     class Status(models.TextChoices):
         DRAFT = "draft", "Yangi"
         APPROVED = "approved", "Tasdiqlangan"
-        IN_PRODUCTION = "in_production", "Tsexda ishlab chiqarilmoqda"
+        IN_PRODUCTION = "in_production", "Jarayonda"
         PARTIALLY_READY = "partially_ready", "Qisman tayyor"
-        READY_FOR_PACKAGING = "ready_for_packaging", "Qadoqlashga tayyor"
-        PACKAGING = "packaging", "Qadoqlanmoqda"
         WAREHOUSE = "warehouse", "Tayyor omborda"
         COMPLETED = "completed", "Tugallangan"
         DELIVERED = "delivered", "Mijozga topshirildi"
@@ -50,12 +48,20 @@ class Order(models.Model):
     customer_phone = models.CharField(max_length=32, blank=True)
     product_name = models.CharField(max_length=200, blank=True)
     product_type = models.ForeignKey(
-        "catalog.ProductType", on_delete=models.SET_NULL, null=True, blank=True, related_name="orders"
+        "catalog.ProductType",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="orders",
     )
     notes = models.TextField(blank=True)
     deadline = models.DateField(null=True, blank=True)
-    priority = models.CharField(max_length=16, choices=Priority.choices, default=Priority.NORMAL)
-    status = models.CharField(max_length=24, choices=Status.choices, default=Status.DRAFT)
+    priority = models.CharField(
+        max_length=16, choices=Priority.choices, default=Priority.NORMAL
+    )
+    status = models.CharField(
+        max_length=24, choices=Status.choices, default=Status.DRAFT
+    )
     current_stage = models.ForeignKey(
         "manufacturing.Operation",
         on_delete=models.PROTECT,
@@ -68,9 +74,16 @@ class Order(models.Model):
         choices=StageStatus.choices,
         default=StageStatus.NOT_STARTED,
     )
-    qr_token = models.CharField(max_length=64, unique=True, default=generate_order_qr_token, blank=True)
+    qr_token = models.CharField(
+        max_length=64, unique=True, default=generate_order_qr_token, blank=True
+    )
 
-    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name="orders_created")
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="orders_created",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -82,18 +95,26 @@ class Order(models.Model):
 
     def recalculate_status(self):
         """Auto-derive order status from part completion, per spec section 5.4."""
-        if self.status in (self.Status.CANCELLED, self.Status.COMPLETED, self.Status.DELIVERED):
+        if self.status in (
+            self.Status.CANCELLED,
+            self.Status.COMPLETED,
+            self.Status.DELIVERED,
+        ):
             return
         parts = list(self.parts.all())
         if not parts:
             return
         statuses = {p.status for p in parts}
         if statuses == {"completed"}:
-            new_status = self.Status.READY_FOR_PACKAGING
+            new_status = self.Status.WAREHOUSE
         elif "completed" in statuses or "in_progress" in statuses:
             new_status = self.Status.PARTIALLY_READY
         elif statuses == {"pending"}:
-            new_status = self.Status.IN_PRODUCTION if self.status != self.Status.DRAFT else self.status
+            new_status = (
+                self.Status.IN_PRODUCTION
+                if self.status != self.Status.DRAFT
+                else self.status
+            )
         else:
             new_status = self.status
         if new_status != self.status:
@@ -113,13 +134,17 @@ class OrderStageProgress(models.Model):
         IN_PROGRESS = "in_progress", "Jarayonda"
         COMPLETED = "completed", "Bajarilgan"
 
-    order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name="stage_progress")
+    order = models.ForeignKey(
+        Order, on_delete=models.CASCADE, related_name="stage_progress"
+    )
     stage = models.ForeignKey(
         "manufacturing.Operation",
         on_delete=models.PROTECT,
         related_name="order_stage_progress",
     )
-    status = models.CharField(max_length=16, choices=Status.choices, default=Status.IN_PROGRESS)
+    status = models.CharField(
+        max_length=16, choices=Status.choices, default=Status.IN_PROGRESS
+    )
     started_at = models.DateTimeField(auto_now_add=True)
     completed_at = models.DateTimeField(null=True, blank=True)
     completed_by = models.ForeignKey(
@@ -153,26 +178,44 @@ class Part(models.Model):
         IN_PROGRESS = "in_progress", "Jarayonda"
         COMPLETED = "completed", "Tayyor"
         BLOCKED = "blocked", "Bloklangan"
-        CONFLICT = "conflict", "Konflikt"
+        CONFLICT = "conflict", "Muammoli holat"
 
     order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name="parts")
-    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="parts", null=True, blank=True)
+    product = models.ForeignKey(
+        Product, on_delete=models.CASCADE, related_name="parts", null=True, blank=True
+    )
     code = models.CharField(max_length=64)
     name = models.CharField(max_length=200)
     material = models.CharField(max_length=100, blank=True)
     color = models.CharField(max_length=100, blank=True)
-    length_mm = models.DecimalField(max_digits=10, decimal_places=1, null=True, blank=True)
-    width_mm = models.DecimalField(max_digits=10, decimal_places=1, null=True, blank=True)
-    thickness_mm = models.DecimalField(max_digits=10, decimal_places=1, null=True, blank=True)
+    length_mm = models.DecimalField(
+        max_digits=10, decimal_places=1, null=True, blank=True
+    )
+    width_mm = models.DecimalField(
+        max_digits=10, decimal_places=1, null=True, blank=True
+    )
+    thickness_mm = models.DecimalField(
+        max_digits=10, decimal_places=1, null=True, blank=True
+    )
     quantity = models.PositiveIntegerField(default=1)
-    area_m2 = models.DecimalField(max_digits=10, decimal_places=3, null=True, blank=True)
-    edge_meter = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    area_m2 = models.DecimalField(
+        max_digits=10, decimal_places=3, null=True, blank=True
+    )
+    edge_meter = models.DecimalField(
+        max_digits=10, decimal_places=2, null=True, blank=True
+    )
     drilling_count = models.PositiveIntegerField(default=0)
     qr_token = models.CharField(max_length=64, unique=True, default=generate_qr_token)
     current_operation = models.ForeignKey(
-        "manufacturing.Operation", on_delete=models.SET_NULL, null=True, blank=True, related_name="current_parts"
+        "manufacturing.Operation",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="current_parts",
     )
-    status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING)
+    status = models.CharField(
+        max_length=16, choices=Status.choices, default=Status.PENDING
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -182,7 +225,11 @@ class Part(models.Model):
         return f"{self.code} — {self.name}"
 
     def next_route_step(self):
-        return self.routes.filter(status__in=["pending", "blocked"]).order_by("sequence_index").first()
+        return (
+            self.routes.filter(status__in=["pending", "blocked"])
+            .order_by("sequence_index")
+            .first()
+        )
 
 
 class PartRoute(models.Model):
@@ -194,11 +241,24 @@ class PartRoute(models.Model):
         NOT_REQUIRED = "not_required", "Kerak emas"
 
     part = models.ForeignKey(Part, on_delete=models.CASCADE, related_name="routes")
-    operation = models.ForeignKey("manufacturing.Operation", on_delete=models.PROTECT, related_name="part_routes")
+    operation = models.ForeignKey(
+        "manufacturing.Operation", on_delete=models.PROTECT, related_name="part_routes"
+    )
     sequence_index = models.PositiveSmallIntegerField()
-    status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING)
+    status = models.CharField(
+        max_length=16, choices=Status.choices, default=Status.PENDING
+    )
     completed_at = models.DateTimeField(null=True, blank=True)
-    completed_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
+    completed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True
+    )
+    machine = models.ForeignKey(
+        "manufacturing.Machine",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="part_routes",
+    )
 
     class Meta:
         ordering = ["part", "sequence_index"]
@@ -218,13 +278,23 @@ class OrderDetail(models.Model):
 
     order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name="details")
     name = models.CharField(max_length=200)
-    length_mm = models.DecimalField(max_digits=10, decimal_places=1, null=True, blank=True)
-    width_mm = models.DecimalField(max_digits=10, decimal_places=1, null=True, blank=True)
-    thickness_mm = models.DecimalField(max_digits=10, decimal_places=1, null=True, blank=True)
+    length_mm = models.DecimalField(
+        max_digits=10, decimal_places=1, null=True, blank=True
+    )
+    width_mm = models.DecimalField(
+        max_digits=10, decimal_places=1, null=True, blank=True
+    )
+    thickness_mm = models.DecimalField(
+        max_digits=10, decimal_places=1, null=True, blank=True
+    )
     quantity = models.PositiveIntegerField(default=1)
     material_type = models.CharField(max_length=100, blank=True)
     part = models.OneToOneField(
-        Part, on_delete=models.SET_NULL, null=True, blank=True, related_name="order_detail"
+        Part,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="order_detail",
     )
 
     class Meta:
@@ -235,9 +305,19 @@ class OrderDetail(models.Model):
 
 
 class Label(models.Model):
-    part = models.ForeignKey(Part, on_delete=models.CASCADE, related_name="labels", null=True, blank=True)
-    package = models.ForeignKey("packaging.Package", on_delete=models.CASCADE, related_name="labels", null=True, blank=True)
-    printed_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
+    part = models.ForeignKey(
+        Part, on_delete=models.CASCADE, related_name="labels", null=True, blank=True
+    )
+    package = models.ForeignKey(
+        "packaging.Package",
+        on_delete=models.CASCADE,
+        related_name="labels",
+        null=True,
+        blank=True,
+    )
+    printed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True
+    )
     printed_at = models.DateTimeField(auto_now_add=True)
     label_width_mm = models.PositiveSmallIntegerField(default=70)
     label_height_mm = models.PositiveSmallIntegerField(default=50)

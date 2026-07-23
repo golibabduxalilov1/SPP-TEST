@@ -95,21 +95,33 @@ def overview(date_from, date_to):
 
 def machines_summary(date_from, date_to):
     window_hours = _window_hours(date_from, date_to)
-    machines = Machine.objects.select_related("operation", "workstation").filter(status="active").order_by("machine_id")
+    machines = Machine.objects.select_related("operation", "tsex").filter(status="active").order_by("machine_id")
 
-    routes_by_operation = defaultdict(list)
+    machines_by_operation = defaultdict(list)
+    for m in machines:
+        machines_by_operation[m.operation_id].append(m)
+
+    routes_by_machine = defaultdict(list)
+    unassigned_routes_by_operation = defaultdict(list)
     for route in _completed_routes(date_from, date_to):
-        routes_by_operation[route.operation_id].append(route)
+        if route.machine_id:
+            routes_by_machine[route.machine_id].append(route)
+        else:
+            unassigned_routes_by_operation[route.operation_id].append(route)
 
     results = []
     for machine in machines:
         unit = machine.operation.measure_unit
-        # Completion is tracked per stage (operation), not per physical
-        # machine unit, so machines sharing one operation share its total —
-        # true today since every operation has exactly one machine.
-        volume = sum(
-            (_route_value(r, unit) for r in routes_by_operation.get(machine.operation_id, [])), Decimal("0")
-        )
+        routes = list(routes_by_machine.get(machine.id, []))
+        # A completion with no machine recorded (e.g. a bulk "Bosqichni
+        # yakunlash" click, which isn't tied to any physical equipment) can
+        # only be credited to a specific machine when its stage has exactly
+        # one active machine — otherwise there's no way to know which one
+        # actually did the work, so it's left off every machine card (it
+        # still counts in the window-wide overview totals).
+        if len(machines_by_operation[machine.operation_id]) == 1:
+            routes += unassigned_routes_by_operation.get(machine.operation_id, [])
+        volume = sum((_route_value(r, unit) for r in routes), Decimal("0"))
         efficiency = None
         if machine.capacity_per_hour:
             capacity_total = machine.capacity_per_hour * Decimal(str(window_hours))
@@ -147,7 +159,11 @@ def machine_series(machine, date_from, date_to, interval_minutes):
         buckets = [date_from]
 
     bucket_values = [Decimal("0") for _ in buckets]
-    routes = _completed_routes(date_from, date_to).filter(operation=machine.operation)
+    routes_qs = _completed_routes(date_from, date_to).filter(operation=machine.operation)
+    sibling_count = Machine.objects.filter(operation=machine.operation, status="active").count()
+    # Same fallback rule as machines_summary: only fold in machine-less
+    # completions when this machine is the sole one for its stage.
+    routes = routes_qs if sibling_count == 1 else routes_qs.filter(machine=machine)
 
     interval_seconds = interval_minutes * 60
     for route in routes:
@@ -194,11 +210,16 @@ def leaderboard(date_from, date_to, limit=10):
         for machine in Machine.objects.select_related("operation").filter(status="active")
     }
 
-    agg = defaultdict(lambda: {"employee": None, "output": 0, "operation_volumes": defaultdict(Decimal), "operation_caps": {}})
+    agg = defaultdict(lambda: {
+        "employee": None, "output": 0, "machine_ids": set(),
+        "operation_volumes": defaultdict(Decimal), "operation_caps": {},
+    })
     for route in routes.iterator():
         entry = agg[route.completed_by_id]
         entry["employee"] = route.completed_by
         entry["output"] += 1
+        if route.machine_id:
+            entry["machine_ids"].add(route.machine_id)
         machine = machine_by_operation.get(route.operation_id)
         if machine:
             value = _route_value(route, machine.operation.measure_unit)
@@ -222,7 +243,10 @@ def leaderboard(date_from, date_to, limit=10):
                 "name": employee.get_full_name() or employee.username,
                 "role": employee.role,
                 "output": entry["output"],
-                "machines": len(entry["operation_volumes"]),
+                # Real distinct machine count when scans carried one; falls
+                # back to a per-stage estimate for legacy/bulk completions
+                # that have no machine attached.
+                "machines": len(entry["machine_ids"]) or len(entry["operation_volumes"]),
                 "efficiency": efficiency,
             }
         )

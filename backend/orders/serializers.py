@@ -7,6 +7,44 @@ from .models import Label, Order, OrderDetail, OrderStageProgress, Part, PartRou
 from .services import assign_route, create_part_for_order_detail, sync_part_from_order_detail
 
 
+ORDER_SPECIAL_STATUS_LABELS = {
+    Order.Status.DRAFT: "Yangi",
+    Order.Status.APPROVED: "Tasdiqlangan",
+    Order.Status.CANCELLED: "Bekor qilingan",
+}
+
+
+def order_display_status(obj):
+    """Status shown in the Orders UI: three lifecycle states or a real stage."""
+    if obj.status in ORDER_SPECIAL_STATUS_LABELS:
+        return {
+            "type": "status",
+            "value": obj.status,
+            "label": ORDER_SPECIAL_STATUS_LABELS[obj.status],
+            "stage_id": None,
+        }
+
+    if obj.current_stage_id:
+        return {
+            "type": "stage",
+            "value": f"stage:{obj.current_stage_id}",
+            "label": obj.current_stage.name,
+            "stage_id": obj.current_stage_id,
+        }
+
+    stage_id = getattr(obj, "last_completed_stage_id", None)
+    stage_name = getattr(obj, "last_completed_stage_name", None)
+    if stage_id and stage_name:
+        return {
+            "type": "stage",
+            "value": f"stage:{stage_id}",
+            "label": stage_name,
+            "stage_id": stage_id,
+        }
+
+    return {"type": "stage", "value": None, "label": "—", "stage_id": None}
+
+
 class PartRouteSerializer(serializers.ModelSerializer):
     operation_code = serializers.CharField(source="operation.code", read_only=True)
     operation_name = serializers.CharField(source="operation.name", read_only=True)
@@ -113,6 +151,7 @@ class OrderListSerializer(serializers.ModelSerializer):
     product_type_name = serializers.CharField(source="product_type.name", read_only=True)
     current_stage_name = serializers.CharField(source="current_stage.name", read_only=True)
     details = OrderDetailItemCreateSerializer(many=True, write_only=True, required=False)
+    display_status = serializers.SerializerMethodField()
 
     class Meta:
         model = Order
@@ -120,6 +159,7 @@ class OrderListSerializer(serializers.ModelSerializer):
             "id", "order_no", "customer_name", "customer_phone", "product_name", "product_type",
             "product_type_name", "deadline", "priority", "status", "created_at",
             "parts_total", "parts_completed", "details", "current_stage", "current_stage_name", "stage_status",
+            "display_status",
         ]
         read_only_fields = ["current_stage", "stage_status"]
 
@@ -128,6 +168,9 @@ class OrderListSerializer(serializers.ModelSerializer):
 
     def get_parts_completed(self, obj):
         return obj.parts.filter(status="completed").count()
+
+    def get_display_status(self, obj):
+        return order_display_status(obj)
 
     def create(self, validated_data):
         details_data = validated_data.pop("details", [])
@@ -148,6 +191,7 @@ class OrderDetailSerializer(serializers.ModelSerializer):
     product_type_name = serializers.CharField(source="product_type.name", read_only=True)
     current_stage_name = serializers.CharField(source="current_stage.name", read_only=True)
     stage_progress = OrderStageProgressSerializer(many=True, read_only=True)
+    display_status = serializers.SerializerMethodField()
 
     class Meta:
         model = Order
@@ -156,10 +200,14 @@ class OrderDetailSerializer(serializers.ModelSerializer):
             "product_type", "product_type_name", "deadline", "priority", "status", "qr_token",
             "created_at", "updated_at", "products", "parts", "details",
             "current_stage", "current_stage_name", "stage_status", "stage_progress",
+            "display_status",
         ]
         read_only_fields = [
             "order_no", "qr_token", "created_at", "updated_at", "current_stage", "stage_status",
         ]
+
+    def get_display_status(self, obj):
+        return order_display_status(obj)
 
 
 class LabelSerializer(serializers.ModelSerializer):

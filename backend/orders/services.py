@@ -29,6 +29,28 @@ def assign_route(part: Part, route_key: str):
     part.save(update_fields=["current_operation"])
 
 
+def assign_active_stages_route(part: Part):
+    """Build a part's route from every currently active stage, in order.
+
+    This is the standard "New Order" path: the route is not tied to a fixed
+    product-type template, so a newly added active stage is automatically
+    picked up by parts created afterwards, and a deactivated stage is
+    automatically excluded — without touching any already-created part's
+    existing route.
+    """
+    operations = list(Operation.objects.filter(is_active=True).order_by("order_index", "id"))
+    part.routes.all().delete()
+    for index, operation in enumerate(operations, start=1):
+        PartRoute.objects.create(
+            part=part,
+            operation=operation,
+            sequence_index=index,
+            status=PartRoute.Status.PENDING,
+        )
+    part.current_operation = operations[0] if operations else None
+    part.save(update_fields=["current_operation"])
+
+
 def create_part_for_order_detail(detail):
     """Every 'Mahsulot detallari' row gets its own trackable Part (unique QR + route)."""
     part = Part.objects.create(
@@ -41,7 +63,7 @@ def create_part_for_order_detail(detail):
         thickness_mm=detail.thickness_mm,
         quantity=detail.quantity,
     )
-    assign_route(part, DEFAULT_ROUTE_KEY)
+    assign_active_stages_route(part)
     detail.part = part
     detail.save(update_fields=["part"])
     return part

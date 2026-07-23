@@ -88,7 +88,7 @@ export default function AdminLayout() {
           aria-label="Menyuni ochish"
           aria-expanded={navOpen}
           aria-controls="admin-navigation"
-          className="shrink-0 !rounded-xl !border-transparent !bg-transparent !text-white/80 hover:!bg-transparent hover:!text-white"
+          className="shrink-0 rounded-xl! border-transparent! bg-transparent! text-white/80! hover:bg-transparent! hover:text-white!"
         >
           <MobileMenuIcon open={false} />
         </Button>
@@ -105,9 +105,9 @@ export default function AdminLayout() {
       <aside
         id="admin-navigation"
         className={clsx(
-          "brand-shell !fixed inset-y-0 left-0 z-50 flex h-dvh w-72 max-w-[85vw] flex-col overflow-hidden border-r border-r-white/8 elevation-lg transition-[transform,visibility] duration-300 ease-in-out",
+          "brand-shell fixed! inset-y-0 left-0 z-50 flex h-dvh w-72 max-w-[85vw] flex-col overflow-hidden border-r border-r-white/8 elevation-lg transition-[transform,visibility] duration-300 ease-in-out",
           navOpen ? "visible translate-x-0 delay-0" : "invisible -translate-x-full delay-300",
-          "lg:visible lg:!static lg:h-dvh lg:w-64 lg:max-w-none lg:shrink-0 lg:translate-x-0 lg:self-stretch lg:delay-0 xl:w-72"
+          "lg:visible lg:static! lg:h-dvh lg:w-64 lg:max-w-none lg:shrink-0 lg:translate-x-0 lg:self-stretch lg:delay-0 xl:w-72"
         )}
       >
         <div className="flex h-full flex-col lg:h-dvh">
@@ -128,7 +128,7 @@ export default function AdminLayout() {
               magnetic={false}
               onClick={() => setNavOpen(false)}
               aria-label="Menyuni yopish"
-              className="shrink-0 !rounded-xl !border-transparent !bg-transparent !text-white/70 hover:!bg-transparent hover:!text-white lg:hidden"
+              className="shrink-0 rounded-xl! border-transparent! bg-transparent! text-white/70! hover:bg-transparent! hover:text-white! lg:hidden"
             >
               <MobileMenuIcon open />
             </Button>

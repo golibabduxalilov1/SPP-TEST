@@ -13,17 +13,17 @@ function getMotionComponent(Component) {
 
 const VARIANTS = {
   primary:
-    "text-white border-[color-mix(in_srgb,var(--accent-strong)_45%,transparent)] bg-[linear-gradient(135deg,var(--accent-bright),var(--accent))] shadow-[var(--shadow-accent)] hover:bg-[linear-gradient(135deg,var(--accent),var(--accent-strong))]",
+    "text-white border-[color-mix(in_srgb,var(--accent-strong)_45%,transparent)] bg-[linear-gradient(135deg,var(--accent-bright),var(--accent))] shadow-(--shadow-accent) hover:bg-[linear-gradient(135deg,var(--accent),var(--accent-strong))]",
   secondary:
-    "bg-[var(--surface)] hover:bg-[var(--surface-muted)] text-[var(--ink)] border-[var(--border-strong)] elevation-sm",
+    "bg-(--surface) hover:bg-(--surface-muted) text-(--ink) border-(--border-strong) elevation-sm",
   outline:
-    "bg-transparent hover:bg-[var(--accent-soft)] text-[var(--accent-strong)] border-[color-mix(in_srgb,var(--accent)_40%,transparent)]",
+    "bg-transparent hover:bg-(--accent-soft) text-(--accent-strong) border-[color-mix(in_srgb,var(--accent)_40%,transparent)]",
   danger:
     "bg-status-red hover:brightness-105 text-white border-transparent shadow-[0_2px_8px_rgba(220,38,38,0.22)]",
   success:
     "bg-status-green hover:brightness-105 text-white border-transparent shadow-[0_2px_8px_rgba(21,128,61,0.22)]",
   ghost:
-    "bg-transparent hover:bg-[var(--surface-muted)] text-[var(--ink)] border-transparent",
+    "bg-transparent hover:bg-(--surface-muted) text-(--ink) border-transparent",
 };
 
 const SIZES = {

@@ -61,14 +61,14 @@ export function CardHeader({ title, subtitle, actions, className, ...props }) {
   return (
     <div
       className={clsx(
-        "flex flex-col items-start justify-between gap-3 border-b border-[var(--border-subtle)] px-4 py-4 sm:flex-row sm:items-center sm:gap-4 sm:px-5",
+        "flex flex-col items-start justify-between gap-3 border-b border-(--border-subtle) px-4 py-4 sm:flex-row sm:items-center sm:gap-4 sm:px-5",
         className
       )}
       {...props}
     >
       <div className="min-w-0">
-        <h2 className="font-display text-base font-semibold tracking-tight text-[var(--ink)]">{title}</h2>
-        {subtitle && <p className="text-sm text-[var(--ink-soft)] mt-0.5">{subtitle}</p>}
+        <h2 className="font-display text-base font-semibold tracking-tight text-(--ink)">{title}</h2>
+        {subtitle && <p className="text-sm text-(--ink-soft) mt-0.5">{subtitle}</p>}
       </div>
       {actions && <div className="flex min-w-0 w-full flex-wrap items-center gap-2 sm:w-auto">{actions}</div>}
     </div>

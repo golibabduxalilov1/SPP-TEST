@@ -146,7 +146,7 @@ export default function TutorialOverlay() {
         style={tooltipStyle}
       >
         <div className="mb-3 flex items-center justify-between gap-3">
-          <span className="text-xs font-semibold uppercase tracking-wide text-[var(--accent-strong)]">
+          <span className="text-xs font-semibold uppercase tracking-wide text-(--accent-strong)">
             {stepIndex + 1}/{steps.length}
           </span>
           <Button
@@ -156,14 +156,14 @@ export default function TutorialOverlay() {
             magnetic={false}
             onClick={skip}
             aria-label="Yopish"
-            className="!-m-2.5 !rounded-lg !border-transparent !bg-transparent !text-[var(--ink-faint)] hover:!bg-transparent hover:!text-[var(--ink)]"
+            className="-m-2.5! rounded-lg! border-transparent! bg-transparent! text-(--ink-faint)! hover:bg-transparent! hover:text-(--ink)!"
           >
             <X size={16} />
           </Button>
         </div>
 
-        <h3 className="font-display text-base font-semibold text-[var(--ink)]">{step.title}</h3>
-        <p className="mt-1.5 text-sm leading-relaxed text-[var(--ink-soft)]">{step.content}</p>
+        <h3 className="font-display text-base font-semibold text-(--ink)">{step.title}</h3>
+        <p className="mt-1.5 text-sm leading-relaxed text-(--ink-soft)">{step.content}</p>
 
         <div className="mt-4 flex items-center gap-1.5">
           {steps.map((_, i) => (
@@ -182,7 +182,7 @@ export default function TutorialOverlay() {
             size="sm"
             magnetic={false}
             onClick={skip}
-            className="!rounded-lg !border-transparent !bg-transparent !px-2 !text-xs !font-medium !text-[var(--ink-faint)] hover:!bg-transparent hover:!text-[var(--ink-soft)]"
+            className="rounded-lg! border-transparent! bg-transparent! px-2! text-xs! font-medium! text-(--ink-faint)! hover:bg-transparent! hover:text-(--ink-soft)!"
           >
             O'tkazib yuborish
           </Button>

@@ -124,18 +124,18 @@ function ProductionStagesTab({ canManage }) {
                 {stages.map((stage) => (
                   <Tr key={stage.id}>
                     <Td>
-                      <span className="tabular inline-flex min-w-9 items-center justify-center rounded-lg bg-[var(--surface-muted)] px-2.5 py-1.5 font-semibold text-[var(--ink-soft)]">
+                      <span className="tabular inline-flex min-w-9 items-center justify-center rounded-lg bg-(--surface-muted) px-2.5 py-1.5 font-semibold text-(--ink-soft)">
                         {stage.order_index}
                       </span>
                     </Td>
                     <Td>
                       <div className="flex items-center gap-3">
-                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--accent-soft)] text-[var(--accent-strong)]">
+                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-(--accent-soft) text-(--accent-strong)">
                           <Factory size={16} />
                         </span>
                         <div className="min-w-0">
-                          <p className="font-semibold text-[var(--ink)]">{stage.name}</p>
-                          {stage.is_default && <p className="text-xs text-[var(--ink-faint)]">Default bosqich</p>}
+                          <p className="font-semibold text-(--ink)">{stage.name}</p>
+                          {stage.is_default && <p className="text-xs text-(--ink-faint)">Default bosqich</p>}
                         </div>
                       </div>
                     </Td>
@@ -161,7 +161,7 @@ function ProductionStagesTab({ canManage }) {
                             type="button" variant="ghost" size="sm" magnetic={false}
                             onClick={() => openEditModal(stage)}
                             aria-label={`${stage.name} tahrirlash`} title="Tahrirlash"
-                            className="!min-h-9 !min-w-9 !rounded-lg !border-[var(--border-strong)] !px-0 !text-[var(--accent-strong)] hover:!bg-[var(--accent-soft)]"
+                            className="min-h-9! min-w-9! rounded-lg! border-(--border-strong)! px-0! text-(--accent-strong)! hover:bg-(--accent-soft)!"
                           >
                             <Pencil size={14} strokeWidth={2.2} />
                           </Button>
@@ -171,7 +171,7 @@ function ProductionStagesTab({ canManage }) {
                             disabled={stage.is_default}
                             aria-label={`${stage.name} o'chirish`}
                             title={stage.is_default ? "Default bosqichni o'chirib bo'lmaydi" : "O'chirish"}
-                            className="!min-h-9 !min-w-9 !rounded-lg !border-[var(--border-strong)] !px-0 !text-status-red hover:!bg-[var(--color-status-red-bg)]"
+                            className="min-h-9! min-w-9! rounded-lg! border-(--border-strong)! px-0! text-status-red! hover:bg-(--color-status-red-bg)!"
                           >
                             <Trash2 size={14} strokeWidth={2.2} />
                           </Button>
@@ -259,13 +259,13 @@ function ProductionStageModal({ open, stage, nextOrderIndex, onClose, onSaved })
             onChange={(e) => setForm({ ...form, order_index: e.target.value })}
           />
         </Field>
-        <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-muted)] px-4 py-3">
+        <div className="rounded-xl border border-(--border-subtle) bg-(--surface-muted) px-4 py-3">
           <Toggle
             checked={form.is_active}
             onChange={(e) => setForm({ ...form, is_active: e.target.checked })}
             label="Faol bosqich"
           />
-          <p className="mt-1 text-xs leading-5 text-[var(--ink-soft)]">Faqat faol bosqichlar ishlab chiqarish tablosida ko'rinadi.</p>
+          <p className="mt-1 text-xs leading-5 text-(--ink-soft)">Faqat faol bosqichlar ishlab chiqarish tablosida ko'rinadi.</p>
         </div>
         <Button type="submit" className="w-full" loading={saving}>{isEditing ? "Saqlash" : "Yaratish"}</Button>
       </form>
@@ -307,11 +307,11 @@ function DeleteProductionStageModal({ stage, onClose, onChanged }) {
 
   return (
     <Modal open={Boolean(stage)} onClose={onClose} title="Bosqichni o'chirish" size="sm">
-      <p className="text-sm leading-6 text-[var(--ink-soft)]">
-        <strong className="font-semibold text-[var(--ink)]">{stage?.name}</strong> bosqichini o'chirmoqchimisiz?
+      <p className="text-sm leading-6 text-(--ink-soft)">
+        <strong className="font-semibold text-(--ink)">{stage?.name}</strong> bosqichini o'chirmoqchimisiz?
         Agar unga faol yoki tarixiy buyurtma detallari bog'langan bo'lsa, o'chirish bloklanadi.
       </p>
-      <p className="mt-3 rounded-lg bg-[var(--accent-soft)] px-3 py-2.5 text-xs leading-5 text-[var(--accent-strong)]">
+      <p className="mt-3 rounded-lg bg-(--accent-soft) px-3 py-2.5 text-xs leading-5 text-(--accent-strong)">
         Ma'lumotlarni saqlab qolish uchun bosqichni nofaol qilish tavsiya etiladi.
       </p>
       <div className="mt-5 flex flex-wrap justify-end gap-2">
@@ -371,7 +371,7 @@ function ProductTypesTab() {
           actions={
             <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
               <div className="relative w-full sm:w-auto">
-                <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--ink-soft)]" />
+                <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-(--ink-soft)" />
                 <Input className="pl-8 w-full sm:w-md" placeholder="Qidirish..." value={search} onChange={(e) => setSearch(e.target.value)} />
               </div>
               <Button onClick={openCreateModal} className="w-full sm:w-auto"><Plus size={16} /> Mahsulot turi qo'shish</Button>
@@ -396,7 +396,7 @@ function ProductTypesTab() {
                 {productTypes.map((pt) => (
                   <Tr key={pt.id}>
                     <Td className="font-medium">{pt.name}</Td>
-                    <Td className="text-[var(--ink-soft)]">{pt.description || "—"}</Td>
+                    <Td className="text-(--ink-soft)">{pt.description || "—"}</Td>
                     <Td>{pt.details.length} ta detal</Td>
                     <Td>
                       <div className="ml-auto flex w-fit items-center gap-1.5">
@@ -404,7 +404,7 @@ function ProductTypesTab() {
                           type="button" variant="ghost" size="sm" magnetic={false}
                           onClick={() => setDetailsType(pt)}
                           aria-label={`${pt.name} standart detallari`} title="Standart detallar"
-                          className="!min-h-9 !min-w-9 !rounded-lg !border-[var(--border-strong)] !px-0 !text-[var(--accent-strong)] hover:!bg-[var(--accent-soft)]"
+                          className="min-h-9! min-w-9! rounded-lg! border-(--border-strong)! px-0! text-(--accent-strong)! hover:bg-(--accent-soft)!"
                         >
                           <ListTree size={14} strokeWidth={2.2} />
                         </Button>
@@ -412,7 +412,7 @@ function ProductTypesTab() {
                           type="button" variant="ghost" size="sm" magnetic={false}
                           onClick={() => openEditModal(pt)}
                           aria-label={`${pt.name} tahrirlash`} title="Tahrirlash"
-                          className="!min-h-9 !min-w-9 !rounded-lg !border-[var(--border-strong)] !px-0 !text-[var(--accent-strong)] hover:!bg-[var(--accent-soft)]"
+                          className="min-h-9! min-w-9! rounded-lg! border-(--border-strong)! px-0! text-(--accent-strong)! hover:bg-(--accent-soft)!"
                         >
                           <Pencil size={14} strokeWidth={2.2} />
                         </Button>
@@ -420,7 +420,7 @@ function ProductTypesTab() {
                           type="button" variant="ghost" size="sm" magnetic={false}
                           onClick={() => setDeletingType(pt)}
                           aria-label={`${pt.name} o'chirish`} title="O'chirish"
-                          className="!min-h-9 !min-w-9 !rounded-lg !border-[var(--border-strong)] !px-0 !text-status-red hover:!bg-[var(--color-status-red-bg)]"
+                          className="min-h-9! min-w-9! rounded-lg! border-(--border-strong)! px-0! text-status-red! hover:bg-(--color-status-red-bg)!"
                         >
                           <Trash2 size={14} strokeWidth={2.2} />
                         </Button>
@@ -501,8 +501,8 @@ function DeleteProductTypeModal({ productType, onClose, onDeleted }) {
 
   return (
     <Modal open={Boolean(productType)} onClose={onClose} title="Mahsulot turini o'chirish" size="sm">
-      <p className="text-sm leading-6 text-[var(--ink-soft)]">
-        <strong className="font-semibold text-[var(--ink)]">{productType?.name}</strong> mahsulot turini va uning
+      <p className="text-sm leading-6 text-(--ink-soft)">
+        <strong className="font-semibold text-(--ink)">{productType?.name}</strong> mahsulot turini va uning
         barcha standart detallarini o'chirmoqchimisiz? Bu amalni ortga qaytarib bo'lmaydi.
       </p>
       <div className="mt-5 flex justify-end gap-2">

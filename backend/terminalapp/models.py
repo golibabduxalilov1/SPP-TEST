@@ -4,13 +4,13 @@ from django.db import models
 
 class ScanEvent(models.Model):
     class Source(models.TextChoices):
-        ONLINE = "online", "online"
-        OFFLINE_SYNC = "offline_sync", "offline_sync"
+        ONLINE = "online", "Tarmoqda"
+        OFFLINE_SYNC = "offline_sync", "Oflayn sinxronizatsiya"
 
     class Status(models.TextChoices):
-        ACCEPTED = "accepted", "accepted"
-        REJECTED = "rejected", "rejected"
-        CONFLICT = "conflict", "conflict"
+        ACCEPTED = "accepted", "Qabul qilindi"
+        REJECTED = "rejected", "Rad etildi"
+        CONFLICT = "conflict", "Muammoli holat"
 
     client_scan_id = models.CharField(max_length=128, unique=True)
     qr_token = models.CharField(max_length=64)
@@ -18,7 +18,6 @@ class ScanEvent(models.Model):
     order = models.ForeignKey("orders.Order", on_delete=models.SET_NULL, null=True, blank=True, related_name="scan_events")
     operation = models.ForeignKey("manufacturing.Operation", on_delete=models.SET_NULL, null=True, blank=True)
     machine = models.ForeignKey("manufacturing.Machine", on_delete=models.SET_NULL, null=True, blank=True)
-    workstation = models.ForeignKey("manufacturing.Workstation", on_delete=models.SET_NULL, null=True, blank=True)
     employee = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
     device_id = models.CharField(max_length=128, blank=True)
     scanned_at_client = models.DateTimeField(null=True, blank=True)
@@ -38,7 +37,7 @@ class ScanEvent(models.Model):
 class OfflineSyncBatch(models.Model):
     client_batch_id = models.CharField(max_length=128, unique=True)
     device_id = models.CharField(max_length=128)
-    workstation = models.ForeignKey("manufacturing.Workstation", on_delete=models.SET_NULL, null=True, blank=True)
+    operation = models.ForeignKey("manufacturing.Operation", on_delete=models.SET_NULL, null=True, blank=True)
     employee = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
     received_at = models.DateTimeField(auto_now_add=True)
     accepted_count = models.PositiveIntegerField(default=0)
@@ -51,8 +50,8 @@ class OfflineSyncBatch(models.Model):
 
 class Conflict(models.Model):
     class Status(models.TextChoices):
-        PENDING = "pending", "pending"
-        RESOLVED = "resolved", "resolved"
+        PENDING = "pending", "Kutilmoqda"
+        RESOLVED = "resolved", "Hal qilingan"
 
     scan_event = models.OneToOneField(ScanEvent, on_delete=models.CASCADE, related_name="conflict")
     reason_code = models.CharField(max_length=32)

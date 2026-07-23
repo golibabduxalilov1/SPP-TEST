@@ -7,10 +7,9 @@ from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
-STATUS_LABELS = {
-    "draft": "Yangi", "approved": "Tasdiqlangan", "in_production": "Jarayonda",
-    "partially_ready": "Qisman tayyor", "ready_for_packaging": "Qadoqlashga tayyor",
-    "packaging": "Qadoqlanmoqda", "warehouse": "Tayyor omborda", "delivered": "Mijozga topshirildi",
+SPECIAL_STATUS_LABELS = {
+    "draft": "Yangi",
+    "approved": "Tasdiqlangan",
     "cancelled": "Bekor qilingan",
 }
 PRIORITY_LABELS = {"low": "Past", "normal": "Oddiy", "high": "Yuqori", "urgent": "Shoshilinch"}
@@ -21,6 +20,12 @@ HEADERS = ["Buyurtma", "Mijoz", "Telefon", "Mahsulot", "Muddat", "Prioritet", "S
 def _row(order):
     parts = list(order.parts.all())
     completed = sum(1 for p in parts if p.status == "completed")
+    if order.status in SPECIAL_STATUS_LABELS:
+        display_status = SPECIAL_STATUS_LABELS[order.status]
+    elif order.current_stage_id:
+        display_status = order.current_stage.name
+    else:
+        display_status = getattr(order, "last_completed_stage_name", None) or "-"
     return [
         order.order_no,
         order.customer_name or "-",
@@ -28,7 +33,7 @@ def _row(order):
         order.product_name or "-",
         order.deadline.strftime("%d.%m.%Y") if order.deadline else "-",
         PRIORITY_LABELS.get(order.priority, order.priority),
-        STATUS_LABELS.get(order.status, order.status),
+        display_status,
         f"{completed}/{len(parts)}",
         order.created_at.strftime("%d.%m.%Y"),
     ]

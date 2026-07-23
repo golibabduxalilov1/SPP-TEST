@@ -22,17 +22,17 @@ export default function PageHeader({ eyebrow, title, subtitle, actions, classNam
         {eyebrow && (
           <motion.p
             {...anim(0)}
-            className="mb-2 inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--accent-strong)]"
+            className="mb-2 inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-(--accent-strong)"
           >
             <span className="h-1 w-6 rounded-full bg-[linear-gradient(90deg,var(--accent),var(--accent-2))]" />
             {eyebrow}
           </motion.p>
         )}
-        <motion.h1 {...anim(1)} className="page-title text-[clamp(1.7rem,3vw,2.4rem)] font-semibold leading-tight text-[var(--ink)]">
+        <motion.h1 {...anim(1)} className="page-title text-[clamp(1.7rem,3vw,2.4rem)] font-semibold leading-tight text-(--ink)">
           {title}
         </motion.h1>
         {subtitle && (
-          <motion.p {...anim(2)} className="mt-1.5 max-w-2xl text-sm leading-6 text-[var(--ink-soft)]">
+          <motion.p {...anim(2)} className="mt-1.5 max-w-2xl text-sm leading-6 text-(--ink-soft)">
             {subtitle}
           </motion.p>
         )}

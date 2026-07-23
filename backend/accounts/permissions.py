@@ -24,15 +24,23 @@ def roles_allowed(*roles):
 
 
 IsSuperAdmin = roles_allowed(Role.SUPER_ADMIN, Role.ADMIN)
+
+# Management-level roles: view production/employee/report data and perform
+# most non-employee-CRUD write actions (orders, production stage completion,
+# conflict resolution). Replaces the former IsMasterOrAbove/IsTechnologistOrAbove/
+# CanCompleteProductionStage classes, which collapsed to this exact set once
+# Bosh usta/Texnolog were merged into Ishlab chiqarish menejeri.
 IsManagementRole = roles_allowed(Role.SUPER_ADMIN, Role.ADMIN, Role.DIRECTOR, Role.MANAGER)
-IsMasterOrAbove = roles_allowed(Role.SUPER_ADMIN, Role.ADMIN, Role.DIRECTOR, Role.MANAGER, Role.MASTER)
-IsTechnologistOrAbove = roles_allowed(Role.SUPER_ADMIN, Role.ADMIN, Role.DIRECTOR, Role.MANAGER, Role.TECHNOLOGIST)
-CanCompleteProductionStage = roles_allowed(
-    Role.SUPER_ADMIN, Role.ADMIN, Role.DIRECTOR, Role.MANAGER, Role.MASTER, Role.TECHNOLOGIST,
-)
+
+# Full employee account management (create, edit any field, delete, deactivate).
+IsUserManagementRole = roles_allowed(Role.SUPER_ADMIN, Role.ADMIN)
+
+# Department (Tsex) / machine / device / printer write access — Rahbar may
+# view these but not manage them.
+CanManageProduction = roles_allowed(Role.SUPER_ADMIN, Role.ADMIN, Role.MANAGER)
 
 # QR-based order status updates: management roles plus the terminal roles that
 # actually handle physical orders on the production/warehouse floor.
 CanScanOrderStatus = roles_allowed(
-    Role.SUPER_ADMIN, Role.ADMIN, Role.DIRECTOR, Role.MANAGER, Role.MASTER, Role.PACKAGING, Role.WAREHOUSE,
+    Role.SUPER_ADMIN, Role.ADMIN, Role.DIRECTOR, Role.MANAGER, Role.OPERATOR, Role.WAREHOUSE,
 )

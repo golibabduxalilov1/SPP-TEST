@@ -76,9 +76,9 @@ class OrderApiTests(APITestCase):
         )
 
     def test_workflow_skips_stages_none_of_the_orders_parts_route_through(self):
-        # "faqat_kesish" only routes through ARRA, QADOQLASH, OMBOR — the
-        # board must skip straight past KROMKA/PRISADKA/PAZ/ROVER/STOLYARKA/
-        # YIGISH instead of getting stuck "in progress" on one of them.
+        # "faqat_kesish" only routes through ARRA, OMBOR — the board must
+        # skip straight past KROMKA/PRISADKA instead of getting stuck
+        # "in progress" on one of them.
         order = Order.objects.create(product_name="Route-aware test", created_by=self.user)
         part = Part.objects.create(order=order, code="RT-1", name="Panel", quantity=1)
         assign_route(part, "faqat_kesish")
@@ -91,9 +91,14 @@ class OrderApiTests(APITestCase):
 
         self.assertEqual(response.status_code, 200, response.data)
         order.refresh_from_db()
-        self.assertEqual(order.current_stage.code, "QADOQLASH")
+        self.assertEqual(order.current_stage.code, "OMBOR")
 
-    def test_completing_last_stage_marks_order_completed_and_keeps_history(self):
+    def test_completing_last_stage_marks_order_warehouse_and_keeps_history(self):
+        # The last active stage is OMBOR (Tayyor ombor), so finishing it must
+        # land the order in `warehouse` — with a Package to match — not
+        # silently `completed` with nothing to show on the Tayyor ombor page.
+        from packaging.models import Package
+
         order = Order.objects.create(product_name="Final workflow test", created_by=self.user)
         OrderDetail.objects.create(order=order, name="Detal", quantity=4)
         self.client.post(f"/api/orders/{order.id}/approve/")
@@ -104,12 +109,13 @@ class OrderApiTests(APITestCase):
             self.assertEqual(response.status_code, 200, response.data)
 
         order.refresh_from_db()
-        self.assertEqual(order.status, Order.Status.COMPLETED)
+        self.assertEqual(order.status, Order.Status.WAREHOUSE)
         self.assertIsNone(order.current_stage)
         self.assertEqual(order.stage_status, Order.StageStatus.COMPLETED)
         self.assertEqual(order.stage_progress.count(), stage_count)
         self.assertFalse(order.stage_progress.exclude(status=OrderStageProgress.Status.COMPLETED).exists())
         self.assertEqual(order.stage_progress.exclude(completed_by=self.user).count(), 0)
+        self.assertEqual(Package.objects.filter(order=order, status=Package.Status.WAREHOUSE).count(), 1)
 
         table_response = self.client.get("/api/production/table", {"mode": "soni"})
         row = next(item for item in table_response.data["rows"] if item["order_id"] == order.id)
@@ -141,6 +147,57 @@ class OrderApiTests(APITestCase):
         order.refresh_from_db()
         self.assertIsNotNone(order.current_stage)
         self.assertEqual(order.stage_status, Order.StageStatus.IN_PROGRESS)
+
+    def test_order_display_status_uses_only_special_statuses_or_production_stages(self):
+        first_stage, second_stage = list(Operation.objects.filter(is_active=True).order_by("order_index", "id")[:2])
+        draft = Order.objects.create(product_name="Draft", created_by=self.user)
+        approved = Order.objects.create(
+            product_name="Approved", created_by=self.user, status=Order.Status.APPROVED,
+            current_stage=first_stage, stage_status=Order.StageStatus.IN_PROGRESS,
+        )
+        active = Order.objects.create(
+            product_name="Active", created_by=self.user, status=Order.Status.IN_PRODUCTION,
+            current_stage=second_stage, stage_status=Order.StageStatus.IN_PROGRESS,
+        )
+        finished = Order.objects.create(
+            product_name="Finished", created_by=self.user, status=Order.Status.WAREHOUSE,
+            stage_status=Order.StageStatus.COMPLETED,
+        )
+        OrderStageProgress.objects.create(
+            order=finished, stage=second_stage, status=OrderStageProgress.Status.COMPLETED,
+        )
+
+        response = self.client.get("/api/orders/")
+        self.assertEqual(response.status_code, 200, response.data)
+        rows = {row["id"]: row for row in response.data["results"]}
+        self.assertEqual(rows[draft.id]["display_status"]["label"], "Yangi")
+        self.assertEqual(rows[approved.id]["display_status"]["label"], "Tasdiqlangan")
+        self.assertEqual(rows[active.id]["display_status"]["label"], second_stage.name)
+        self.assertEqual(rows[finished.id]["display_status"]["label"], second_stage.name)
+
+    def test_order_stage_filter_uses_current_or_last_completed_stage(self):
+        stage = Operation.objects.filter(is_active=True).order_by("order_index", "id").first()
+        active = Order.objects.create(
+            product_name="Active stage", created_by=self.user, status=Order.Status.IN_PRODUCTION,
+            current_stage=stage, stage_status=Order.StageStatus.IN_PROGRESS,
+        )
+        approved = Order.objects.create(
+            product_name="Approved special", created_by=self.user, status=Order.Status.APPROVED,
+            current_stage=stage, stage_status=Order.StageStatus.IN_PROGRESS,
+        )
+        finished = Order.objects.create(
+            product_name="Finished stage", created_by=self.user, status=Order.Status.WAREHOUSE,
+            stage_status=Order.StageStatus.COMPLETED,
+        )
+        OrderStageProgress.objects.create(
+            order=finished, stage=stage, status=OrderStageProgress.Status.COMPLETED,
+        )
+
+        response = self.client.get("/api/orders/", {"production_stage": stage.id})
+        self.assertEqual(response.status_code, 200, response.data)
+        ids = {row["id"] for row in response.data["results"]}
+        self.assertEqual(ids, {active.id, finished.id})
+        self.assertNotIn(approved.id, ids)
 
     def test_approval_without_active_stage_is_rejected_atomically(self):
         Operation.objects.update(is_active=False)
@@ -282,5 +339,16 @@ class PartApiTests(APITestCase):
 
         self.assertEqual(response.status_code, 201)
         part = Part.objects.get(code="P-001")
-        self.assertEqual(part.routes.count(), 3)
+        self.assertEqual(part.routes.count(), 2)
         self.assertEqual(part.current_operation.code, "ARRA")
+
+    def test_parts_can_be_searched_by_order_number_and_order_qr_token(self):
+        part = Part.objects.create(order=self.order, code="P-SEARCH", name="Panel", quantity=1)
+
+        by_order_number = self.client.get("/api/parts/", {"search": self.order.order_no})
+        self.assertEqual(by_order_number.status_code, 200)
+        self.assertEqual([row["id"] for row in by_order_number.data["results"]], [part.id])
+
+        by_order_qr = self.client.get("/api/parts/", {"search": self.order.qr_token})
+        self.assertEqual(by_order_qr.status_code, 200)
+        self.assertEqual([row["id"] for row in by_order_qr.data["results"]], [part.id])

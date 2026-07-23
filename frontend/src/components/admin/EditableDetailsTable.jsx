@@ -128,7 +128,7 @@ export default function EditableDetailsTable({ rows, onCreate, onUpdate, onDelet
                         type="button" variant="ghost" size="sm" magnetic={false}
                         disabled={busy || editingId !== null} onClick={() => onShowQr(row)}
                         aria-label={`${row.name} QR kodi`} title="QR kodi"
-                        className="!min-h-9 !min-w-9 !rounded-lg !border-[var(--border-strong)] !px-0 !text-[var(--accent-strong)] hover:!bg-[var(--accent-soft)]"
+                        className="min-h-9! min-w-9! rounded-lg! border-(--border-strong)! px-0! text-(--accent-strong)! hover:bg-(--accent-soft)!"
                       >
                         <QrCode size={14} strokeWidth={2.2} />
                       </Button>
@@ -137,7 +137,7 @@ export default function EditableDetailsTable({ rows, onCreate, onUpdate, onDelet
                       type="button" variant="ghost" size="sm" magnetic={false}
                       disabled={busy || editingId !== null} onClick={() => startEdit(row)}
                       aria-label={`${row.name} tahrirlash`} title="Tahrirlash"
-                      className="!min-h-9 !min-w-9 !rounded-lg !border-[var(--border-strong)] !px-0 !text-[var(--accent-strong)] hover:!bg-[var(--accent-soft)]"
+                      className="min-h-9! min-w-9! rounded-lg! border-(--border-strong)! px-0! text-(--accent-strong)! hover:bg-(--accent-soft)!"
                     >
                       <Pencil size={14} strokeWidth={2.2} />
                     </Button>
@@ -145,7 +145,7 @@ export default function EditableDetailsTable({ rows, onCreate, onUpdate, onDelet
                       type="button" variant="ghost" size="sm" magnetic={false}
                       disabled={busy || editingId !== null} onClick={() => remove(row)}
                       aria-label={`${row.name} o'chirish`} title="O'chirish"
-                      className="!min-h-9 !min-w-9 !rounded-lg !border-[var(--border-strong)] !px-0 !text-status-red hover:!bg-[var(--color-status-red-bg)]"
+                      className="min-h-9! min-w-9! rounded-lg! border-(--border-strong)! px-0! text-status-red! hover:bg-(--color-status-red-bg)!"
                     >
                       <Trash2 size={14} strokeWidth={2.2} />
                     </Button>
@@ -172,36 +172,36 @@ function EditRow({ draft, setDraft, busy, onSave, onCancel }) {
   return (
     <Tr>
       <Td>
-        <Input autoFocus value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="Nomi" className="!min-h-9" />
+        <Input autoFocus value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="Nomi" className="min-h-9!" />
       </Td>
       <Td>
-        <Input type="number" step="0.1" min="0" value={draft.length_mm} onChange={(e) => setDraft({ ...draft, length_mm: e.target.value })} className="!min-h-9 !w-20" />
+        <Input type="number" step="0.1" min="0" value={draft.length_mm} onChange={(e) => setDraft({ ...draft, length_mm: e.target.value })} className="min-h-9! w-20!" />
       </Td>
       <Td>
-        <Input type="number" step="0.1" min="0" value={draft.width_mm} onChange={(e) => setDraft({ ...draft, width_mm: e.target.value })} className="!min-h-9 !w-20" />
+        <Input type="number" step="0.1" min="0" value={draft.width_mm} onChange={(e) => setDraft({ ...draft, width_mm: e.target.value })} className="min-h-9! w-20!" />
       </Td>
       <Td>
-        <Input type="number" step="0.1" min="0" value={draft.thickness_mm} onChange={(e) => setDraft({ ...draft, thickness_mm: e.target.value })} className="!min-h-9 !w-20" />
+        <Input type="number" step="0.1" min="0" value={draft.thickness_mm} onChange={(e) => setDraft({ ...draft, thickness_mm: e.target.value })} className="min-h-9! w-20!" />
       </Td>
       <Td>
-        <Input type="number" min="1" value={draft.quantity} onChange={(e) => setDraft({ ...draft, quantity: e.target.value })} className="!min-h-9 !w-16" />
+        <Input type="number" min="1" value={draft.quantity} onChange={(e) => setDraft({ ...draft, quantity: e.target.value })} className="min-h-9! w-16!" />
       </Td>
       <Td>
-        <Input value={draft.material_type} onChange={(e) => setDraft({ ...draft, material_type: e.target.value })} placeholder="LDSP" className="!min-h-9 !w-24" />
+        <Input value={draft.material_type} onChange={(e) => setDraft({ ...draft, material_type: e.target.value })} placeholder="LDSP" className="min-h-9! w-24!" />
       </Td>
       <Td>
         <div className="ml-auto flex w-fit items-center gap-1.5">
           <Button
             type="button" variant="ghost" size="sm" magnetic={false} loading={busy} onClick={onSave}
             aria-label="Saqlash" title="Saqlash"
-            className="!min-h-9 !min-w-9 !rounded-lg !border-[var(--border-strong)] !px-0 !text-emerald-600 hover:!bg-[var(--surface-muted)]"
+            className="min-h-9! min-w-9! rounded-lg! border-(--border-strong)! px-0! text-emerald-600! hover:bg-(--surface-muted)!"
           >
             <Check size={14} strokeWidth={2.4} />
           </Button>
           <Button
             type="button" variant="ghost" size="sm" magnetic={false} disabled={busy} onClick={onCancel}
             aria-label="Bekor qilish" title="Bekor qilish"
-            className="!min-h-9 !min-w-9 !rounded-lg !border-[var(--border-strong)] !px-0 !text-[var(--ink-soft)] hover:!bg-[var(--surface-muted)]"
+            className="min-h-9! min-w-9! rounded-lg! border-(--border-strong)! px-0! text-(--ink-soft)! hover:bg-(--surface-muted)!"
           >
             <X size={14} strokeWidth={2.4} />
           </Button>

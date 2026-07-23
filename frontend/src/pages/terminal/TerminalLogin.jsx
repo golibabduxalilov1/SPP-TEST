@@ -108,7 +108,7 @@ export default function TerminalLogin() {
       <div className="blob-decor blob-signal h-[20rem] w-[20rem] -right-20 bottom-0" />
 
       <div className="relative mb-6 flex items-center gap-2.5">
-        <div className="rounded-xl bg-[linear-gradient(135deg,var(--accent),var(--accent-bright))] p-2 text-white shadow-[var(--shadow-accent)]">
+        <div className="rounded-xl bg-[linear-gradient(135deg,var(--accent),var(--accent-bright))] p-2 text-white shadow-(--shadow-accent)">
           <Hexagon size={22} />
         </div>
         <span className="font-display text-xl font-semibold">SPP Terminal</span>
@@ -129,7 +129,7 @@ export default function TerminalLogin() {
                   className={clsx(
                     "h-3.5 w-3.5 rounded-full border-2 transition-all duration-200",
                     i < pin.length
-                      ? "border-[var(--accent-bright)] bg-[var(--accent-bright)] shadow-[0_0_0_4px_rgba(99,102,241,0.28)]"
+                      ? "border-(--accent-bright) bg-(--accent-bright) shadow-[0_0_0_4px_rgba(99,102,241,0.28)]"
                       : "border-white/25"
                   )}
                 />
@@ -149,9 +149,9 @@ export default function TerminalLogin() {
                 onClick={() => press(k)}
                 disabled={k === ""}
                 className={clsx(
-                  "!min-h-14 !rounded-[10px] !text-[15px] !font-semibold",
-                  k === "" ? "invisible" : "!border-white/10 !bg-white/10 !text-white hover:!border-[var(--accent-bright)] hover:!bg-[color-mix(in_srgb,var(--accent)_45%,transparent)]",
-                  k === "back" && "!bg-white/5 text-white/70 hover:!bg-status-red/40 hover:text-white"
+                  "min-h-14! rounded-[10px]! text-[15px]! font-semibold!",
+                  k === "" ? "invisible" : "border-white/10! bg-white/10! text-white! hover:border-(--accent-bright)! hover:bg-[color-mix(in_srgb,var(--accent)_45%,transparent)]!",
+                  k === "back" && "bg-white/5! text-white/70 hover:bg-status-red/40! hover:text-white"
                 )}
               >
                 {k === "back" ? <Delete className="mx-auto" size={20} /> : k}
@@ -184,7 +184,7 @@ export default function TerminalLogin() {
                 type="button"
                 disabled={loading}
                 onClick={() => goToWorkstation(ws)}
-                className="focus-ring flex min-h-16 w-full flex-col items-start justify-center rounded-2xl border border-white/15 bg-white/10 px-4 py-3 text-left transition-colors duration-200 hover:border-[var(--accent-bright)] hover:bg-[color-mix(in_srgb,var(--accent)_35%,transparent)] disabled:pointer-events-none disabled:opacity-50"
+                className="focus-ring flex min-h-16 w-full flex-col items-start justify-center rounded-2xl border border-white/15 bg-white/10 px-4 py-3 text-left transition-colors duration-200 hover:border-(--accent-bright) hover:bg-[color-mix(in_srgb,var(--accent)_35%,transparent)] disabled:pointer-events-none disabled:opacity-50"
               >
                 <span className="font-display text-base font-semibold">{ws.operation_name}</span>
                 <span className="text-xs text-white/55">{ws.name} — {ws.tsex}</span>
@@ -210,7 +210,7 @@ export default function TerminalLogin() {
             <Select
               value={fallbackWorkstationId}
               onChange={(e) => setFallbackWorkstationId(e.target.value)}
-              className="border-white/15 bg-white/10 text-white [&>option]:text-[var(--ink)]"
+              className="border-white/15 bg-white/10 text-white [&>option]:text-(--ink)"
             >
               {allWorkstations.length === 0 && <option>Postlar yuklanmoqda...</option>}
               {allWorkstations.map((w) => (

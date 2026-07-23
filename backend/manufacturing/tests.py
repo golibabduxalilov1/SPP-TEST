@@ -1,8 +1,9 @@
 from rest_framework.test import APITestCase
 
 from accounts.models import Role, User
-from orders.models import Order, Part, PartRoute
+from orders.models import Order, OrderDetail, Part, PartRoute
 from orders.production_workflow import approve_order
+from orders.services import create_part_for_order_detail
 
 from .models import Operation
 
@@ -103,15 +104,17 @@ class OperationApiTests(APITestCase):
         self.assertTrue(rows)
         self.assertTrue(all(row["is_active"] for row in rows))
 
-    def test_default_stage_cannot_be_deleted(self):
+    def test_seed_stage_can_be_deleted_once_unused(self):
+        # OPERATION_SEEDS is only initial demo data — it must not grant the
+        # seeded rows any special runtime protection. Deletion is allowed
+        # purely based on whether anything is actually linked to the stage.
         operation = Operation.objects.get(code="ARRA")
         self.client.force_authenticate(user=self.super_admin)
 
         response = self.client.delete(f"/api/operations/{operation.id}/")
 
-        self.assertEqual(response.status_code, 400)
-        self.assertIn("Default", response.data["detail"])
-        self.assertTrue(Operation.objects.filter(pk=operation.pk).exists())
+        self.assertEqual(response.status_code, 204)
+        self.assertFalse(Operation.objects.filter(pk=operation.pk).exists())
 
     def test_stage_linked_to_active_order_cannot_be_deleted(self):
         operation = Operation.objects.create(
@@ -169,3 +172,103 @@ class OperationApiTests(APITestCase):
         self.assertEqual(response.status_code, 200, response.data)
         order.refresh_from_db()
         self.assertEqual(order.current_stage, arra, "order wasn't parked on the deactivated stage")
+
+    def test_new_stage_is_included_in_new_orders_route_but_not_existing_ones(self):
+        # A new order created after the stage exists must route through it;
+        # an order whose part route was already built before the stage
+        # existed must be left untouched.
+        existing_order = Order.objects.create(product_name="Pre-existing order")
+        existing_detail = OrderDetail.objects.create(
+            order=existing_order, name="Eski detal", quantity=1, length_mm=500, width_mm=500,
+        )
+        create_part_for_order_detail(existing_detail)
+        existing_codes_before = set(
+            existing_detail.part.routes.values_list("operation__code", flat=True)
+        )
+
+        self.client.force_authenticate(user=self.super_admin)
+        create_response = self.client.post(
+            "/api/operations/",
+            {"name": "Yangi bosqich", "order_index": 4, "is_active": True},
+            format="json",
+        )
+        self.assertEqual(create_response.status_code, 201, create_response.data)
+        new_code = create_response.data["code"]
+
+        new_order = Order.objects.create(product_name="Post-stage order")
+        new_detail = OrderDetail.objects.create(
+            order=new_order, name="Yangi detal", quantity=1, length_mm=500, width_mm=500,
+        )
+        create_part_for_order_detail(new_detail)
+
+        new_codes = set(new_detail.part.routes.values_list("operation__code", flat=True))
+        self.assertIn(new_code, new_codes, "new active stage must appear in a new order's route")
+
+        existing_detail.part.refresh_from_db()
+        existing_codes_after = set(
+            existing_detail.part.routes.values_list("operation__code", flat=True)
+        )
+        self.assertEqual(
+            existing_codes_before, existing_codes_after,
+            "an already-routed part must not be retroactively changed by a later stage",
+        )
+
+    def test_inactive_stage_is_excluded_from_new_orders_route(self):
+        self.client.force_authenticate(user=self.super_admin)
+        create_response = self.client.post(
+            "/api/operations/",
+            {"name": "Nofaol boshlanadi", "order_index": 5, "is_active": False},
+            format="json",
+        )
+        self.assertEqual(create_response.status_code, 201, create_response.data)
+        inactive_code = create_response.data["code"]
+
+        order = Order.objects.create(product_name="Order with inactive stage")
+        detail = OrderDetail.objects.create(
+            order=order, name="Detal", quantity=1, length_mm=500, width_mm=500,
+        )
+        create_part_for_order_detail(detail)
+
+        codes = set(detail.part.routes.values_list("operation__code", flat=True))
+        self.assertNotIn(inactive_code, codes)
+
+    def test_new_active_stage_appears_in_terminal_operations_list(self):
+        self.client.force_authenticate(user=self.super_admin)
+        create_response = self.client.post(
+            "/api/operations/",
+            {"name": "Terminal uchun bosqich", "order_index": 6, "is_active": True},
+            format="json",
+        )
+        self.assertEqual(create_response.status_code, 201, create_response.data)
+
+        self.client.force_authenticate(user=None)
+        response = self.client.get("/api/terminal/operations")
+
+        self.assertEqual(response.status_code, 200, response.data)
+        codes = [row["code"] for row in response.data]
+        self.assertIn(create_response.data["code"], codes)
+
+    def test_new_stage_appears_in_production_report_after_use(self):
+        self.client.force_authenticate(user=self.super_admin)
+        create_response = self.client.post(
+            "/api/operations/",
+            {"name": "Hisobot bosqichi", "order_index": 7, "is_active": True},
+            format="json",
+        )
+        self.assertEqual(create_response.status_code, 201, create_response.data)
+        stage_code = create_response.data["code"]
+
+        order = Order.objects.create(product_name="Report order")
+        part = Part.objects.create(order=order, code="REPORT-PART", name="Detal")
+        PartRoute.objects.create(
+            part=part, operation_id=create_response.data["id"], sequence_index=1,
+            status=PartRoute.Status.IN_PROGRESS,
+        )
+
+        response = self.client.get("/api/reports/production")
+
+        self.assertEqual(response.status_code, 200, response.data)
+        row = next(r for r in response.data if r["code"] == stage_code)
+        self.assertEqual(row["total"], 1)
+        self.assertEqual(row["in_progress"], 1)
+        self.assertEqual(row["completed"], 0)

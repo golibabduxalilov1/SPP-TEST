@@ -2,7 +2,7 @@ from django.db.models import Count
 from django.utils import timezone
 
 from accounts.models import TerminalSession
-from manufacturing.models import Machine, Workstation
+from manufacturing.models import Machine
 from orders.models import Order, Part
 from terminalapp.models import ScanEvent
 
@@ -30,7 +30,6 @@ def build_summary():
         "today_scans_accepted": accepted_today,
         "today_production_events": total_today,
         "active_parts": Part.objects.filter(order__in=active_orders).exclude(status="completed").count(),
-        "active_workstations": Workstation.objects.filter(status="active").count(),
         "active_machines": Machine.objects.filter(status="active").count(),
         "active_employees_on_shift": TerminalSession.objects.filter(is_active=True).values("employee").distinct().count(),
         "oee": oee,

@@ -3,7 +3,7 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from accounts.permissions import IsTechnologistOrAbove
+from accounts.permissions import IsManagementRole
 from .models import Customer
 from .serializers import CustomerSerializer
 
@@ -16,7 +16,7 @@ class CustomerViewSet(viewsets.ModelViewSet):
 
     def get_permissions(self):
         if self.request.method not in ("GET", "HEAD", "OPTIONS"):
-            return [IsAuthenticated(), IsTechnologistOrAbove()]
+            return [IsAuthenticated(), IsManagementRole()]
         return [IsAuthenticated()]
 
     @action(detail=False, methods=["get"])

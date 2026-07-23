@@ -137,7 +137,7 @@ export default function TerminalOrderStatus() {
       <Card className="overflow-hidden">
         <CardHeader title="Buyurtma statusi" subtitle="Buyurtma QR kodini kameraga tuting" />
         <CardBody>
-          <div className="relative mx-auto aspect-square w-full max-w-sm overflow-hidden rounded-2xl border-2 border-[var(--border-strong)] bg-black [&>div>video]:h-full [&>div>video]:w-full [&>div>video]:object-cover">
+          <div className="relative mx-auto aspect-square w-full max-w-sm overflow-hidden rounded-2xl border-2 border-(--border-strong) bg-black [&>div>video]:h-full [&>div>video]:w-full [&>div>video]:object-cover">
             <div id={READER_ID} className="h-full w-full" />
             <AnimatePresence>
               {flash && (
@@ -179,7 +179,7 @@ export default function TerminalOrderStatus() {
           />
           <CardBody className="space-y-4">
             <div>
-              <p className="text-xs uppercase font-semibold text-[var(--ink-soft)]">Mijoz</p>
+              <p className="text-xs uppercase font-semibold text-(--ink-soft)">Mijoz</p>
               <p className="font-medium">{order.customer_name || "—"}</p>
             </div>
 

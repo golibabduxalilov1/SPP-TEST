@@ -7,22 +7,22 @@ const FIELD_STRUCTURE =
   "focus:outline-none disabled:cursor-not-allowed disabled:opacity-50";
 
 const FIELD_LIGHT =
-  "bg-[var(--surface)] px-3.5 py-2.5 text-sm text-[var(--ink)] " +
+  "bg-(--surface) px-3.5 py-2.5 text-sm text-(--ink) " +
   "shadow-[inset_0_1px_2px_rgba(74,50,35,0.05)] " +
-  "placeholder:text-[var(--ink-faint)] transition-[border-color,box-shadow,background-color] duration-[220ms] ease-out " +
-  "disabled:hover:!border-[var(--border-strong)]";
+  "placeholder:text-(--ink-faint) transition-[border-color,box-shadow,background-color] duration-[220ms] ease-out " +
+  "disabled:hover:border-(--border-strong)!";
 
 const FIELD_DARK =
   "border-white/10 bg-white/[0.06] px-3.5 py-3 text-[15px] text-white " +
-  "placeholder:text-white/35 hover:border-white/20 focus:border-[var(--accent-bright)] " +
+  "placeholder:text-white/35 hover:border-white/20 focus:border-(--accent-bright) " +
   "focus:shadow-[0_0_0_3px_rgba(99,102,241,0.30)]";
 
 const FIELD_BASE = `${FIELD_STRUCTURE} ${FIELD_LIGHT}`;
 
 const STATE_CLASSES = {
   default:
-    "border-[var(--border-strong)] hover:border-[var(--ink-faint)] " +
-    "focus:border-[var(--accent)] focus:shadow-[inset_0_1px_2px_rgba(74,50,35,0.05),0_0_0_3px_color-mix(in_srgb,var(--accent)_16%,transparent)]",
+    "border-(--border-strong) hover:border-(--ink-faint) " +
+    "focus:border-(--accent) focus:shadow-[inset_0_1px_2px_rgba(74,50,35,0.05),0_0_0_3px_color-mix(in_srgb,var(--accent)_16%,transparent)]",
   error:
     "border-status-red hover:border-status-red field-shake " +
     "focus:border-status-red focus:shadow-[inset_0_1px_2px_rgba(74,50,35,0.05),0_0_0_3px_color-mix(in_srgb,var(--color-status-red)_16%,transparent)]",

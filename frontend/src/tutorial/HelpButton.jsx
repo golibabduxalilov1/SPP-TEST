@@ -21,7 +21,7 @@ export default function HelpButton() {
       onClick={() => start(pageKey, page.steps)}
       aria-label="Sahifa bo'yicha yordam"
       title="Sahifa bo'yicha yordam"
-      className="!fixed bottom-4 right-4 z-[var(--z-sticky)] !h-12 !w-12 !rounded-full !border-[color-mix(in_srgb,var(--accent-strong)_45%,transparent)] !bg-[linear-gradient(135deg,var(--accent-bright),var(--accent))] !text-white !shadow-[var(--shadow-accent)] hover:!bg-[linear-gradient(135deg,var(--accent),var(--accent-strong))] sm:bottom-6 sm:right-6"
+      className="fixed! bottom-4 right-4 z-(--z-sticky) h-12! w-12! rounded-full! border-[color-mix(in_srgb,var(--accent-strong)_45%,transparent)]! bg-[linear-gradient(135deg,var(--accent-bright),var(--accent))]! text-white! shadow-(--shadow-accent)! hover:bg-[linear-gradient(135deg,var(--accent),var(--accent-strong))]! sm:bottom-6 sm:right-6"
     >
       <HelpCircle size={22} />
     </Button>

@@ -115,14 +115,14 @@ export default function TerminalPackaging() {
       <Card>
         <CardHeader title={`Qadoq: ${pkg.package_no}`} subtitle={`Buyurtma #${pkg.order_no} — ${pkg.items_count} ta detal skanerlangan`} />
         <CardBody>
-          <div className="relative mx-auto aspect-square w-full max-w-xs overflow-hidden rounded-2xl border-2 border-[var(--border-strong)] bg-black [&>div>video]:h-full [&>div>video]:w-full [&>div>video]:object-cover">
+          <div className="relative mx-auto aspect-square w-full max-w-xs overflow-hidden rounded-2xl border-2 border-(--border-strong) bg-black [&>div>video]:h-full [&>div>video]:w-full [&>div>video]:object-cover">
             <QrCameraScanner onDecode={processToken} onError={() => setCameraError("Kameraga ruxsat berilmadi yoki kamera topilmadi. QR tokenni qo'lda kiriting.")} className="h-full w-full" />
           </div>
           {cameraError && <p className="mt-3 text-center text-sm text-status-red">{cameraError}</p>}
 
           <form onSubmit={handleManualSubmit} className="mt-4">
             <div className="relative">
-              <ScanLine size={20} className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--ink-soft)]" />
+              <ScanLine size={20} className="absolute left-4 top-1/2 -translate-y-1/2 text-(--ink-soft)" />
               <Input ref={inputRef} autoFocus value={value} onChange={(e) => setValue(e.target.value)} placeholder="Detal QR kodini skanerlang..." className="pl-11 text-lg py-4 terminal-tap" />
             </div>
           </form>

@@ -6,9 +6,9 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from accounts.permissions import CanScanOrderStatus, IsMasterOrAbove
+from accounts.permissions import CanScanOrderStatus, IsManagementRole
 from core.audit import log_action, push_live_log
-from manufacturing.models import Machine, Operation, Workstation
+from manufacturing.models import Machine, Operation
 from orders.models import Order, Part, PartRoute
 from orders.production_workflow import ProductionWorkflowError, start_production_workflow
 from orders.serializers import PartSerializer
@@ -19,31 +19,22 @@ from .serializers import ConflictSerializer, ScanEventSerializer, SingleScanSeri
 from .services import process_scan
 
 
-class TerminalWorkstationsView(APIView):
-    """Public listing so the terminal login screen can show post names before authenticating."""
+class TerminalOperationsView(APIView):
+    """Public listing so the terminal login screen can show stage names before authenticating."""
 
     permission_classes = []
 
     def get(self, request):
-        workstations = Workstation.objects.filter(status="active", operation__is_active=True).select_related("tsex", "operation")
+        operations = Operation.objects.filter(is_active=True).order_by("order_index", "id")
         return Response(
-            [
-                {
-                    "id": w.id,
-                    "name": w.name,
-                    "operation_code": w.operation.code,
-                    "operation_name": w.operation.name,
-                    "tsex": w.tsex.name,
-                }
-                for w in workstations
-            ]
+            [{"id": op.id, "code": op.code, "name": op.name} for op in operations]
         )
 
 
 class TerminalBootstrapView(APIView):
     def get(self, request):
-        workstation_id = request.query_params.get("workstation_id")
-        workstation = Workstation.objects.filter(id=workstation_id).select_related("tsex", "operation").first()
+        operation_id = request.query_params.get("operation_id")
+        operation = Operation.objects.filter(id=operation_id).first()
         operations = list(
             Operation.objects.filter(is_active=True)
             .order_by("order_index", "id")
@@ -51,30 +42,33 @@ class TerminalBootstrapView(APIView):
         )
 
         parts_qs = Part.objects.none()
-        if workstation:
+        machines_qs = Machine.objects.none()
+        if operation:
             parts_qs = (
-                Part.objects.filter(current_operation=workstation.operation, status__in=["pending", "in_progress"])
+                Part.objects.filter(current_operation=operation, status__in=["pending", "in_progress"])
                 .select_related("order")
                 .prefetch_related("routes__operation")
                 .order_by("order__priority", "order__deadline")[:200]
             )
-
-        machines = list(
-            Machine.objects.filter(workstation=workstation).values("id", "machine_id", "name", "status")
-        ) if workstation else []
+            # An employee only sees the machines they're assigned to for this
+            # stage; an employee with no assignment yet (fallback login) sees
+            # every active machine at the stage instead.
+            machines_qs = Machine.objects.filter(operation=operation, status="active")
+            if request.user.is_authenticated:
+                assigned = request.user.assigned_machines.filter(operation=operation, status="active")
+                if assigned.exists():
+                    machines_qs = assigned
 
         return Response(
             {
                 "server_time": timezone.now(),
-                "workstation": {
-                    "id": workstation.id,
-                    "name": workstation.name,
-                    "operation_code": workstation.operation.code,
-                    "operation_name": workstation.operation.name,
-                    "tsex": workstation.tsex.name,
-                } if workstation else None,
+                "operation": {
+                    "id": operation.id,
+                    "code": operation.code,
+                    "name": operation.name,
+                } if operation else None,
                 "operations": operations,
-                "machines": machines,
+                "machines": list(machines_qs.values("id", "machine_id", "name", "status")),
                 "parts": PartSerializer(parts_qs, many=True).data,
                 "offline_ready": True,
             }
@@ -86,7 +80,6 @@ class TerminalScanView(APIView):
         serializer = SingleScanSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
-        workstation = Workstation.objects.filter(id=data.get("workstation_id")).first()
         machine = Machine.objects.filter(id=data.get("machine_id")).first()
         import uuid
 
@@ -96,7 +89,6 @@ class TerminalScanView(APIView):
             operation_code=data["operation_code"],
             employee=request.user,
             device_id=request.headers.get("X-Device-Id", ""),
-            workstation=workstation,
             machine=machine,
             scanned_at_client=data.get("scanned_at_client") or timezone.now(),
             source=ScanEvent.Source.ONLINE,
@@ -123,24 +115,25 @@ class TerminalSyncView(APIView):
                 }
             )
 
-        workstation = Workstation.objects.filter(id=data.get("workstation_id")).first()
+        operation = Operation.objects.filter(id=data.get("operation_id")).first()
         batch = OfflineSyncBatch.objects.create(
             client_batch_id=data["client_batch_id"],
             device_id=data["device_id"],
-            workstation=workstation,
+            operation=operation,
             employee=request.user,
         )
 
         results = []
         accepted = conflict = failed = 0
         for scan in data["scans"]:
+            machine = Machine.objects.filter(id=scan.get("machine_id")).first()
             result = process_scan(
                 client_scan_id=scan["client_scan_id"],
                 qr_token=scan["qr_token"],
                 operation_code=scan["operation_code"],
                 employee=request.user,
                 device_id=data["device_id"],
-                workstation=workstation,
+                machine=machine,
                 scanned_at_client=scan.get("scanned_at_client"),
                 source=ScanEvent.Source.OFFLINE_SYNC,
                 batch=batch,
@@ -190,7 +183,7 @@ class SyncStatusView(APIView):
 class ConflictViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Conflict.objects.select_related("scan_event__part", "scan_event__order", "scan_event__operation").all()
     serializer_class = ConflictSerializer
-    permission_classes = [IsAuthenticated, IsMasterOrAbove]
+    permission_classes = [IsAuthenticated, IsManagementRole]
     filterset_fields = ["status", "reason_code"]
 
     @action(detail=True, methods=["post"])

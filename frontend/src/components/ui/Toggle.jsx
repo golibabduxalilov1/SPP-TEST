@@ -20,7 +20,7 @@ export default function Toggle({ checked, onChange, disabled, label, className, 
           checked={checked}
           onChange={onChange}
           disabled={disabled}
-          className="peer absolute inset-0 !h-full !w-full cursor-pointer appearance-none focus:outline-none"
+          className="peer absolute inset-0 h-full! w-full! cursor-pointer appearance-none focus:outline-none"
           {...props}
         />
         <span
@@ -30,8 +30,8 @@ export default function Toggle({ checked, onChange, disabled, label, className, 
             "shadow-[inset_0_1px_2px_rgba(74,50,35,0.10)]",
             "peer-focus-visible:shadow-[inset_0_1px_2px_rgba(74,50,35,0.10),0_0_0_3px_color-mix(in_srgb,var(--accent)_25%,transparent)]",
             checked
-              ? "border-transparent bg-[var(--accent)]"
-              : "border-[var(--border-strong)] bg-[var(--surface-muted)]"
+              ? "border-transparent bg-(--accent)"
+              : "border-(--border-strong) bg-(--surface-muted)"
           )}
         />
         <motion.span
@@ -41,7 +41,7 @@ export default function Toggle({ checked, onChange, disabled, label, className, 
           transition={prefersReducedMotion ? { duration: 0 } : { type: "spring", stiffness: 500, damping: 32 }}
         />
       </span>
-      {label && <span className="text-sm font-medium text-[var(--ink)]">{label}</span>}
+      {label && <span className="text-sm font-medium text-(--ink)">{label}</span>}
     </label>
   );
 }

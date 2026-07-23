@@ -6,10 +6,10 @@ from .models import Role, TerminalSession, User
 
 class UserAdmin(BaseUserAdmin):
     fieldsets = BaseUserAdmin.fieldsets + (
-        ("SPP", {"fields": ("role", "phone", "pin_code", "badge_token", "is_active_employee")}),
-        ("Terminal bosqichi", {"fields": ("multi_stage_enabled", "assigned_workstation", "assigned_workstations")}),
+        ("SPP", {"fields": ("role", "department", "phone", "pin_code", "badge_token", "is_active_employee")}),
+        ("Terminal bosqichi", {"fields": ("multi_stage_enabled", "assigned_operation", "assigned_operations", "assigned_machines")}),
     )
-    list_display = ("username", "first_name", "last_name", "role", "is_active_employee")
+    list_display = ("username", "first_name", "last_name", "role", "department", "is_active_employee")
     list_filter = ("role", "is_active_employee")
 
     def get_readonly_fields(self, request, obj=None):

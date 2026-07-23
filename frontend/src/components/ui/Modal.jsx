@@ -23,7 +23,7 @@ export default function Modal({ open, onClose, title, children, footer, size = "
     <AnimatePresence>
       {open && (
         <motion.div
-          className="fixed inset-0 z-[var(--z-modal)] flex items-center justify-center p-3 sm:p-4"
+          className="fixed inset-0 z-(--z-modal) flex items-center justify-center p-3 sm:p-4"
           style={{ background: "rgba(42,29,20,0.34)", backdropFilter: "blur(3px)", WebkitBackdropFilter: "blur(3px)" }}
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -39,10 +39,10 @@ export default function Modal({ open, onClose, title, children, footer, size = "
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, scale: 0.97, y: 8 }}
             transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
-            className={`wood-panel flex max-h-[calc(100dvh-1.5rem)] w-full flex-col ${widths[size]} rounded-[14px] border border-[var(--border)] bg-[var(--surface-raised)] elevation-lg sm:max-h-[calc(100dvh-2rem)]`}
+            className={`wood-panel flex max-h-[calc(100dvh-1.5rem)] w-full flex-col ${widths[size]} rounded-[14px] border border-(--border) bg-(--surface-raised) elevation-lg sm:max-h-[calc(100dvh-2rem)]`}
           >
-            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--border-subtle)] px-4 py-3 sm:px-5 sm:py-4">
-              <h3 className="min-w-0 break-words font-display text-base font-semibold tracking-tight text-[var(--ink)]">{title}</h3>
+            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-(--border-subtle) px-4 py-3 sm:px-5 sm:py-4">
+              <h3 className="min-w-0 wrap-break-word font-display text-base font-semibold tracking-tight text-(--ink)">{title}</h3>
               <Button
                 type="button"
                 variant="ghost"
@@ -50,14 +50,14 @@ export default function Modal({ open, onClose, title, children, footer, size = "
                 magnetic={false}
                 onClick={onClose}
                 aria-label="Yopish"
-                className="!min-h-11 !min-w-11 !rounded-lg !text-[var(--ink-soft)] hover:!text-[var(--ink)]"
+                className="min-h-11! min-w-11! rounded-lg! text-(--ink-soft)! hover:text-(--ink)!"
               >
                 <X size={18} />
               </Button>
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto p-4 scrollbar-thin sm:p-5">{children}</div>
             {footer && (
-              <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-[var(--border-subtle)] px-4 py-3 sm:px-5 sm:py-4">
+              <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-(--border-subtle) px-4 py-3 sm:px-5 sm:py-4">
                 {footer}
               </div>
             )}

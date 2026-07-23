@@ -31,10 +31,12 @@ class OrderQRStatusTests(APITestCase):
         response = self.client.post("/api/terminal/order-qr/lookup", {"qr_token": "SPP-O-NOPE00"}, format="json")
         self.assertEqual(response.status_code, 404)
 
-    def test_operator_role_forbidden(self):
+    def test_operator_role_allowed(self):
+        # Operator / Usta absorbed the former Qadoqlash operatori's scanning duties
+        # when the roles were merged, so it must be allowed here too.
         self.client.force_authenticate(user=self.operator_user)
         response = self.client.post("/api/terminal/order-qr/lookup", {"qr_token": self.order.qr_token}, format="json")
-        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.status_code, 200, response.data)
 
     def test_status_update_to_allowed_next_status_succeeds_and_logs(self):
         self.client.force_authenticate(user=self.warehouse_user)

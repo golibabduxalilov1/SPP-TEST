@@ -21,7 +21,6 @@ class SingleScanSerializer(serializers.Serializer):
     client_scan_id = serializers.CharField(required=False)
     qr_token = serializers.CharField()
     operation_code = serializers.CharField()
-    workstation_id = serializers.IntegerField(required=False, allow_null=True)
     machine_id = serializers.IntegerField(required=False, allow_null=True)
     scanned_at_client = serializers.DateTimeField(required=False, allow_null=True)
 
@@ -30,12 +29,13 @@ class SyncScanItemSerializer(serializers.Serializer):
     client_scan_id = serializers.CharField()
     qr_token = serializers.CharField()
     operation_code = serializers.CharField()
+    machine_id = serializers.IntegerField(required=False, allow_null=True)
     scanned_at_client = serializers.DateTimeField(required=False, allow_null=True)
 
 
 class SyncBatchSerializer(serializers.Serializer):
     device_id = serializers.CharField()
-    workstation_id = serializers.IntegerField(required=False, allow_null=True)
+    operation_id = serializers.IntegerField(required=False, allow_null=True)
     employee_id = serializers.IntegerField(required=False, allow_null=True)
     client_batch_id = serializers.CharField()
     scans = SyncScanItemSerializer(many=True)

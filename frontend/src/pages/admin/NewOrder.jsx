@@ -19,14 +19,14 @@ function nextTempDetailId() {
 
 function SectionCard({ icon: Icon, tone, title, subtitle, children, className }) {
   return (
-    <div className={clsx("rounded-xl border border-[var(--border-subtle)] bg-[var(--surface)] p-4 sm:p-5", className)}>
+    <div className={clsx("rounded-xl border border-(--border-subtle) bg-(--surface) p-4 sm:p-5", className)}>
       <div className="mb-4 flex items-center gap-3">
         <span className={clsx("flex h-9 w-9 shrink-0 items-center justify-center rounded-lg", tone)}>
           <Icon size={17} />
         </span>
         <div className="min-w-0">
-          <p className="font-display text-sm font-semibold text-[var(--ink)]">{title}</p>
-          {subtitle && <p className="text-xs text-[var(--ink-soft)]">{subtitle}</p>}
+          <p className="font-display text-sm font-semibold text-(--ink)">{title}</p>
+          {subtitle && <p className="text-xs text-(--ink-soft)">{subtitle}</p>}
         </div>
       </div>
       <div className="space-y-4">{children}</div>
@@ -141,12 +141,12 @@ export default function NewOrder() {
         <button
           type="button"
           onClick={() => navigate("/orders")}
-          className="focus-ring inline-flex min-h-11 items-center gap-2 rounded-lg text-sm font-semibold text-[var(--accent-strong)] hover:text-[var(--ink)]"
+          className="focus-ring inline-flex min-h-11 items-center gap-2 rounded-lg text-sm font-semibold text-(--accent-strong) hover:text-(--ink)"
         >
           <ArrowLeft size={15} /> Buyurtmalarga qaytish
         </button>
-        <h1 className="page-title mt-2 text-[clamp(1.5rem,2.6vw,2rem)] font-semibold leading-tight text-[var(--ink)]">Yangi buyurtma</h1>
-        <p className="mt-1 text-sm leading-6 text-[var(--ink-soft)]">Yangi mebel buyurtmasini ro'yxatdan o'tkazish</p>
+        <h1 className="page-title mt-2 text-[clamp(1.5rem,2.6vw,2rem)] font-semibold leading-tight text-(--ink)">Yangi buyurtma</h1>
+        <p className="mt-1 text-sm leading-6 text-(--ink-soft)">Yangi mebel buyurtmasini ro'yxatdan o'tkazish</p>
       </div>
 
       <form onSubmit={submit} className="space-y-5">
@@ -168,7 +168,7 @@ export default function NewOrder() {
                     loading={lookingUp}
                     aria-label="Mijozni qidirish"
                     title="Mijozni qidirish"
-                    className="!mr-1 !min-h-9 !min-w-9 !rounded-lg !border-transparent !text-[var(--ink-soft)] hover:!bg-[var(--surface-muted)]"
+                    className="mr-1! min-h-9! min-w-9! rounded-lg! border-transparent! text-(--ink-soft)! hover:bg-(--surface-muted)!"
                   >
                     <Search size={15} />
                   </Button>
@@ -199,7 +199,7 @@ export default function NewOrder() {
             </Field>
           </SectionCard>
 
-          <SectionCard className="lg:col-span-2" icon={PackageSearch} tone="bg-[var(--accent-soft)] text-[var(--accent-strong)]" title="Mebel parametrlari" subtitle="Mahsulot turi va detallar ma'lumotlari">
+          <SectionCard className="lg:col-span-2" icon={PackageSearch} tone="bg-(--accent-soft) text-(--accent-strong)" title="Mebel parametrlari" subtitle="Mahsulot turi va detallar ma'lumotlari">
             <Field label="Mahsulot nomi" required>
               <Input required value={form.product_name} onChange={(e) => setForm({ ...form, product_name: e.target.value })} />
             </Field>
@@ -224,7 +224,7 @@ export default function NewOrder() {
           </SectionCard>
         </div>
 
-        <div className="flex flex-wrap justify-end gap-2 border-t border-[var(--border-subtle)] pt-4">
+        <div className="flex flex-wrap justify-end gap-2 border-t border-(--border-subtle) pt-4">
           <Button type="button" variant="secondary" onClick={() => navigate("/orders")} disabled={saving}>
             <X size={16} /> Bekor qilish
           </Button>

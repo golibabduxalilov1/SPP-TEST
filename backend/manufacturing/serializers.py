@@ -1,41 +1,30 @@
 from rest_framework import serializers
 from django.utils.text import slugify
 
-from .models import Device, Machine, Operation, Printer, Tsex, Workstation
-from orders.constants import OPERATION_SEEDS
-
-
-DEFAULT_OPERATION_CODES = {seed["code"] for seed in OPERATION_SEEDS}
+from .models import Device, Machine, Operation, Printer, Tsex
 
 
 class OperationSerializer(serializers.ModelSerializer):
-    is_default = serializers.SerializerMethodField()
     can_delete = serializers.SerializerMethodField()
 
     class Meta:
         model = Operation
         fields = [
             "id", "code", "name", "measure_unit", "qr_scan_required",
-            "order_index", "is_active", "is_default", "can_delete",
+            "order_index", "is_active", "can_delete",
         ]
-        read_only_fields = ["code", "is_default", "can_delete"]
+        read_only_fields = ["code", "can_delete"]
         extra_kwargs = {
             "measure_unit": {"required": False},
             "qr_scan_required": {"required": False},
         }
 
-    def get_is_default(self, obj):
-        return obj.code in DEFAULT_OPERATION_CODES
-
     def get_can_delete(self, obj):
-        if obj.code in DEFAULT_OPERATION_CODES:
-            return False
         return not (
             obj.part_routes.exists()
             or obj.current_parts.exists()
             or obj.current_orders.exists()
             or obj.order_stage_progress.exists()
-            or obj.workstations.exists()
             or obj.machines.exists()
         )
 
@@ -73,16 +62,6 @@ class TsexSerializer(serializers.ModelSerializer):
         fields = "__all__"
 
 
-class WorkstationSerializer(serializers.ModelSerializer):
-    tsex_name = serializers.CharField(source="tsex.name", read_only=True)
-    operation_name = serializers.CharField(source="operation.name", read_only=True)
-    operation_code = serializers.CharField(source="operation.code", read_only=True)
-
-    class Meta:
-        model = Workstation
-        fields = "__all__"
-
-
 class DeviceSerializer(serializers.ModelSerializer):
     class Meta:
         model = Device
@@ -97,7 +76,7 @@ class PrinterSerializer(serializers.ModelSerializer):
 
 class MachineSerializer(serializers.ModelSerializer):
     operation_name = serializers.CharField(source="operation.name", read_only=True)
-    workstation_name = serializers.CharField(source="workstation.name", read_only=True)
+    tsex_name = serializers.CharField(source="tsex.name", read_only=True)
 
     class Meta:
         model = Machine

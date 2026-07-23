@@ -171,7 +171,7 @@ export default function Tablo() {
               variant="ghost"
               size="sm"
               magnetic={false}
-              className="!min-h-11 !rounded-lg !border-white/15 !bg-white/10 !text-sm !font-medium !text-white/80 hover:!bg-white/15 hover:!text-white"
+              className="min-h-11! rounded-lg! border-white/15! bg-white/10! text-sm! font-medium! text-white/80! hover:bg-white/15! hover:text-white!"
             >
               <Terminal size={14} /> Terminal
             </Button>

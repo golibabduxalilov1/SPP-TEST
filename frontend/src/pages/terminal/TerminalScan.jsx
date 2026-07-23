@@ -83,14 +83,14 @@ export default function TerminalScan() {
       <Card>
         <CardHeader title={workstation?.name} subtitle={`Bosqich: ${workstation?.operation_name}`} />
         <CardBody>
-          <div className="relative mx-auto aspect-square w-full max-w-xs overflow-hidden rounded-2xl border-2 border-[var(--border-strong)] bg-black [&>div>video]:h-full [&>div>video]:w-full [&>div>video]:object-cover">
+          <div className="relative mx-auto aspect-square w-full max-w-xs overflow-hidden rounded-2xl border-2 border-(--border-strong) bg-black [&>div>video]:h-full [&>div>video]:w-full [&>div>video]:object-cover">
             <QrCameraScanner onDecode={processToken} onError={() => setCameraError("Kameraga ruxsat berilmadi yoki kamera topilmadi. QR tokenni qo'lda kiriting.")} className="h-full w-full" />
           </div>
           {cameraError && <p className="mt-3 text-center text-sm text-status-red">{cameraError}</p>}
 
           <form onSubmit={handleManualSubmit} className="mt-4">
             <div className="relative">
-              <ScanLine size={20} className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--ink-soft)]" />
+              <ScanLine size={20} className="absolute left-4 top-1/2 -translate-y-1/2 text-(--ink-soft)" />
               <Input
                 ref={inputRef}
                 autoFocus
@@ -133,12 +133,12 @@ export default function TerminalScan() {
           {parts.length === 0 ? (
             <EmptyState title="Navbatda detal yo'q" />
           ) : (
-            <ul className="divide-y divide-[var(--border-subtle)] max-h-96 overflow-y-auto scrollbar-thin">
+            <ul className="divide-y divide-(--border-subtle) max-h-96 overflow-y-auto scrollbar-thin">
               {parts.map((p) => (
-                <li key={p.id} className="px-5 py-3 flex items-center justify-between gap-3 transition-colors hover:bg-[var(--accent-soft)]">
+                <li key={p.id} className="px-5 py-3 flex items-center justify-between gap-3 transition-colors hover:bg-(--accent-soft)">
                   <div className="min-w-0">
                     <p className="font-medium text-sm truncate">{p.code} — {p.name}</p>
-                    <p className="text-xs text-[var(--ink-faint)]">{p.order_no} · {p.quantity} dona</p>
+                    <p className="text-xs text-(--ink-faint)">{p.order_no} · {p.quantity} dona</p>
                   </div>
                   <Badge tone={p.status === "in_progress" ? "yellow" : "gray"}>{p.status}</Badge>
                 </li>

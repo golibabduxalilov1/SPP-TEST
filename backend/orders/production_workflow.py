@@ -11,6 +11,9 @@ class ProductionWorkflowError(Exception):
     """A user-facing order workflow validation error."""
 
 
+OMBOR_STAGE_CODE = "OMBOR"
+
+
 def _complete_all_routes_for_stage(order, stage, completed_by):
     """Bulk-finish every detail/part still outstanding at `stage`.
 
@@ -152,6 +155,8 @@ def complete_current_stage(order_id, completed_by=None):
             order=order, stage=order.current_stage, status=OrderStageProgress.Status.IN_PROGRESS,
         )
 
+    completed_stage = order.current_stage
+
     now = timezone.now()
     progress.status = OrderStageProgress.Status.COMPLETED
     progress.completed_at = now
@@ -182,6 +187,15 @@ def complete_current_stage(order_id, completed_by=None):
         order.stage_status = Order.StageStatus.COMPLETED
         order.status = Order.Status.COMPLETED
         order.save(update_fields=["current_stage", "stage_status", "status", "updated_at"])
+
+    if completed_stage.code == OMBOR_STAGE_CODE:
+        # Deferred import: packaging.services imports complete_current_stage
+        # from this module at load time, so importing it back at module
+        # level here would be circular. The order/package sync stays inside
+        # this same @transaction.atomic call.
+        from packaging.services import sync_order_into_warehouse
+
+        sync_order_into_warehouse(order, employee=completed_by)
 
     return order
 

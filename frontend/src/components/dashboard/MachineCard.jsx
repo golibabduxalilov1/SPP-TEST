@@ -51,22 +51,22 @@ export default function MachineCard({ machine, from, to, interval, indicator }) 
       <CardBody className="space-y-4">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
-            <p className="text-xs font-medium uppercase tracking-wide text-[var(--ink-soft)]">Davr ichidagi o'rtacha samaradorlik</p>
-            <p className="mt-1 text-2xl font-semibold text-[var(--ink)]">
+            <p className="text-xs font-medium uppercase tracking-wide text-(--ink-soft)">Davr ichidagi o'rtacha samaradorlik</p>
+            <p className="mt-1 text-2xl font-semibold text-(--ink)">
               {machine.period_efficiency !== null ? `${machine.period_efficiency}%` : "—"}
             </p>
           </div>
           <div>
-            <p className="text-xs font-medium uppercase tracking-wide text-[var(--ink-soft)]">Davr ichidagi hajm</p>
-            <p className="mt-1 text-2xl font-semibold text-[var(--ink)]">
-              {machine.period_volume} <span className="text-sm font-normal text-[var(--ink-soft)]">{machine.unit_label}</span>
+            <p className="text-xs font-medium uppercase tracking-wide text-(--ink-soft)">Davr ichidagi hajm</p>
+            <p className="mt-1 text-2xl font-semibold text-(--ink)">
+              {machine.period_volume} <span className="text-sm font-normal text-(--ink-soft)">{machine.unit_label}</span>
             </p>
           </div>
         </div>
 
-        <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-muted)]/40 p-3">
+        <div className="rounded-2xl border border-(--border-subtle) bg-(--surface-muted)/40 p-3">
             {loadingSeries || !series ? (
-              <div className="flex h-64 items-center justify-center text-sm text-[var(--ink-faint)]">Yuklanmoqda...</div>
+              <div className="flex h-64 items-center justify-center text-sm text-(--ink-faint)">Yuklanmoqda...</div>
             ) : (
               <>
                 <div className="h-64">
@@ -94,7 +94,7 @@ export default function MachineCard({ machine, from, to, interval, indicator }) 
                     </AreaChart>
                   </ResponsiveContainer>
                 </div>
-                <div className="mt-2 flex items-center justify-between text-xs font-medium text-[var(--ink-soft)]">
+                <div className="mt-2 flex items-center justify-between text-xs font-medium text-(--ink-soft)">
                   <span>Quvvat: {series.capacity_per_hour ? `${series.capacity_per_hour} ${series.unit_label}/soat` : "—"}</span>
                   <span>MAX: {series.max_value} {series.unit_label}</span>
                 </div>

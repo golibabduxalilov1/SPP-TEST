@@ -14,25 +14,28 @@ from .serializers import (
     AdminLoginSerializer, TerminalLoginSerializer, TerminalPinLookupSerializer, UserSerializer,
 )
 
+_USER_MANAGEMENT_ROLES = {Role.SUPER_ADMIN, Role.ADMIN}
+_WORKPLACE_ONLY_FIELDS = {"department", "assigned_machines"}
+
 
 class AdminLoginView(TokenObtainPairView):
     serializer_class = AdminLoginSerializer
 
 
-def _workstation_payload(workstation):
+def _operation_payload(operation, employee):
+    machines = employee.assigned_machines.filter(operation=operation)
     return {
-        "id": workstation.id,
-        "name": workstation.name,
-        "operation_code": workstation.operation.code,
-        "operation_name": workstation.operation.name,
-        "tsex": workstation.tsex.name,
+        "id": operation.id,
+        "code": operation.code,
+        "name": operation.name,
+        "machines": [{"id": m.id, "machine_id": m.machine_id, "name": m.name} for m in machines],
     }
 
 
 class TerminalPinLookupView(APIView):
     """Identifies an employee by PIN alone, before any session/token exists —
     used by the terminal's quick-login screen to auto-resolve their assigned
-    stage(s) (or fall back to manual post selection if none are assigned)."""
+    stage(s) (or fall back to manual stage selection if none are assigned)."""
 
     permission_classes = []
 
@@ -46,13 +49,11 @@ class TerminalPinLookupView(APIView):
             return Response({"detail": "PIN kod noto'g'ri"}, status=status.HTTP_401_UNAUTHORIZED)
 
         if user.multi_stage_enabled:
-            workstations = list(
-                user.assigned_workstations.select_related("operation", "tsex").all()
-            )
-        elif user.assigned_workstation:
-            workstations = [user.assigned_workstation]
+            operations = list(user.assigned_operations.all())
+        elif user.assigned_operation:
+            operations = [user.assigned_operation]
         else:
-            workstations = []
+            operations = []
 
         return Response(
             {
@@ -61,7 +62,7 @@ class TerminalPinLookupView(APIView):
                     "last_name": user.last_name,
                     "role_display": user.get_role_display(),
                 },
-                "workstations": [_workstation_payload(w) for w in workstations],
+                "operations": [_operation_payload(op, user) for op in operations],
             }
         )
 
@@ -89,7 +90,7 @@ class TerminalLoginView(APIView):
         )
         session = TerminalSession.objects.create(
             employee=user,
-            workstation_id=data.get("workstation_id"),
+            operation_id=data.get("operation_id"),
             device_id=data["device_id"],
         )
 
@@ -127,6 +128,8 @@ class UserViewSet(viewsets.ModelViewSet):
     search_fields = ["phone", "first_name", "last_name"]
 
     def perform_create(self, serializer):
+        if self.request.user.role not in _USER_MANAGEMENT_ROLES:
+            raise PermissionDenied("Xodim qo'shish huquqi faqat Super Admin va Admin'da.")
         # Admin has the same privilege level as Super Admin, except it may not
         # create a Super Admin account.
         if serializer.validated_data.get("role") == Role.SUPER_ADMIN and self.request.user.role == Role.ADMIN:
@@ -136,10 +139,11 @@ class UserViewSet(viewsets.ModelViewSet):
 
     def perform_update(self, serializer):
         is_self = serializer.instance == self.request.user
+        requester_role = self.request.user.role
         if is_self:
             # Only a Super Admin may edit their own account via this endpoint —
             # and even then, never their own phone number (it's the login field).
-            if self.request.user.role != Role.SUPER_ADMIN:
+            if requester_role != Role.SUPER_ADMIN:
                 raise PermissionDenied("O'zingizni tahrirlay olmaysiz.")
             new_phone = serializer.validated_data.get("phone")
             if new_phone is not None and new_phone != self.request.user.phone:
@@ -153,12 +157,21 @@ class UserViewSet(viewsets.ModelViewSet):
             # deactivate, or otherwise change any field on another super admin account here.
             if serializer.instance.role == Role.SUPER_ADMIN:
                 raise PermissionDenied("Super adminni tahrirlab bo'lmaydi.")
-            if serializer.validated_data.get("role") == Role.SUPER_ADMIN and self.request.user.role == Role.ADMIN:
+            if requester_role == Role.DIRECTOR:
+                raise PermissionDenied("Sizda xodimlarni tahrirlash huquqi yo'q, faqat ko'rish mumkin.")
+            if requester_role == Role.MANAGER:
+                if not set(serializer.validated_data.keys()) <= _WORKPLACE_ONLY_FIELDS:
+                    raise PermissionDenied("Sizda faqat xodimni bo'lim va stanokka biriktirish huquqi bor.")
+            elif requester_role not in _USER_MANAGEMENT_ROLES:
+                raise PermissionDenied("Xodimni tahrirlash huquqingiz yo'q.")
+            if serializer.validated_data.get("role") == Role.SUPER_ADMIN and requester_role == Role.ADMIN:
                 raise PermissionDenied("Admin super admin tayinlay olmaydi.")
         instance = serializer.save()
         log_action(self.request.user, "employee.update", "User", instance.id, {"phone": instance.phone})
 
     def perform_destroy(self, instance):
+        if self.request.user.role not in _USER_MANAGEMENT_ROLES:
+            raise PermissionDenied("Xodimni o'chirish huquqi faqat Super Admin va Admin'da.")
         if instance == self.request.user:
             raise PermissionDenied("O'zingizni o'chira olmaysiz.")
         # Super admins are the only role allowed to manage other super admins, but

@@ -16,7 +16,7 @@ export const Checkbox = forwardRef(function Checkbox({ className, label, checked
           ref={ref}
           type="checkbox"
           checked={checked}
-          className="peer absolute inset-0 !h-full !w-full cursor-pointer appearance-none focus:outline-none"
+          className="peer absolute inset-0 h-full! w-full! cursor-pointer appearance-none focus:outline-none"
           {...props}
         />
         <span
@@ -26,14 +26,14 @@ export const Checkbox = forwardRef(function Checkbox({ className, label, checked
             "shadow-[inset_0_1px_2px_rgba(74,50,35,0.05)]",
             "peer-focus-visible:shadow-[0_0_0_3px_color-mix(in_srgb,var(--accent)_25%,transparent)]",
             checked
-              ? "border-[var(--accent)] bg-[var(--accent)]"
-              : "border-[var(--border-strong)] bg-[var(--surface)] peer-hover:border-[var(--ink-faint)]"
+              ? "border-(--accent) bg-(--accent)"
+              : "border-(--border-strong) bg-(--surface) peer-hover:border-(--ink-faint)"
           )}
         >
           {checked && <Check size={13} strokeWidth={3} className="check-pop text-white" />}
         </span>
       </span>
-      {label && <span className="text-sm font-medium text-[var(--ink)]">{label}</span>}
+      {label && <span className="text-sm font-medium text-(--ink)">{label}</span>}
     </label>
   );
 });
@@ -52,7 +52,7 @@ export const Radio = forwardRef(function Radio({ className, label, checked, ...p
           ref={ref}
           type="radio"
           checked={checked}
-          className="peer absolute inset-0 !h-full !w-full cursor-pointer appearance-none focus:outline-none"
+          className="peer absolute inset-0 h-full! w-full! cursor-pointer appearance-none focus:outline-none"
           {...props}
         />
         <span
@@ -62,16 +62,16 @@ export const Radio = forwardRef(function Radio({ className, label, checked, ...p
             "shadow-[inset_0_1px_2px_rgba(74,50,35,0.05)]",
             "peer-focus-visible:shadow-[0_0_0_3px_color-mix(in_srgb,var(--accent)_25%,transparent)]",
             checked
-              ? "border-[var(--accent)] bg-[var(--surface)]"
-              : "border-[var(--border-strong)] bg-[var(--surface)] peer-hover:border-[var(--ink-faint)]"
+              ? "border-(--accent) bg-(--surface)"
+              : "border-(--border-strong) bg-(--surface) peer-hover:border-(--ink-faint)"
           )}
         >
           {checked && (
-            <span className="check-pop h-2.5 w-2.5 rounded-full bg-[var(--accent)]" />
+            <span className="check-pop h-2.5 w-2.5 rounded-full bg-(--accent)" />
           )}
         </span>
       </span>
-      {label && <span className="text-sm font-medium text-[var(--ink)]">{label}</span>}
+      {label && <span className="text-sm font-medium text-(--ink)">{label}</span>}
     </label>
   );
 });

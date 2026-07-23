@@ -11,7 +11,7 @@ from orders.production_workflow import ProductionWorkflowError, complete_current
 from .models import Conflict, ScanEvent
 
 
-def _reject(client_scan_id, qr_token, error_code, source, employee, device_id, workstation, operation=None,
+def _reject(client_scan_id, qr_token, error_code, source, employee, device_id, machine, operation=None,
             part=None, order=None, batch=None):
     scan = ScanEvent.objects.create(
         client_scan_id=client_scan_id,
@@ -19,7 +19,7 @@ def _reject(client_scan_id, qr_token, error_code, source, employee, device_id, w
         part=part,
         order=order,
         operation=operation,
-        workstation=workstation,
+        machine=machine,
         employee=employee,
         device_id=device_id,
         source=source,
@@ -28,11 +28,11 @@ def _reject(client_scan_id, qr_token, error_code, source, employee, device_id, w
         batch=batch,
     )
     Conflict.objects.create(scan_event=scan, reason_code=error_code)
-    push_live_log("conflict", f"Konflikt: {qr_token} — {error_code}", {"scan_id": scan.id})
+    push_live_log("conflict", f"Muammoli holat: {qr_token} — {error_code}", {"scan_id": scan.id})
     return {"client_scan_id": client_scan_id, "status": "conflict", "error_code": error_code}
 
 
-def process_scan(*, client_scan_id, qr_token, operation_code, employee, device_id, workstation=None,
+def process_scan(*, client_scan_id, qr_token, operation_code, employee, device_id,
                   machine=None, scanned_at_client=None, source=ScanEvent.Source.ONLINE, batch=None):
     existing = ScanEvent.objects.filter(client_scan_id=client_scan_id).first()
     if existing:
@@ -43,41 +43,42 @@ def process_scan(*, client_scan_id, qr_token, operation_code, employee, device_i
     part = Part.objects.filter(qr_token=qr_token).first()
 
     if not part:
-        return _reject(client_scan_id, qr_token, "invalid_qr", source, employee, device_id, workstation, operation, batch=batch)
+        return _reject(client_scan_id, qr_token, "invalid_qr", source, employee, device_id, machine, operation, batch=batch)
 
     order = part.order
     if not operation:
-        return _reject(client_scan_id, qr_token, "invalid_qr", source, employee, device_id, workstation, operation, part, order, batch)
+        return _reject(client_scan_id, qr_token, "invalid_qr", source, employee, device_id, machine, operation, part, order, batch)
 
     if order.status in (Order.Status.CANCELLED, Order.Status.DELIVERED):
-        return _reject(client_scan_id, qr_token, "order_closed", source, employee, device_id, workstation, operation, part, order, batch)
+        return _reject(client_scan_id, qr_token, "order_closed", source, employee, device_id, machine, operation, part, order, batch)
 
-    if workstation and workstation.operation_id != operation.id:
-        return _reject(client_scan_id, qr_token, "device_not_allowed", source, employee, device_id, workstation, operation, part, order, batch)
+    if machine and machine.operation_id != operation.id:
+        return _reject(client_scan_id, qr_token, "device_not_allowed", source, employee, device_id, machine, operation, part, order, batch)
 
     route_step = part.routes.filter(operation=operation).first()
     if not route_step:
-        return _reject(client_scan_id, qr_token, "wrong_operation", source, employee, device_id, workstation, operation, part, order, batch)
+        return _reject(client_scan_id, qr_token, "wrong_operation", source, employee, device_id, machine, operation, part, order, batch)
 
     if route_step.status == PartRoute.Status.COMPLETED:
-        return _reject(client_scan_id, qr_token, "duplicate_scan", source, employee, device_id, workstation, operation, part, order, batch)
+        return _reject(client_scan_id, qr_token, "duplicate_scan", source, employee, device_id, machine, operation, part, order, batch)
 
     unfinished_previous = part.routes.filter(
         sequence_index__lt=route_step.sequence_index
     ).exclude(status__in=[PartRoute.Status.COMPLETED, PartRoute.Status.NOT_REQUIRED]).exists()
     if unfinished_previous:
-        return _reject(client_scan_id, qr_token, "previous_not_completed", source, employee, device_id, workstation, operation, part, order, batch)
+        return _reject(client_scan_id, qr_token, "previous_not_completed", source, employee, device_id, machine, operation, part, order, batch)
 
     if scanned_at_client:
         now = timezone.now()
         if scanned_at_client > now + timedelta(hours=1) or scanned_at_client < now - timedelta(days=7):
-            return _reject(client_scan_id, qr_token, "review_required", source, employee, device_id, workstation, operation, part, order, batch)
+            return _reject(client_scan_id, qr_token, "review_required", source, employee, device_id, machine, operation, part, order, batch)
 
     # All checks passed — accept the scan and advance the part along its route.
     route_step.status = PartRoute.Status.COMPLETED
     route_step.completed_at = timezone.now()
     route_step.completed_by = employee
-    route_step.save(update_fields=["status", "completed_at", "completed_by"])
+    route_step.machine = machine
+    route_step.save(update_fields=["status", "completed_at", "completed_by", "machine"])
 
     next_step = part.routes.filter(status=PartRoute.Status.PENDING).order_by("sequence_index").first()
     part.current_operation = next_step.operation if next_step else None
@@ -106,7 +107,6 @@ def process_scan(*, client_scan_id, qr_token, operation_code, employee, device_i
         order=order,
         operation=operation,
         machine=machine,
-        workstation=workstation,
         employee=employee,
         device_id=device_id,
         scanned_at_client=scanned_at_client,

@@ -3,8 +3,8 @@ import { motion, useReducedMotion } from "framer-motion";
 import { EASE_REVEAL } from "../../motion/reveal";
 
 const TONES = {
-  accent: "text-white bg-[linear-gradient(135deg,var(--accent),var(--accent-bright))] shadow-[var(--shadow-accent)]",
-  wood: "text-white bg-[linear-gradient(135deg,var(--accent),var(--accent-bright))] shadow-[var(--shadow-accent)]", // legacy alias
+  accent: "text-white bg-[linear-gradient(135deg,var(--accent),var(--accent-bright))] shadow-(--shadow-accent)",
+  wood: "text-white bg-[linear-gradient(135deg,var(--accent),var(--accent-bright))] shadow-(--shadow-accent)", // legacy alias
   signal: "text-white bg-[linear-gradient(135deg,var(--accent-2),var(--accent-2-bright))] shadow-[0_8px_22px_rgba(71,93,53,0.30)]",
   green: "text-status-green bg-status-green-bg",
   red: "text-status-red bg-status-red-bg",
@@ -28,9 +28,9 @@ export default function StatCard({ icon: Icon, label, value, hint, tone = "accen
           {Icon && <Icon size={22} />}
         </div>
         <div className="min-w-0">
-          <p className="text-sm font-medium text-[var(--ink-soft)]">{label}</p>
-          <p className="mt-0.5 truncate font-display text-2xl font-semibold tracking-tight text-[var(--ink)] tabular">{value}</p>
-          {hint && <p className="text-xs text-[var(--ink-soft)] mt-1">{hint}</p>}
+          <p className="text-sm font-medium text-(--ink-soft)">{label}</p>
+          <p className="mt-0.5 truncate font-display text-2xl font-semibold tracking-tight text-(--ink) tabular">{value}</p>
+          {hint && <p className="text-xs text-(--ink-soft) mt-1">{hint}</p>}
         </div>
       </div>
     </motion.div>

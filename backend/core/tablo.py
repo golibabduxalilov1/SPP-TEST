@@ -8,8 +8,6 @@ TABLO_STATUSES = [
     Order.Status.APPROVED,
     Order.Status.IN_PRODUCTION,
     Order.Status.PARTIALLY_READY,
-    Order.Status.READY_FOR_PACKAGING,
-    Order.Status.PACKAGING,
     Order.Status.WAREHOUSE,
     Order.Status.COMPLETED,
 ]
@@ -71,16 +69,20 @@ def _detail_totals(order, operation=None):
 
 
 def _stage_value(totals, operation, mode, status):
-    quantity, area, edge = totals
+    quantity, area, _edge = totals
     if mode == "foiz":
         return 100 if status == "completed" else 0
     if mode == "soni":
         return quantity
-    if operation.measure_unit == "m2":
-        return round(float(area), 2)
-    if operation.measure_unit == "meter":
-        return round(float(edge), 2)
-    return quantity
+    # mode == "hajm": every stage is measured in m2 of material area, since
+    # that's what the board is meant to answer ("how much still needs
+    # cutting/edging/assembling") — except PRISADKA (drilling), which is
+    # inherently per-piece and has no m2 meaning. This is independent of
+    # Operation.measure_unit, which stays authoritative for dashboard/machine
+    # capacity math elsewhere.
+    if operation.code == "PRISADKA":
+        return quantity
+    return round(float(area), 2)
 
 
 def _cells(order, operations):

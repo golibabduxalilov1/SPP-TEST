@@ -7,7 +7,7 @@ const TONES = {
   gray: "text-status-gray bg-status-gray-bg border-status-gray/20",
   blue: "text-status-blue bg-status-blue-bg border-status-blue/20",
   orange: "text-status-orange bg-status-orange-bg border-status-orange/20",
-  accent: "text-[var(--accent-strong)] bg-[var(--accent-soft)] border-[color-mix(in_srgb,var(--accent)_25%,transparent)]",
+  accent: "text-(--accent-strong) bg-(--accent-soft) border-[color-mix(in_srgb,var(--accent)_25%,transparent)]",
 };
 
 export const STATUS_TONE_MAP = {

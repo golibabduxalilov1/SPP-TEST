@@ -89,7 +89,7 @@ export default function Customers() {
           subtitle={`Jami ${customers.length} ta mijoz`}
           actions={
             <div className="relative w-full sm:w-64">
-              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--ink-soft)]" />
+              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-(--ink-soft)" />
               <Input className="pl-8 w-full" placeholder="Ism yoki telefon..." value={search} onChange={(e) => setSearch(e.target.value)} />
             </div>
           }
@@ -114,14 +114,14 @@ export default function Customers() {
                   <Tr key={customer.id}>
                     <Td>
                       <div className="flex items-center gap-2.5">
-                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--accent-soft)] text-xs font-semibold text-[var(--accent-strong)]">
+                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-(--accent-soft) text-xs font-semibold text-(--accent-strong)">
                           {initials(customer.name)}
                         </span>
                         <p className="font-medium">{customer.name || "—"}</p>
                       </div>
                     </Td>
                     <Td>
-                      <a href={`tel:${customer.phone}`} className="text-[var(--accent-strong)] hover:underline">
+                      <a href={`tel:${customer.phone}`} className="text-(--accent-strong) hover:underline">
                         {customer.phone}
                       </a>
                     </Td>
@@ -134,8 +134,8 @@ export default function Customers() {
                           onClick={() => openEditModal(customer)}
                           aria-label={`${customer.name} mijozini tahrirlash`} title="Tahrirlash"
                           className={clsx(
-                            "!min-h-9 !min-w-9 !rounded-lg !px-0 !border-[var(--border-strong)]",
-                            "!text-[var(--accent-strong)] hover:!bg-[var(--accent-soft)]"
+                            "min-h-9! min-w-9! rounded-lg! px-0! border-(--border-strong)!",
+                            "text-(--accent-strong)! hover:bg-(--accent-soft)!"
                           )}
                         >
                           <Pencil size={14} strokeWidth={2.2} />
@@ -144,7 +144,7 @@ export default function Customers() {
                           type="button" variant="ghost" size="sm" magnetic={false}
                           onClick={() => setDeletingCustomer(customer)}
                           aria-label={`${customer.name} mijozini o'chirish`} title="O'chirish"
-                          className="!min-h-9 !min-w-9 !rounded-lg !px-0 !border-[var(--border-strong)] !text-status-red hover:!bg-[var(--color-status-red-bg)]"
+                          className="min-h-9! min-w-9! rounded-lg! px-0! border-(--border-strong)! text-status-red! hover:bg-(--color-status-red-bg)!"
                         >
                           <Trash2 size={14} strokeWidth={2.2} />
                         </Button>
@@ -244,8 +244,8 @@ function DeleteCustomerModal({ customer, onClose, onDeleted }) {
 
   return (
     <Modal open={Boolean(customer)} onClose={onClose} title="Mijozni o'chirish" size="sm">
-      <p className="text-sm leading-6 text-[var(--ink-soft)]">
-        <strong className="font-semibold text-[var(--ink)]">{customer?.name}</strong> mijozini o'chirmoqchimisiz?
+      <p className="text-sm leading-6 text-(--ink-soft)">
+        <strong className="font-semibold text-(--ink)">{customer?.name}</strong> mijozini o'chirmoqchimisiz?
         Bu amalni ortga qaytarib bo'lmaydi.
       </p>
       <div className="mt-5 flex justify-end gap-2">

@@ -54,8 +54,8 @@ export default function TopPerformers({ rows }) {
               {rows.map((row, i) => {
                 const Icon = RANK_ICON[i];
                 return (
-                  <Tr key={row.employee_id} className={i === 0 ? "bg-[var(--accent-soft)]" : undefined}>
-                    <Td>{Icon ? <Icon size={16} className={RANK_TONE[i]} /> : <span className="text-xs font-semibold text-[var(--ink-faint)]">#{i + 1}</span>}</Td>
+                  <Tr key={row.employee_id} className={i === 0 ? "bg-(--accent-soft)" : undefined}>
+                    <Td>{Icon ? <Icon size={16} className={RANK_TONE[i]} /> : <span className="text-xs font-semibold text-(--ink-faint)">#{i + 1}</span>}</Td>
                     <Td>
                       <div className="flex items-center gap-2.5">
                         <span className={clsx("flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white", avatarColor(row.name))}>
@@ -63,20 +63,20 @@ export default function TopPerformers({ rows }) {
                         </span>
                         <div>
                           <p className="font-medium">{row.name}</p>
-                          {i === 0 && <span className="text-[10px] font-bold uppercase text-[var(--accent-strong)]">Chempion</span>}
+                          {i === 0 && <span className="text-[10px] font-bold uppercase text-(--accent-strong)">Chempion</span>}
                         </div>
                       </div>
                     </Td>
                     <Td>
                       <span className="font-semibold">{row.output}</span>{" "}
-                      <span className="text-xs text-[var(--ink-soft)]">dona</span>
+                      <span className="text-xs text-(--ink-soft)">dona</span>
                     </Td>
                     <Td>
                       <Badge tone="gray">{row.machines} ta stanok</Badge>
                     </Td>
                     <Td>
-                      <div className="flex min-w-[120px] items-center gap-2">
-                        <div className="h-2 flex-1 overflow-hidden rounded-full bg-[var(--surface-muted)]">
+                      <div className="flex min-w-30 items-center gap-2">
+                        <div className="h-2 flex-1 overflow-hidden rounded-full bg-(--surface-muted)">
                           <div className="h-full rounded-full bg-[linear-gradient(90deg,var(--accent),var(--accent-2))]" style={{ width: `${Math.min(row.efficiency ?? 0, 100)}%` }} />
                         </div>
                         <span className="w-10 text-right text-xs font-semibold">{row.efficiency !== null ? `${row.efficiency}%` : "—"}</span>

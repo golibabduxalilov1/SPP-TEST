@@ -39,14 +39,14 @@ function RowActions({ onEdit, onDelete, editLabel, deleteLabel }) {
       <Button
         type="button" variant="ghost" size="sm" magnetic={false}
         onClick={onEdit} aria-label={editLabel} title="Tahrirlash"
-        className="!min-h-9 !min-w-9 !rounded-lg !border-[var(--border-strong)] !px-0 !text-[var(--accent-strong)] hover:!bg-[var(--accent-soft)]"
+        className="min-h-9! min-w-9! rounded-lg! border-(--border-strong)! px-0! text-(--accent-strong)! hover:bg-(--accent-soft)!"
       >
         <Pencil size={14} strokeWidth={2.2} />
       </Button>
       <Button
         type="button" variant="ghost" size="sm" magnetic={false}
         onClick={onDelete} aria-label={deleteLabel} title="O'chirish"
-        className="!min-h-9 !min-w-9 !rounded-lg !border-[var(--border-strong)] !px-0 !text-status-red hover:!bg-[var(--color-status-red-bg)]"
+        className="min-h-9! min-w-9! rounded-lg! border-(--border-strong)! px-0! text-status-red! hover:bg-(--color-status-red-bg)!"
       >
         <Trash2 size={14} strokeWidth={2.2} />
       </Button>
@@ -389,8 +389,8 @@ function DeleteTsexModal({ tsex, onClose, onDeleted }) {
 
   return (
     <Modal open={Boolean(tsex)} onClose={onClose} title="Tsexni o'chirish" size="sm">
-      <p className="text-sm leading-6 text-[var(--ink-soft)]">
-        <strong className="font-semibold text-[var(--ink)]">{tsex?.name}</strong> tsexini o'chirmoqchimisiz?
+      <p className="text-sm leading-6 text-(--ink-soft)">
+        <strong className="font-semibold text-(--ink)">{tsex?.name}</strong> tsexini o'chirmoqchimisiz?
         Bu tsexga bog'liq postlar bo'lsa, o'chirish rad etilishi mumkin.
       </p>
       <div className="mt-5 flex justify-end gap-2">
@@ -490,8 +490,8 @@ function DeleteWorkstationModal({ workstation, onClose, onDeleted }) {
 
   return (
     <Modal open={Boolean(workstation)} onClose={onClose} title="Postni o'chirish" size="sm">
-      <p className="text-sm leading-6 text-[var(--ink-soft)]">
-        <strong className="font-semibold text-[var(--ink)]">{workstation?.name}</strong> postini o'chirmoqchimisiz?
+      <p className="text-sm leading-6 text-(--ink-soft)">
+        <strong className="font-semibold text-(--ink)">{workstation?.name}</strong> postini o'chirmoqchimisiz?
         Bu postga bog'liq stanoklar bo'lsa, o'chirish rad etilishi mumkin.
       </p>
       <div className="mt-5 flex justify-end gap-2">
@@ -606,8 +606,8 @@ function DeleteMachineModal({ machine, onClose, onDeleted }) {
 
   return (
     <Modal open={Boolean(machine)} onClose={onClose} title="Stanokni o'chirish" size="sm">
-      <p className="text-sm leading-6 text-[var(--ink-soft)]">
-        <strong className="font-semibold text-[var(--ink)]">{machine?.name}</strong> stanogini o'chirmoqchimisiz?
+      <p className="text-sm leading-6 text-(--ink-soft)">
+        <strong className="font-semibold text-(--ink)">{machine?.name}</strong> stanogini o'chirmoqchimisiz?
         Bu amalni ortga qaytarib bo'lmaydi.
       </p>
       <div className="mt-5 flex justify-end gap-2">

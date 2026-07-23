@@ -19,18 +19,14 @@ pin_code_validator = RegexValidator(
 class Role(models.TextChoices):
     SUPER_ADMIN = "super_admin", "Super Admin"
     ADMIN = "admin", "Admin"
-    DIRECTOR = "director", "Rahbar / Direktor"
+    DIRECTOR = "director", "Rahbar"
     MANAGER = "manager", "Ishlab chiqarish menejeri"
-    MASTER = "master", "Master / Tsex boshlig'i"
-    TECHNOLOGIST = "technologist", "Texnolog / Konstruktor"
     OPERATOR = "operator", "Operator / Usta"
-    PACKAGING = "packaging", "Qadoqlash operatori"
     WAREHOUSE = "warehouse", "Omborchi"
-    SYSADMIN = "sysadmin", "Tizim administratori"
 
 
 # Roles allowed to use the terminal (PIN/QR-badge based session, not the admin panel).
-TERMINAL_ROLES = {Role.MASTER, Role.OPERATOR, Role.PACKAGING, Role.WAREHOUSE}
+TERMINAL_ROLES = {Role.OPERATOR, Role.WAREHOUSE}
 
 # Roles allowed to use the admin/web panel.
 ADMIN_ROLES = {
@@ -38,9 +34,6 @@ ADMIN_ROLES = {
     Role.ADMIN,
     Role.DIRECTOR,
     Role.MANAGER,
-    Role.MASTER,
-    Role.TECHNOLOGIST,
-    Role.SYSADMIN,
 }
 
 # Roles with the same overall privilege level as Super Admin (is_staff/is_superuser),
@@ -72,15 +65,24 @@ class User(AbstractUser):
     is_active_employee = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
-    # Terminal quick-login (PIN) stage assignment — off by default (single stage).
-    # "Bosqich" in this app is represented by Workstation (each is bound to one
-    # Operation), so assignment reuses that model instead of adding a new one.
-    multi_stage_enabled = models.BooleanField(default=False)
-    assigned_workstation = models.ForeignKey(
-        "manufacturing.Workstation", on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
+    # Ishlab chiqarish bo'limi ("Tsex") — Operator/Usta uchun majburiy, Ishlab
+    # chiqarish menejeri uchun ixtiyoriy, qolgan rollar uchun ishlatilmaydi.
+    department = models.ForeignKey(
+        "manufacturing.Tsex", on_delete=models.SET_NULL, null=True, blank=True, related_name="employees"
     )
-    assigned_workstations = models.ManyToManyField(
-        "manufacturing.Workstation", blank=True, related_name="+"
+
+    # Terminal quick-login (PIN) stage assignment — off by default (single stage).
+    multi_stage_enabled = models.BooleanField(default=False)
+    assigned_operation = models.ForeignKey(
+        "manufacturing.Operation", on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
+    )
+    assigned_operations = models.ManyToManyField(
+        "manufacturing.Operation", blank=True, related_name="+"
+    )
+    # The exact machine(s) ("stanok") this employee works on within their
+    # assigned stage(s) — always multi, independent of multi_stage_enabled.
+    assigned_machines = models.ManyToManyField(
+        "manufacturing.Machine", blank=True, related_name="+"
     )
 
     def __str__(self):
@@ -114,8 +116,8 @@ class TerminalSession(models.Model):
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     employee = models.ForeignKey(User, on_delete=models.CASCADE, related_name="terminal_sessions")
-    workstation = models.ForeignKey(
-        "manufacturing.Workstation", on_delete=models.SET_NULL, null=True, blank=True, related_name="sessions"
+    operation = models.ForeignKey(
+        "manufacturing.Operation", on_delete=models.SET_NULL, null=True, blank=True, related_name="sessions"
     )
     device_id = models.CharField(max_length=128)
     started_at = models.DateTimeField(auto_now_add=True)

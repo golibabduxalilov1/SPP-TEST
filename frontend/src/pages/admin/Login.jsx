@@ -122,7 +122,7 @@ export default function Login() {
                       magnetic={false}
                       onClick={() => setShowPassword((v) => !v)}
                       aria-label={showPassword ? "Parolni yashirish" : "Parolni ko'rsatish"}
-                      className="!rounded-lg !border-transparent !bg-transparent !text-white/40 hover:!bg-transparent hover:!text-white/70"
+                      className="rounded-lg! border-transparent! bg-transparent! text-white/40! hover:bg-transparent! hover:text-white/70!"
                     >
                       {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                     </Button>

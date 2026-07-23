@@ -152,16 +152,16 @@ export default function Employees() {
                             onClick={() => openEditModal(employee)}
                             aria-label={`${employee.username} xodimini tahrirlash`}
                             title="Tahrirlash"
-                            className="!min-h-9 !min-w-9 !rounded-lg !border-[var(--border-strong)] !px-0 !text-[var(--accent-strong)] hover:!bg-[var(--accent-soft)]"
+                            className="min-h-9! min-w-9! rounded-lg! border-(--border-strong)! px-0! text-(--accent-strong)! hover:bg-(--accent-soft)!"
                           >
                             <Pencil size={14} strokeWidth={2.2} />
                           </Button>
                         </div>
                       ) : (
-                        <span className="ml-auto block w-fit text-xs text-[var(--ink-soft)]">—</span>
+                        <span className="ml-auto block w-fit text-xs text-(--ink-soft)">—</span>
                       )
                     ) : employee.role === "super_admin" ? (
-                      <span className="ml-auto block w-fit text-xs text-[var(--ink-soft)]">—</span>
+                      <span className="ml-auto block w-fit text-xs text-(--ink-soft)">—</span>
                     ) : (
                       <div className="ml-auto flex w-fit items-center gap-1.5">
                         <Button
@@ -173,7 +173,7 @@ export default function Employees() {
                           loading={togglingId === employee.id}
                           aria-label={`${employee.username} xodimini ${employee.is_active_employee ? "nofaol" : "faol"} qilish`}
                           title={employee.is_active_employee ? "Nofaol qilish" : "Faol qilish"}
-                          className={`!min-h-9 !min-w-9 !rounded-lg !border-[var(--border-strong)] !px-0 ${employee.is_active_employee ? "!text-[var(--ink-soft)] hover:!bg-[var(--surface-muted)]" : "!text-emerald-600 hover:!bg-[var(--surface-muted)]"}`}
+                          className={`min-h-9! min-w-9! rounded-lg! border-(--border-strong)! px-0! ${employee.is_active_employee ? "text-(--ink-soft)! hover:bg-(--surface-muted)!" : "text-emerald-600! hover:bg-(--surface-muted)!"}`}
                         >
                           {employee.is_active_employee ? <Ban size={14} strokeWidth={2.2} /> : <CheckCircle2 size={14} strokeWidth={2.2} />}
                         </Button>
@@ -185,7 +185,7 @@ export default function Employees() {
                           onClick={() => openEditModal(employee)}
                           aria-label={`${employee.username} xodimini tahrirlash`}
                           title="Tahrirlash"
-                          className="!min-h-9 !min-w-9 !rounded-lg !border-[var(--border-strong)] !px-0 !text-[var(--accent-strong)] hover:!bg-[var(--accent-soft)]"
+                          className="min-h-9! min-w-9! rounded-lg! border-(--border-strong)! px-0! text-(--accent-strong)! hover:bg-(--accent-soft)!"
                         >
                           <Pencil size={14} strokeWidth={2.2} />
                         </Button>
@@ -197,7 +197,7 @@ export default function Employees() {
                           onClick={() => setDeletingEmployee(employee)}
                           aria-label={`${employee.username} xodimini o'chirish`}
                           title="O'chirish"
-                          className="!min-h-9 !min-w-9 !rounded-lg !border-[var(--border-strong)] !px-0 !text-status-red hover:!bg-[var(--color-status-red-bg)]"
+                          className="min-h-9! min-w-9! rounded-lg! border-(--border-strong)! px-0! text-status-red! hover:bg-(--color-status-red-bg)!"
                         >
                           <Trash2 size={14} strokeWidth={2.2} />
                         </Button>
@@ -342,20 +342,20 @@ function EmployeeModal({ open, employee, currentUser, onClose, onSaved }) {
           <Input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
         </Field>
 
-        <div className="rounded-xl border border-[var(--border-subtle)] p-3.5">
+        <div className="rounded-xl border border-(--border-subtle) p-3.5">
           <Toggle
             label="Bir nechta bosqich"
             checked={form.multi_stage_enabled}
             onChange={(e) => setForm({ ...form, multi_stage_enabled: e.target.checked })}
           />
-          <p className="mt-1.5 text-xs text-[var(--ink-soft)]">
+          <p className="mt-1.5 text-xs text-(--ink-soft)">
             Terminalga PIN bilan kirganda xodim avtomatik shu bosqich(lar)ga yo'naltiriladi.
           </p>
 
           {form.multi_stage_enabled ? (
             <div className="mt-3 max-h-48 space-y-2 overflow-y-auto">
               {workstations.map((w) => (
-                <label key={w.id} className="flex cursor-pointer items-center gap-2.5 text-sm text-[var(--ink)]">
+                <label key={w.id} className="flex cursor-pointer items-center gap-2.5 text-sm text-(--ink)">
                   <Checkbox
                     checked={form.assigned_workstations.includes(w.id)}
                     onChange={() => toggleAssignedWorkstation(w.id)}
@@ -363,7 +363,7 @@ function EmployeeModal({ open, employee, currentUser, onClose, onSaved }) {
                   {w.name} — {w.operation_name} ({w.tsex_name})
                 </label>
               ))}
-              {workstations.length === 0 && <p className="text-xs text-[var(--ink-faint)]">Postlar topilmadi</p>}
+              {workstations.length === 0 && <p className="text-xs text-(--ink-faint)">Postlar topilmadi</p>}
             </div>
           ) : (
             <div className="mt-3">
@@ -408,8 +408,8 @@ function DeleteEmployeeModal({ employee, onClose, onDeleted }) {
 
   return (
     <Modal open={Boolean(employee)} onClose={onClose} title="Xodimni o'chirish" size="sm">
-      <p className="text-sm leading-6 text-[var(--ink-soft)]">
-        <strong className="font-semibold text-[var(--ink)]">{employee?.username}</strong> xodimini o'chirmoqchimisiz?
+      <p className="text-sm leading-6 text-(--ink-soft)">
+        <strong className="font-semibold text-(--ink)">{employee?.username}</strong> xodimini o'chirmoqchimisiz?
         Bu amalni ortga qaytarib bo'lmaydi.
       </p>
       <div className="mt-5 flex justify-end gap-2">

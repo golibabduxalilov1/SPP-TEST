@@ -3,14 +3,14 @@ from rest_framework.routers import DefaultRouter
 
 from .views import (
     ConflictViewSet, OrderQRLookupView, OrderQRStatusUpdateView, SyncStatusView,
-    TerminalBootstrapView, TerminalScanView, TerminalSyncView, TerminalWorkstationsView,
+    TerminalBootstrapView, TerminalOperationsView, TerminalScanView, TerminalSyncView,
 )
 
 router = DefaultRouter()
 router.register("conflicts", ConflictViewSet)
 
 urlpatterns = [
-    path("terminal/workstations", TerminalWorkstationsView.as_view(), name="terminal-workstations"),
+    path("terminal/operations", TerminalOperationsView.as_view(), name="terminal-operations"),
     path("terminal/bootstrap", TerminalBootstrapView.as_view(), name="terminal-bootstrap"),
     path("terminal/scan", TerminalScanView.as_view(), name="terminal-scan"),
     path("terminal/sync", TerminalSyncView.as_view(), name="terminal-sync"),

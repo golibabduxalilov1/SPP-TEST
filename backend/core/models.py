@@ -48,9 +48,9 @@ class LiveLogEvent(models.Model):
 
     EVENT_TYPES = [
         ("scan", "Skan"),
-        ("sync", "Offline sync"),
+        ("sync", "Oflayn sinxronizatsiya"),
         ("order", "Yangi buyurtma"),
-        ("conflict", "Konflikt"),
+        ("conflict", "Muammoli holat"),
         ("packaging", "Qadoqlash"),
         ("warehouse", "Ombor"),
         ("fraud", "Soxta skan bloklandi"),

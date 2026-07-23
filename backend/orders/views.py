@@ -1,5 +1,6 @@
 from django.http import FileResponse
 from django.db import transaction
+from django.db.models import OuterRef, Q, Subquery
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
@@ -8,11 +9,11 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from accounts.permissions import CanCompleteProductionStage, IsSuperAdmin, IsTechnologistOrAbove
+from accounts.permissions import IsManagementRole, IsSuperAdmin
 from core.audit import log_action, push_live_log
 from .export import render_orders_excel, render_orders_pdf
 from .labels import render_labels_pdf
-from .models import Label, Order, OrderDetail, Part
+from .models import Label, Order, OrderDetail, OrderStageProgress, Part
 from .production_workflow import (
     ProductionWorkflowError, approve_order, complete_current_stage, start_production_workflow,
 )
@@ -22,15 +23,40 @@ from .serializers import (
 from .services import import_parts_from_file
 
 
+_latest_completed_stage = OrderStageProgress.objects.filter(
+    order_id=OuterRef("pk"),
+    status=OrderStageProgress.Status.COMPLETED,
+).order_by("-completed_at", "-id")
+
+
 class OrderViewSet(viewsets.ModelViewSet):
     queryset = (
         Order.objects.select_related("current_stage")
         .prefetch_related("parts", "stage_progress__stage", "stage_progress__completed_by")
+        .annotate(
+            last_completed_stage_id=Subquery(_latest_completed_stage.values("stage_id")[:1]),
+            last_completed_stage_name=Subquery(_latest_completed_stage.values("stage__name")[:1]),
+        )
         .all()
     )
     permission_classes = [IsAuthenticated]
     filterset_fields = ["status", "priority"]
     search_fields = ["order_no", "customer_name", "product_name"]
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        production_stage = self.request.query_params.get("production_stage")
+        if not production_stage:
+            return queryset
+
+        # The Orders page presents a single effective production stage. Draft,
+        # approved and cancelled are separate lifecycle states, so they must not
+        # also appear under a stage merely because current_stage is populated.
+        special_statuses = [Order.Status.DRAFT, Order.Status.APPROVED, Order.Status.CANCELLED]
+        return queryset.exclude(status__in=special_statuses).filter(
+            Q(current_stage_id=production_stage)
+            | Q(current_stage__isnull=True, last_completed_stage_id=production_stage)
+        )
 
     def get_serializer_class(self):
         if self.action in ("retrieve", "update", "partial_update"):
@@ -41,9 +67,9 @@ class OrderViewSet(viewsets.ModelViewSet):
         if self.action == "approve":
             return [IsAuthenticated(), IsSuperAdmin()]
         if self.action == "complete_current_stage_action":
-            return [IsAuthenticated(), CanCompleteProductionStage()]
+            return [IsAuthenticated(), IsManagementRole()]
         if self.request.method not in ("GET", "HEAD", "OPTIONS"):
-            return [IsAuthenticated(), IsTechnologistOrAbove()]
+            return [IsAuthenticated(), IsManagementRole()]
         return [IsAuthenticated()]
 
     def perform_create(self, serializer):
@@ -83,7 +109,7 @@ class OrderViewSet(viewsets.ModelViewSet):
         detail=True,
         methods=["post"],
         url_path="complete-current-stage",
-        permission_classes=[IsAuthenticated, CanCompleteProductionStage],
+        permission_classes=[IsAuthenticated, IsManagementRole],
     )
     def complete_current_stage_action(self, request, pk=None):
         order = self.get_object()
@@ -140,11 +166,11 @@ class PartViewSet(viewsets.ModelViewSet):
     serializer_class = PartSerializer
     permission_classes = [IsAuthenticated]
     filterset_fields = ["order", "status", "current_operation"]
-    search_fields = ["code", "name", "qr_token"]
+    search_fields = ["code", "name", "qr_token", "order__order_no", "order__qr_token"]
 
     def get_permissions(self):
         if self.request.method not in ("GET", "HEAD", "OPTIONS"):
-            return [IsAuthenticated(), IsTechnologistOrAbove()]
+            return [IsAuthenticated(), IsManagementRole()]
         return [IsAuthenticated()]
 
 
@@ -156,7 +182,7 @@ class OrderDetailItemViewSet(viewsets.ModelViewSet):
 
     def get_permissions(self):
         if self.request.method not in ("GET", "HEAD", "OPTIONS"):
-            return [IsAuthenticated(), IsTechnologistOrAbove()]
+            return [IsAuthenticated(), IsManagementRole()]
         return [IsAuthenticated()]
 
     def perform_destroy(self, instance):

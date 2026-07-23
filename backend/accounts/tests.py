@@ -1,6 +1,6 @@
 from rest_framework.test import APITestCase
 
-from manufacturing.models import Operation, Tsex, Workstation
+from manufacturing.models import Machine, Operation, Tsex
 from orders.models import Order, Part
 
 from .models import Role, User
@@ -228,7 +228,7 @@ class SuperAdminSelfEditTests(APITestCase):
     def test_super_admin_cannot_change_own_role(self):
         self.client.force_authenticate(user=self.super_admin)
         response = self.client.patch(
-            f"/api/employees/{self.super_admin.id}/", {"role": Role.OPERATOR}, format="json"
+            f"/api/employees/{self.super_admin.id}/", {"role": Role.WAREHOUSE}, format="json"
         )
         self.assertEqual(response.status_code, 403)
         self.super_admin.refresh_from_db()
@@ -310,9 +310,15 @@ class SuperAdminFullAccessTests(APITestCase):
         self.assertFalse(Part.objects.filter(id=part_id).exists())
 
     def test_employees_full_crud(self):
+        tsex = Tsex.objects.create(name="Test bo'lim")
+        operation = Operation.objects.create(code="TEST-EMP-OP", name="Test bosqich", measure_unit="piece")
+        machine = Machine.objects.create(machine_id="M-TEST-EMP", name="Test stanok", operation=operation, tsex=tsex)
         create = self.client.post(
             "/api/employees/",
-            {"username": "yangi-xodim", "phone": "+998901112402", "role": Role.OPERATOR, "password": "secret-pass"},
+            {
+                "username": "yangi-xodim", "phone": "+998901112402", "role": Role.OPERATOR, "password": "secret-pass",
+                "department": tsex.id, "assigned_machines": [machine.id],
+            },
             format="json",
         )
         self.assertEqual(create.status_code, 201, create.data)
@@ -329,28 +335,162 @@ class SuperAdminFullAccessTests(APITestCase):
         operation = Operation.objects.create(code="TEST-OP", name="Test bosqich", measure_unit="piece")
         tsex = Tsex.objects.create(name="Tsex")
 
-        ws_create = self.client.post(
-            "/api/workstations/",
-            {"tsex": tsex.id, "operation": operation.id, "name": "Post-1"},
-            format="json",
-        )
-        self.assertEqual(ws_create.status_code, 201, ws_create.data)
-        workstation_id = ws_create.data["id"]
-
-        ws_update = self.client.patch(f"/api/workstations/{workstation_id}/", {"status": "maintenance"}, format="json")
-        self.assertEqual(ws_update.status_code, 200, ws_update.data)
-
         machine_create = self.client.post(
             "/api/machines/",
-            {"machine_id": "M-1", "name": "Stanok", "operation": operation.id, "workstation": workstation_id},
+            {"machine_id": "M-1", "name": "Stanok", "operation": operation.id, "tsex": tsex.id},
             format="json",
         )
         self.assertEqual(machine_create.status_code, 201, machine_create.data)
         machine_id = machine_create.data["id"]
 
+        machine_update = self.client.patch(f"/api/machines/{machine_id}/", {"status": "maintenance"}, format="json")
+        self.assertEqual(machine_update.status_code, 200, machine_update.data)
+
         machine_delete = self.client.delete(f"/api/machines/{machine_id}/")
         self.assertEqual(machine_delete.status_code, 204)
+        self.assertFalse(Machine.objects.filter(id=machine_id).exists())
 
-        ws_delete = self.client.delete(f"/api/workstations/{workstation_id}/")
-        self.assertEqual(ws_delete.status_code, 204)
-        self.assertFalse(Workstation.objects.filter(id=workstation_id).exists())
+
+class OperatorDepartmentMachineValidationTests(APITestCase):
+    """Business rules for the new department/machine assignment on Operator / Usta."""
+
+    def setUp(self):
+        self.admin = User.objects.create_user(
+            username="dept-admin", phone="+998901112701", password="secret-pass", role=Role.ADMIN,
+        )
+        self.tsex_a = Tsex.objects.create(name="Bo'lim A")
+        self.tsex_b = Tsex.objects.create(name="Bo'lim B")
+        self.operation = Operation.objects.create(code="DEPT-OP", name="Bosqich", measure_unit="piece")
+        self.machine_a = Machine.objects.create(
+            machine_id="M-DEPT-A", name="Stanok A", operation=self.operation, tsex=self.tsex_a,
+        )
+        self.machine_b = Machine.objects.create(
+            machine_id="M-DEPT-B", name="Stanok B", operation=self.operation, tsex=self.tsex_b,
+        )
+        self.client.force_authenticate(user=self.admin)
+
+    def _create_operator(self, **overrides):
+        payload = {
+            "username": "dept-operator", "phone": "+998901112702", "role": Role.OPERATOR,
+            "password": "secret-pass",
+        }
+        payload.update(overrides)
+        return self.client.post("/api/employees/", payload, format="json")
+
+    def test_operator_without_department_is_rejected(self):
+        response = self._create_operator(assigned_machines=[self.machine_a.id])
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("department", response.data)
+
+    def test_operator_without_machine_is_rejected(self):
+        response = self._create_operator(department=self.tsex_a.id)
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("assigned_machines", response.data)
+
+    def test_operator_machine_from_other_department_is_rejected(self):
+        response = self._create_operator(department=self.tsex_a.id, assigned_machines=[self.machine_b.id])
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("assigned_machines", response.data)
+
+    def test_operator_with_valid_department_and_machine_succeeds(self):
+        response = self._create_operator(department=self.tsex_a.id, assigned_machines=[self.machine_a.id])
+        self.assertEqual(response.status_code, 201, response.data)
+        employee = User.objects.get(id=response.data["id"])
+        self.assertEqual(employee.department_id, self.tsex_a.id)
+        self.assertEqual(employee.assigned_operation_id, self.operation.id)
+
+    def test_manager_department_is_optional(self):
+        response = self.client.post(
+            "/api/employees/",
+            {
+                "username": "dept-manager", "phone": "+998901112703", "role": Role.MANAGER,
+                "password": "secret-pass",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+
+
+class ManagementRolePermissionScopeTests(APITestCase):
+    """Rahbar is read-only over employees; Ishlab chiqarish menejeri may only
+    assign department/machines, never edit any other employee field."""
+
+    def setUp(self):
+        self.tsex = Tsex.objects.create(name="Bo'lim")
+        self.operation = Operation.objects.create(code="SCOPE-OP", name="Bosqich", measure_unit="piece")
+        self.machine = Machine.objects.create(
+            machine_id="M-SCOPE", name="Stanok", operation=self.operation, tsex=self.tsex,
+        )
+        self.director = User.objects.create_user(
+            username="scope-director", phone="+998901112801", password="secret-pass", role=Role.DIRECTOR,
+        )
+        self.manager = User.objects.create_user(
+            username="scope-manager", phone="+998901112802", password="secret-pass", role=Role.MANAGER,
+        )
+        self.operator = User.objects.create_user(
+            username="scope-operator", phone="+998901112803", password="secret-pass", role=Role.OPERATOR,
+        )
+
+    def test_director_can_list_employees(self):
+        self.client.force_authenticate(user=self.director)
+        response = self.client.get("/api/employees/")
+        self.assertEqual(response.status_code, 200, response.data)
+
+    def test_director_cannot_create_employee(self):
+        self.client.force_authenticate(user=self.director)
+        response = self.client.post(
+            "/api/employees/",
+            {"username": "blocked", "phone": "+998901112804", "role": Role.WAREHOUSE, "password": "secret-pass"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_director_cannot_edit_employee(self):
+        self.client.force_authenticate(user=self.director)
+        response = self.client.patch(
+            f"/api/employees/{self.operator.id}/", {"first_name": "Changed"}, format="json"
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_manager_can_assign_department_and_machines(self):
+        self.client.force_authenticate(user=self.manager)
+        response = self.client.patch(
+            f"/api/employees/{self.operator.id}/",
+            {"department": self.tsex.id, "assigned_machines": [self.machine.id]},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.operator.refresh_from_db()
+        self.assertEqual(self.operator.department_id, self.tsex.id)
+
+    def test_manager_cannot_edit_other_fields(self):
+        self.client.force_authenticate(user=self.manager)
+        response = self.client.patch(
+            f"/api/employees/{self.operator.id}/", {"first_name": "Changed"}, format="json"
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_manager_cannot_create_employee(self):
+        self.client.force_authenticate(user=self.manager)
+        response = self.client.post(
+            "/api/employees/",
+            {"username": "blocked2", "phone": "+998901112805", "role": Role.WAREHOUSE, "password": "secret-pass"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 403)
+
+
+class LegacyRoleMigrationTests(APITestCase):
+    """Guards the accounts.0012 data migration's remap logic directly against
+    the model layer, independent of whether the migration already ran on this
+    test database (Django applies all migrations before the test run)."""
+
+    def test_no_legacy_role_values_remain(self):
+        legacy_values = {"master", "technologist", "packaging", "sysadmin"}
+        self.assertFalse(User.objects.filter(role__in=legacy_values).exists())
+
+    def test_role_choices_are_exactly_six(self):
+        self.assertEqual(
+            set(dict(Role.choices).keys()),
+            {"super_admin", "admin", "director", "manager", "operator", "warehouse"},
+        )

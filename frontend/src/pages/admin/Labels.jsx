@@ -59,7 +59,7 @@ export default function Labels() {
         <CardBody data-tutorial="labels-search-card" className="flex flex-wrap items-end gap-3">
           <Field label="Buyurtma raqami yoki detal kodi/nomi" className="w-full sm:w-auto">
             <div className="relative w-full sm:w-72">
-              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--ink-soft)]" />
+              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-(--ink-soft)" />
               <Input className="pl-8" value={search} onChange={(e) => setSearch(e.target.value)} onKeyDown={(e) => e.key === "Enter" && find()} />
             </div>
           </Field>

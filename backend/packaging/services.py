@@ -6,7 +6,7 @@ from orders.production_workflow import ProductionWorkflowError, complete_current
 
 from .models import Package, PackageItem
 
-QADOQLASH_CODE = "QADOQLASH"
+OMBOR_CODE = "OMBOR"
 
 
 def packaging_scan(package: Package, qr_token: str, employee):
@@ -20,7 +20,7 @@ def packaging_scan(package: Package, qr_token: str, employee):
     if PackageItem.objects.filter(package=package, part=part).exists():
         return {"status": "error", "error_code": "duplicate", "message": "Bu detal qadoqlashda avval skanerlangan"}
 
-    route_step = part.routes.filter(operation__code=QADOQLASH_CODE).first()
+    route_step = part.routes.filter(operation__code=OMBOR_CODE).first()
     if route_step:
         unfinished_previous = part.routes.filter(
             sequence_index__lt=route_step.sequence_index
@@ -59,10 +59,48 @@ def packaging_scan(package: Package, qr_token: str, employee):
 
 
 def required_parts_qs(order):
-    return Part.objects.filter(order=order, routes__operation__code=QADOQLASH_CODE).distinct()
+    return Part.objects.filter(order=order, routes__operation__code=OMBOR_CODE).distinct()
 
 
 def missing_parts_count(package: Package):
     required = set(required_parts_qs(package.order).values_list("id", flat=True))
     scanned = set(package.items.values_list("part_id", flat=True))
     return len(required - scanned)
+
+
+def sync_order_into_warehouse(order, employee=None):
+    """Make sure the order has exactly one `warehouse` Package once its OMBOR
+    stage finishes, whichever path finished it (QR scan, "Bosqichni
+    yakunlash", or any other caller of `complete_current_stage`).
+
+    The whole-order "finish the stage" fast path never runs the packaging
+    terminal flow, so it never creates a Package on its own — without this,
+    an order can sail through OMBOR on the production board and simply never
+    appear on the Tayyor ombor screen, which is the bug this closes.
+    """
+    package = (
+        Package.objects.select_for_update()
+        .filter(order=order, status__in=[Package.Status.OPEN, Package.Status.COMPLETED, Package.Status.WAREHOUSE])
+        .order_by("created_at")
+        .first()
+    )
+    if package is None:
+        package = Package.objects.create(
+            order=order, created_by=employee, status=Package.Status.WAREHOUSE, completed_at=timezone.now(),
+        )
+        PackageItem.objects.bulk_create(
+            PackageItem(package=package, part=part, scanned_by=employee)
+            for part in required_parts_qs(order)
+        )
+    elif package.status != Package.Status.WAREHOUSE:
+        package.status = Package.Status.WAREHOUSE
+        if not package.completed_at:
+            package.completed_at = timezone.now()
+        package.save(update_fields=["status", "completed_at"])
+
+    if order.status != Order.Status.DELIVERED:
+        order.status = Order.Status.WAREHOUSE
+        order.save(update_fields=["status", "updated_at"])
+
+    push_live_log("warehouse", f"Buyurtma tayyor omborga tushdi: #{order.order_no} -> {package.package_no}")
+    return package

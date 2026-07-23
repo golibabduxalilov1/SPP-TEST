@@ -57,14 +57,14 @@ function OutputStatCard({ output }) {
         <Boxes size={22} />
       </div>
       <div className="min-w-0 flex-1">
-        <p className="text-sm font-medium text-[var(--ink-soft)]">Jami ishlab chiqarish</p>
+        <p className="text-sm font-medium text-(--ink-soft)">Jami ishlab chiqarish</p>
         <div className="mt-1.5 flex flex-wrap gap-2">
           {OUTPUT_UNITS.map(({ key, label }) => (
-            <span key={key} className="inline-flex items-baseline gap-1 rounded-xl border border-[var(--border-strong)] bg-[var(--surface)] px-2.5 py-1">
-              <span className="font-display text-lg font-semibold text-[var(--ink)]">
+            <span key={key} className="inline-flex items-baseline gap-1 rounded-xl border border-(--border-strong) bg-(--surface) px-2.5 py-1">
+              <span className="font-display text-lg font-semibold text-(--ink)">
                 {Number(output[key] ?? 0).toLocaleString(undefined, { maximumFractionDigits: 1 })}
               </span>
-              <span className="text-[10px] font-semibold uppercase text-[var(--ink-soft)]">{label}</span>
+              <span className="text-[10px] font-semibold uppercase text-(--ink-soft)">{label}</span>
             </span>
           ))}
         </div>
@@ -135,7 +135,7 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
-      <section className="grain relative overflow-hidden rounded-3xl border border-[var(--border)] elevation-md">
+      <section className="grain relative overflow-hidden rounded-3xl border border-(--border) elevation-md">
         <Hero3D variant="light" className="opacity-80" />
         <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(105deg,rgba(255,255,255,0.72),rgba(255,255,255,0.25)_55%,transparent)]" />
         <div className="relative z-10 px-6 py-8 sm:px-8 sm:py-10">

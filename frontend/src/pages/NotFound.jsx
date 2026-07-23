@@ -5,7 +5,7 @@ import Button from "../components/ui/Button";
 
 export default function NotFound() {
   return (
-    <div className="relative flex min-h-dvh flex-col items-center justify-center overflow-hidden px-4 text-[var(--ink-soft)]">
+    <div className="relative flex min-h-dvh flex-col items-center justify-center overflow-hidden px-4 text-(--ink-soft)">
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0"
@@ -21,8 +21,8 @@ export default function NotFound() {
         className="glass-panel relative rounded-3xl px-6 py-8 text-center elevation-lg sm:px-10 sm:py-9"
       >
         <p className="page-title text-6xl font-bold leading-none text-gradient sm:text-7xl">404</p>
-        <p className="mb-6 mt-3 text-[var(--ink-soft)]">Sahifa topilmadi</p>
-        <Button as={Link} to="/" magnetic={false} className="!text-white">
+        <p className="mb-6 mt-3 text-(--ink-soft)">Sahifa topilmadi</p>
+        <Button as={Link} to="/" magnetic={false} className="text-white!">
           <ArrowLeft size={16} /> Bosh sahifaga qaytish
         </Button>
       </motion.div>
