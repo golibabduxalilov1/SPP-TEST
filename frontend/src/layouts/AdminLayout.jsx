@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { NavLink, Outlet, useNavigate, useLocation } from "react-router-dom";
 import {
   LayoutDashboard, ClipboardList, Table2, Factory, Users, AlertTriangle,
   Warehouse, BarChart3, LogOut, Tags, Hexagon, Menu, X, BookOpen,
+  ChevronDown, Wrench, ListTree,
 } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useAuthStore } from "../store/authStore";
@@ -14,20 +15,38 @@ import HelpButton from "../tutorial/HelpButton";
 
 const NAV = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard, end: true },
-  { to: "/orders", label: "Buyurtmalar", icon: ClipboardList },
-  { to: "/customers", label: "Mijozlar", icon: Users },
   { to: "/tablo", label: "Ishlab chiqarish tablosi", icon: Table2 },
+  { to: "/orders", label: "Buyurtmalar", icon: ClipboardList },
+  { to: "/reports", label: "Hisobotlar", icon: BarChart3 },
+  { to: "/customers", label: "Mijozlar", icon: Users },
   { to: "/labels", label: "QR / Birka", icon: Tags },
-  { to: "/machines", label: "Tsex va stanoklar", icon: Factory },
-  { to: "/references", label: "Справочники", icon: BookOpen, roles: ["super_admin", "admin"] },
+  {
+    label: "Ma'lumotnomalar",
+    icon: BookOpen,
+    children: [
+      { to: "/references", tab: "product-types", isDefaultTab: true, label: "Mahsulot turlari", icon: Tags, roles: ["super_admin", "admin"] },
+      { to: "/references", tab: "production-stages", label: "Ishlab chiqarish bosqichlari", icon: ListTree, roles: ["super_admin", "admin"] },
+      { to: "/machines", tab: "tsexes", isDefaultTab: true, label: "Tsexlar", icon: Factory },
+      { to: "/machines", tab: "machines", label: "Stanoklar", icon: Wrench },
+    ],
+  },
   { to: "/employees", label: "Xodimlar", icon: Users },
   { to: "/conflicts", label: "Konfliktlar", icon: AlertTriangle, roles: ["super_admin", "director", "manager", "master"] },
   { to: "/warehouse", label: "Tayyor ombor", icon: Warehouse, extra: "Qadoqlash" },
-  { to: "/reports", label: "Hisobotlar", icon: BarChart3 },
 ];
 
 function initials(user) {
   return `${user?.first_name?.[0] || ""}${user?.last_name?.[0] || ""}`.toUpperCase() || "U";
+}
+
+function canSee(item, user) {
+  return !item.roles || user?.is_superuser || user?.role === "super_admin" || item.roles.includes(user?.role);
+}
+
+function isChildActive(location, child) {
+  if (location.pathname !== child.to) return false;
+  const tabParam = new URLSearchParams(location.search).get("tab");
+  return tabParam ? tabParam === child.tab : Boolean(child.isDefaultTab);
 }
 
 function MobileMenuIcon({ open }) {
@@ -50,7 +69,20 @@ function MobileMenuIcon({ open }) {
 export default function AdminLayout() {
   const { user, logout } = useAuthStore();
   const navigate = useNavigate();
+  const location = useLocation();
   const [navOpen, setNavOpen] = useState(false);
+  const [openGroups, setOpenGroups] = useState(() =>
+    new Set(
+      NAV.filter((item) => item.children?.some((child) => child.to === location.pathname)).map((item) => item.label)
+    )
+  );
+
+  useEffect(() => {
+    const activeGroup = NAV.find((item) => item.children?.some((child) => child.to === location.pathname));
+    if (activeGroup) {
+      setOpenGroups((prev) => (prev.has(activeGroup.label) ? prev : new Set(prev).add(activeGroup.label)));
+    }
+  }, [location.pathname]);
 
   useEffect(() => {
     if (!navOpen) return undefined;
@@ -135,37 +167,97 @@ export default function AdminLayout() {
           </div>
 
           <nav className="flex flex-1 flex-col gap-1 overflow-x-hidden overflow-y-auto px-3 py-3">
-            {NAV.filter((item) => !item.roles || user?.is_superuser || user?.role === "super_admin" || item.roles.includes(user?.role)).map(({ to, label, icon: Icon, end }) => (
-              <NavLink
-                key={to}
-                to={to}
-                end={end}
-                onClick={() => setNavOpen(false)}
-                className={({ isActive }) =>
-                  clsx(
-                    "focus-ring group relative flex shrink-0 items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors duration-300",
-                    "min-h-11 w-full",
-                    isActive ? "text-white!" : "text-white/80! hover:text-white!"
-                  )
-                }
-              >
-                {({ isActive }) => (
-                  <>
-                    {isActive && (
-                      <motion.span
-                        layoutId="nav-active-pill"
-                        transition={{ type: "spring", stiffness: 380, damping: 32 }}
-                        className="absolute inset-0 z-0 rounded-xl bg-[linear-gradient(120deg,var(--accent),var(--accent-bright))] shadow-(--shadow-accent)"
-                      />
-                    )}
-                    <span className="relative z-10 flex items-center gap-3">
+            {NAV.filter((item) => canSee(item, user)).map((item) => {
+              if (item.children) {
+                const visibleChildren = item.children.filter((child) => canSee(child, user));
+                if (visibleChildren.length === 0) return null;
+                const Icon = item.icon;
+                const isOpen = openGroups.has(item.label);
+                const isGroupActive = visibleChildren.some((child) => child.to === location.pathname);
+                return (
+                  <div key={item.label} className="flex flex-col">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setOpenGroups((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(item.label)) next.delete(item.label);
+                          else next.add(item.label);
+                          return next;
+                        })
+                      }
+                      aria-expanded={isOpen}
+                      className={clsx(
+                        "focus-ring group flex min-h-11 w-full shrink-0 items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors duration-300",
+                        isGroupActive ? "text-white!" : "text-white/80! hover:text-white!"
+                      )}
+                    >
                       <Icon size={18} className="shrink-0" />
-                      <span className="whitespace-nowrap">{label}</span>
-                    </span>
-                  </>
-                )}
-              </NavLink>
-            ))}
+                      <span className="flex-1 whitespace-nowrap text-left">{item.label}</span>
+                      <ChevronDown
+                        size={16}
+                        className={clsx("shrink-0 transition-transform duration-300", isOpen && "rotate-180")}
+                      />
+                    </button>
+                    {isOpen && (
+                      <div className="mt-1 flex flex-col gap-1 pl-4">
+                        {visibleChildren.map((child) => {
+                          const ChildIcon = child.icon;
+                          const active = isChildActive(location, child);
+                          return (
+                            <NavLink
+                              key={`${child.to}-${child.tab}`}
+                              to={{ pathname: child.to, search: `?tab=${child.tab}` }}
+                              onClick={() => setNavOpen(false)}
+                              className={clsx(
+                                "focus-ring flex min-h-10 w-full shrink-0 items-center gap-3 rounded-lg px-4 py-2 text-sm font-medium transition-colors duration-300",
+                                active ? "bg-white/12! text-white!" : "text-white/65! hover:bg-white/8! hover:text-white!"
+                              )}
+                            >
+                              <ChildIcon size={16} className="shrink-0" />
+                              <span className="whitespace-nowrap">{child.label}</span>
+                            </NavLink>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              }
+
+              const { to, label, icon: Icon, end } = item;
+              return (
+                <NavLink
+                  key={to}
+                  to={to}
+                  end={end}
+                  onClick={() => setNavOpen(false)}
+                  className={({ isActive }) =>
+                    clsx(
+                      "focus-ring group relative flex shrink-0 items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors duration-300",
+                      "min-h-11 w-full",
+                      isActive ? "text-white!" : "text-white/80! hover:text-white!"
+                    )
+                  }
+                >
+                  {({ isActive }) => (
+                    <>
+                      {isActive && (
+                        <motion.span
+                          layoutId="nav-active-pill"
+                          transition={{ type: "spring", stiffness: 380, damping: 32 }}
+                          className="absolute inset-0 z-0 rounded-xl bg-[linear-gradient(120deg,var(--accent),var(--accent-bright))] shadow-(--shadow-accent)"
+                        />
+                      )}
+                      <span className="relative z-10 flex items-center gap-3">
+                        <Icon size={18} className="shrink-0" />
+                        <span className="whitespace-nowrap">{label}</span>
+                      </span>
+                    </>
+                  )}
+                </NavLink>
+              );
+            })}
           </nav>
 
           <div className="border-t border-white/8 p-3">

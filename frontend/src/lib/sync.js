@@ -4,18 +4,19 @@ import {
   addSyncHistory, countPendingScans, getPendingScans, removePendingScan, setMeta,
 } from "./db";
 
-async function syncRouteScans(routeScans, { workstationId, employeeId }) {
+async function syncRouteScans(routeScans, { operationId, employeeId }) {
   if (routeScans.length === 0) return { accepted: 0, conflict: 0, failed: 0 };
   const clientBatchId = `batch-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const { data } = await terminalApi.post("/terminal/sync", {
     device_id: getDeviceId(),
-    workstation_id: workstationId,
+    operation_id: operationId,
     employee_id: employeeId,
     client_batch_id: clientBatchId,
     scans: routeScans.map((s) => ({
       client_scan_id: s.client_scan_id,
       qr_token: s.qr_token,
       operation_code: s.operation_code,
+      machine_id: s.machine_id,
       scanned_at_client: s.scanned_at_client,
     })),
   });
@@ -57,7 +58,7 @@ async function syncWarehouseScans(scans) {
   return { accepted, conflict, failed };
 }
 
-export async function runSync({ workstationId, employeeId }) {
+export async function runSync({ operationId, employeeId }) {
   const all = await getPendingScans();
   if (all.length === 0) {
     return { accepted: 0, conflict: 0, failed: 0, skipped: true };
@@ -69,7 +70,7 @@ export async function runSync({ workstationId, employeeId }) {
 
   try {
     const [routeResult, packagingResult, warehouseResult] = await Promise.all([
-      syncRouteScans(routeScans, { workstationId, employeeId }),
+      syncRouteScans(routeScans, { operationId, employeeId }),
       syncPackagingScans(packagingScans),
       syncWarehouseScans(warehouseScans),
     ]);

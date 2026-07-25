@@ -10,18 +10,29 @@ import Button from "../../components/ui/Button";
 import PageHeader from "../../components/ui/PageHeader";
 import { Input, Select } from "../../components/ui/Input";
 import { PageLoader } from "../../components/ui/Misc";
-import Badge, { StatusBadge } from "../../components/ui/Badge";
+import Badge from "../../components/ui/Badge";
 import Modal from "../../components/ui/Modal";
 import EditOrderModal from "../../components/admin/EditOrderModal";
 import { format } from "date-fns";
 import { useTutorial } from "../../tutorial/TutorialContext";
 import { ordersSteps } from "../../tutorial/content/orders";
 
-const STATUS_LABELS = {
-  draft: "Yangi", approved: "Tasdiqlangan", in_production: "Jarayonda", partially_ready: "Qisman tayyor",
-  ready_for_packaging: "Qadoqlashga tayyor", packaging: "Qadoqlanmoqda", warehouse: "Omborda",
-  completed: "Tugallangan", delivered: "Topshirildi", cancelled: "Bekor qilingan",
-};
+const LIFECYCLE_STATUS_TONES = { draft: "blue", approved: "blue", delivered: "green", cancelled: "red" };
+const STAGE_STATUS_TONE = "yellow";
+
+function orderStatusTone(displayStatus) {
+  if (!displayStatus || !displayStatus.value) return "gray";
+  return LIFECYCLE_STATUS_TONES[displayStatus.value] || STAGE_STATUS_TONE;
+}
+
+// Status filter values are namespaced so lifecycle statuses and dynamic
+// production stages can share one dropdown/query param without colliding.
+function parseStatusFilter(value) {
+  if (!value) return {};
+  if (value.startsWith("status:")) return { status: value.slice("status:".length) };
+  if (value.startsWith("stage:")) return { production_stage: value.slice("stage:".length) };
+  return {};
+}
 
 const PRIORITY_LABELS = { low: "Past", normal: "Oddiy", high: "Yuqori", urgent: "Shoshilinch" };
 const PRIORITY_TONES = { low: "gray", normal: "blue", high: "orange", urgent: "red" };
@@ -30,7 +41,8 @@ export default function Orders() {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [status, setStatus] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [operations, setOperations] = useState([]);
   const [exportOpen, setExportOpen] = useState(false);
   const [deletingOrder, setDeletingOrder] = useState(null);
   const [editingOrder, setEditingOrder] = useState(null);
@@ -41,9 +53,18 @@ export default function Orders() {
 
   useEffect(() => registerAndAutoStart("orders", ordersSteps), [registerAndAutoStart]);
 
+  useEffect(() => {
+    adminApi.get("/operations/", { params: { is_active: true } }).then(({ data }) => {
+      setOperations(data.results || data);
+    });
+  }, []);
+
   async function load() {
     setLoading(true);
-    const { data } = await adminApi.get("/orders/", { params: { search: search || undefined, status: status || undefined } });
+    const { status, production_stage } = parseStatusFilter(statusFilter);
+    const { data } = await adminApi.get("/orders/", {
+      params: { search: search || undefined, status, production_stage },
+    });
     setOrders(data.results || data);
     setLoading(false);
   }
@@ -65,7 +86,7 @@ export default function Orders() {
     const t = setTimeout(load, 300);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search, status]);
+  }, [search, statusFilter]);
 
   return (
     <div className="space-y-6">
@@ -94,11 +115,20 @@ export default function Orders() {
                 <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-(--ink-soft)" />
                 <Input className="pl-8 w-full sm:w-56" placeholder="Qidirish..." value={search} onChange={(e) => setSearch(e.target.value)} />
               </div>
-              <Select containerClassName="w-full sm:w-auto" className="w-full sm:w-44" value={status} onChange={(e) => setStatus(e.target.value)}>
+              <Select
+                containerClassName="w-full sm:w-auto"
+                className="w-full sm:w-44"
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+              >
                 <option value="">Barcha statuslar</option>
-                {Object.entries(STATUS_LABELS).map(([k, v]) => (
-                  <option key={k} value={k}>{v}</option>
+                <option value="status:draft">Yangi</option>
+                <option value="status:approved">Tasdiqlangan</option>
+                {operations.map((op) => (
+                  <option key={op.id} value={`stage:${op.id}`}>{op.name}</option>
                 ))}
+                <option value="status:delivered">Topshirildi</option>
+                <option value="status:cancelled">Bekor qilingan</option>
               </Select>
             </div>
           }
@@ -136,7 +166,9 @@ export default function Orders() {
                       {o.parts_completed}/{o.parts_total}
                     </Td>
                     <Td>
-                      <StatusBadge status={o.status} labels={STATUS_LABELS} />
+                      <Badge tone={orderStatusTone(o.display_status)} dot>
+                        {o.display_status?.label ?? "—"}
+                      </Badge>
                     </Td>
                     <Td>
                       <div className="ml-auto flex w-fit items-center gap-1.5">
@@ -201,7 +233,7 @@ export default function Orders() {
         </CardBody>
       </Card>
 
-      <ExportModal open={exportOpen} onClose={() => setExportOpen(false)} search={search} status={status} />
+      <ExportModal open={exportOpen} onClose={() => setExportOpen(false)} search={search} statusFilter={statusFilter} />
       <DeleteOrderModal order={deletingOrder} onClose={() => setDeletingOrder(null)} onDeleted={load} />
       <EditOrderModal
         open={Boolean(editingOrder)}
@@ -244,14 +276,15 @@ function DeleteOrderModal({ order, onClose, onDeleted }) {
   );
 }
 
-function ExportModal({ open, onClose, search, status }) {
+function ExportModal({ open, onClose, search, statusFilter }) {
   const [downloading, setDownloading] = useState(null);
 
   async function download(fmt) {
     setDownloading(fmt);
     try {
+      const { status, production_stage } = parseStatusFilter(statusFilter);
       const response = await adminApi.get("/orders/export/", {
-        params: { file_type: fmt, search: search || undefined, status: status || undefined },
+        params: { file_type: fmt, search: search || undefined, status, production_stage },
         responseType: "blob",
       });
       const url = URL.createObjectURL(new Blob([response.data]));

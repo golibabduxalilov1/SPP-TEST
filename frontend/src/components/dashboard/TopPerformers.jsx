@@ -46,7 +46,7 @@ export default function TopPerformers({ rows }) {
                 <Th>O'rin</Th>
                 <Th>Xodim</Th>
                 <Th>Ishlab chiqarish</Th>
-                <Th>Stanoklar</Th>
+                <Th>Dastgohlar</Th>
                 <Th>Samaradorlik</Th>
               </tr>
             </Thead>
@@ -72,7 +72,7 @@ export default function TopPerformers({ rows }) {
                       <span className="text-xs text-(--ink-soft)">dona</span>
                     </Td>
                     <Td>
-                      <Badge tone="gray">{row.machines} ta stanok</Badge>
+                      <Badge tone="gray">{row.machines} ta dastgoh</Badge>
                     </Td>
                     <Td>
                       <div className="flex min-w-30 items-center gap-2">

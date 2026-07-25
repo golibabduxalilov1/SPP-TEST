@@ -1,6 +1,8 @@
 from decimal import Decimal
 
 from manufacturing.models import Operation
+from manufacturing.units import MEASURE_UNIT_LABELS
+from manufacturing.units import stage_value as _stage_value_for_unit
 from orders.models import Order, OrderStageProgress, PartRoute
 
 
@@ -68,27 +70,39 @@ def _detail_totals(order, operation=None):
     return _sum_contributions(items, part_contribution, operation)
 
 
+def _package_count(order):
+    """"Existing packages" for a package-measured stage (e.g. Tayyor ombor).
+    A Package isn't tied to individual OrderDetails/Parts the way area/edge/
+    quantity are, so this is order-level rather than a per-detail sum —
+    normally 0 until the order's OMBOR stage finishes and
+    packaging.services.sync_order_into_warehouse creates its Package, then 1.
+    Reads `.packages.all()` (not `.count()`) so it can be answered from the
+    `packages` prefetch in build_production_table instead of a query per row."""
+    return Decimal(len(order.packages.all()))
+
+
 def _stage_value(totals, operation, mode, status):
-    quantity, area, _edge = totals
+    quantity, area, edge, package_count = totals
     if mode == "foiz":
         return 100 if status == "completed" else 0
     if mode == "soni":
         return quantity
-    # mode == "hajm": every stage is measured in m2 of material area, since
-    # that's what the board is meant to answer ("how much still needs
-    # cutting/edging/assembling") — except PRISADKA (drilling), which is
-    # inherently per-piece and has no m2 meaning. This is independent of
-    # Operation.measure_unit, which stays authoritative for dashboard/machine
-    # capacity math elsewhere.
-    if operation.code == "PRISADKA":
-        return quantity
-    return round(float(area), 2)
+    # mode == "hajm": which figure represents this stage's output is decided
+    # purely by the stage's own measure_unit, never by its code or name, so
+    # a user-created stage behaves correctly with no code changes.
+    value = _stage_value_for_unit(
+        operation.measure_unit, quantity=quantity, area=area, edge=edge, package_count=package_count,
+    )
+    if operation.measure_unit in ("m2", "meter"):
+        return round(float(value), 2)
+    return value
 
 
 def _cells(order, operations):
     progress_by_stage = {item.stage_id: item.status for item in order.stage_progress.all()}
     workflow_started = order.stage_status != Order.StageStatus.NOT_STARTED or bool(progress_by_stage)
     totals = _detail_totals(order)
+    package_count = _package_count(order)
     cells = {}
 
     has_parts = order.parts.exists()
@@ -121,7 +135,7 @@ def _cells(order, operations):
 
         cells[operation.code] = {
             "status": status,
-            "value": None if status == "not_required" else cell_totals,
+            "value": None if status == "not_required" else (*cell_totals, package_count),
         }
     return cells
 
@@ -134,7 +148,7 @@ def build_production_table(mode="hajm"):
     orders = (
         Order.objects.filter(status__in=TABLO_STATUSES)
         .select_related("current_stage")
-        .prefetch_related("details__part__routes", "parts__routes", "stage_progress")
+        .prefetch_related("details__part__routes", "parts__routes", "stage_progress", "packages")
         .order_by("priority", "deadline", "id")
     )
 
@@ -163,7 +177,12 @@ def build_production_table(mode="hajm"):
     return {
         "mode": mode,
         "operations": [
-            {"code": operation.code, "name": operation.name, "measure_unit": operation.measure_unit}
+            {
+                "code": operation.code,
+                "name": operation.name,
+                "measure_unit": operation.measure_unit,
+                "unit_label": MEASURE_UNIT_LABELS.get(operation.measure_unit, operation.measure_unit),
+            }
             for operation in operations
         ],
         "rows": rows,

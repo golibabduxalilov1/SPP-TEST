@@ -13,10 +13,10 @@ const IDLE_EVENTS = ["pointerdown", "keydown", "touchstart"];
 
 // Roles that may open /terminal/order-status — mirrors accounts.permissions.CanScanOrderStatus
 // on the backend, restricted here to the roles that actually log into the terminal.
-const ORDER_STATUS_ROLES = ["master", "packaging", "warehouse"];
+const ORDER_STATUS_ROLES = ["operator", "warehouse", "manager"];
 
 export default function TerminalLayout() {
-  const { employee, workstation, ready, online, pendingCount, lastSyncAt, init, logout, sync, refreshPendingCount } = useTerminalStore();
+  const { employee, stage, machine, ready, online, pendingCount, lastSyncAt, init, logout, sync, refreshPendingCount } = useTerminalStore();
   const navigate = useNavigate();
   const [syncing, setSyncing] = useState(false);
 
@@ -80,7 +80,9 @@ export default function TerminalLayout() {
     <div className="min-h-screen bg-(--canvas) flex flex-col">
       <header className="brand-shell flex flex-wrap items-center justify-between gap-3 border-b border-white/8 px-4 py-3 text-white elevation-lg sm:px-6">
         <div className="min-w-0">
-          <p className="truncate font-display text-sm font-semibold tracking-wide">{workstation?.name || "Post"}</p>
+          <p className="truncate font-display text-sm font-semibold tracking-wide">
+            {stage?.name || "Bosqich"}{machine ? ` · ${machine.name}` : ""}
+          </p>
           <p className="truncate text-xs text-white/50">{employee.first_name} {employee.last_name} — {employee.role_display}</p>
         </div>
         <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:gap-3">

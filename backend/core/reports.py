@@ -1,6 +1,7 @@
 from django.db.models import Avg, Count, DurationField, ExpressionWrapper, F, Q
 
 from manufacturing.models import Machine, Operation
+from manufacturing.units import MEASURE_UNIT_LABELS
 from orders.models import Order, OrderStageProgress
 from packaging.models import Package
 from terminalapp.models import ScanEvent
@@ -39,6 +40,8 @@ def production_report():
             "total": op.total_routes,
             "percent": round((op.completed_routes / op.total_routes) * 100, 1) if op.total_routes else 0,
             "avg_duration_minutes": round(avg_duration.total_seconds() / 60, 1) if avg_duration else None,
+            "measure_unit": op.measure_unit,
+            "unit_label": MEASURE_UNIT_LABELS.get(op.measure_unit, op.measure_unit),
         })
     return result
 

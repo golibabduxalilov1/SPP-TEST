@@ -6,13 +6,26 @@ from rest_framework.test import APITestCase
 
 from accounts.models import Role, User
 from manufacturing.models import Machine, Operation, Tsex
+from orders.constants import DEFAULT_ROUTE_KEY, OPERATION_SEEDS, ROUTE_TEMPLATES
 from orders.models import Order, OrderDetail, PartRoute
-from orders.production_workflow import approve_order
+from orders.production_workflow import approve_order, complete_current_stage
+from packaging.models import Package
 from orders.services import create_part_for_order_detail
 from terminalapp.models import ScanEvent
 from terminalapp.services import process_scan
 
 from .tablo import build_production_table
+
+
+def _ensure_stage_operations_seeded():
+    """Guards against a known pre-existing gap (see project memory
+    project-seed-data-gap): OPERATION_SEEDS in orders/constants.py has no
+    seeding migration, so a fresh test DB has no ARRA/KROMKA/PRISADKA/...
+    rows and route assignment (assign_route/approve_order) silently finds no
+    operations. Keeps these Tablo tests self-sufficient regardless of
+    whether that migration gap has been fixed elsewhere."""
+    for seed in OPERATION_SEEDS:
+        Operation.objects.get_or_create(code=seed["code"], defaults=seed)
 
 
 class ProductionTableStageTests(TestCase):
@@ -34,6 +47,7 @@ class ProductionTableStageTests(TestCase):
         self.assertLess(codes.index(earlier.code), codes.index(later.code))
 
     def test_renamed_stage_is_returned_without_changing_its_code(self):
+        _ensure_stage_operations_seeded()
         operation = Operation.objects.get(code="ARRA")
         operation.name = "Kesish"
         operation.save(update_fields=["name"])
@@ -51,6 +65,7 @@ class ProductionTableRemainingQuantityTests(TestCase):
     should flip to "completed" showing the full original total again."""
 
     def setUp(self):
+        _ensure_stage_operations_seeded()
         self.employee = User.objects.create_user(
             username="tablo-scanner", phone="+998901113601", password="secret-pass", role=Role.OPERATOR,
         )
@@ -91,16 +106,19 @@ class ProductionTableRemainingQuantityTests(TestCase):
         self.assertEqual(row["cells"]["ARRA"]["status"], "completed", "last detail scanned — stage must auto-advance")
         self.assertEqual(row["cells"]["ARRA"]["value"], 1.85, "completed cell must show the full original total")
         self.assertEqual(row["cells"]["KROMKA"]["status"], "in_progress")
-        self.assertEqual(row["cells"]["KROMKA"]["value"], 1.85, "Hajm mode shows m2 for every stage except PRISADKA")
+        # KROMKA is meter-measured: (1000+1000)*2*1/1000 + (1000+850)*2*1/1000 = 4.0 + 3.7 = 7.7m
+        self.assertEqual(row["cells"]["KROMKA"]["value"], 7.7, "meter-measured stage must show edge length, not area")
 
 
 class ProductionTableModeTests(TestCase):
     """Hajm/Soni/Foiz must each apply one consistent rule across every
-    stage, per the board's Tablo mode spec: Hajm = m2 everywhere except
-    PRISADKA (dona, since drilling is inherently per-piece), Soni = dona
-    everywhere, Foiz = unchanged existing 0/100 status logic."""
+    stage, per the board's Tablo mode spec: Hajm shows each stage's own
+    measure_unit figure (m2 -> area, meter -> edge, piece -> quantity,
+    package -> existing package count), Soni = dona everywhere, Foiz =
+    unchanged existing 0/100 status logic."""
 
     def setUp(self):
+        _ensure_stage_operations_seeded()
         self.employee = User.objects.create_user(
             username="tablo-mode-scanner", phone="+998901113602", password="secret-pass", role=Role.OPERATOR,
         )
@@ -115,20 +133,58 @@ class ProductionTableModeTests(TestCase):
         result = build_production_table(mode=mode)
         return next(item for item in result["rows"] if item["order_id"] == self.order.id)
 
-    def test_hajm_mode_shows_area_everywhere_except_prisadka(self):
+    def test_hajm_mode_shows_each_stages_own_unit_figure(self):
+        # Stage set is whatever the order's actual route is, not a hardcoded
+        # list — stays correct even if OPERATION_SEEDS/ROUTE_TEMPLATES change.
+        # Each stage's expected value is driven entirely by its own
+        # measure_unit (m2/meter/piece/package), never by its code.
+        route_codes = ROUTE_TEMPLATES[DEFAULT_ROUTE_KEY]
+        for code in ("ARRA", "KROMKA", "PRISADKA", "OMBOR"):
+            self.assertIn(code, route_codes, f"this test needs {code} in the default route to be meaningful")
+
         row = self._row("hajm")
-        # 1000mm x 500mm x 4 = 2.0 m2
-        self.assertEqual(row["cells"]["ARRA"]["value"], 2.0)
-        self.assertEqual(row["cells"]["KROMKA"]["value"], 2.0)
-        self.assertEqual(row["cells"]["PRISADKA"]["value"], 4)
-        self.assertEqual(row["cells"]["YIGISH"]["value"], 2.0)
+        # 1000mm x 500mm x 4: area = 2.0 m2, edge = (1000+500)*2*4/1000 = 12.0m
+        self.assertEqual(row["cells"]["ARRA"]["value"], 2.0, "m2-measured stage must show area")
+        self.assertEqual(row["cells"]["KROMKA"]["value"], 12.0, "meter-measured stage must show edge length")
+        self.assertEqual(row["cells"]["PRISADKA"]["value"], 4, "piece-measured stage must show quantity")
+        # OMBOR (package-measured): order hasn't reached it yet, so 0 real packages exist.
+        self.assertEqual(row["cells"]["OMBOR"]["value"], 0, "package-measured stage must show existing package count, not area")
+
+    def test_hajm_mode_piece_rule_is_measure_unit_driven(self):
+        # Any user-created stage measured in "piece" gets the dona-instead-
+        # of-m2 treatment, not just the specific code "PRISADKA" — the rule
+        # is driven entirely by Operation.measure_unit.
+        custom_piece_stage = Operation.objects.create(
+            code="CUSTOM_PIECE", name="Maxsus dona bosqich", measure_unit="piece", order_index=4,
+        )
+        custom_area_stage = Operation.objects.create(
+            code="CUSTOM_AREA", name="Maxsus m2 bosqich", measure_unit="m2", order_index=5,
+        )
+        for stage in (custom_piece_stage, custom_area_stage):
+            PartRoute.objects.create(part=self.detail.part, operation=stage, sequence_index=99, status=PartRoute.Status.PENDING)
+
+        row = self._row("hajm")
+        self.assertEqual(row["cells"]["CUSTOM_PIECE"]["value"], 4, "piece-measured stage must show quantity, not area")
+        self.assertEqual(row["cells"]["CUSTOM_AREA"]["value"], 2.0, "m2-measured stage must show area")
+
+    def test_hajm_mode_package_shows_real_package_count_once_ombor_completes(self):
+        # Completing every stage through OMBOR triggers
+        # packaging.services.sync_order_into_warehouse, which creates exactly
+        # one Package for the order — that real count, not a hidden m2/piece
+        # figure, is what a package-measured stage must show.
+        self.assertEqual(Package.objects.filter(order=self.order).count(), 0)
+        for _ in range(len(ROUTE_TEMPLATES[DEFAULT_ROUTE_KEY])):
+            complete_current_stage(self.order.id, completed_by=self.employee)
+
+        self.assertEqual(Package.objects.filter(order=self.order).count(), 1)
+        row = self._row("hajm")
+        self.assertEqual(row["cells"]["OMBOR"]["value"], 1, "package-measured stage must show the real package count")
 
     def test_soni_mode_shows_quantity_everywhere(self):
+        route_codes = ROUTE_TEMPLATES[DEFAULT_ROUTE_KEY]
         row = self._row("soni")
-        self.assertEqual(row["cells"]["ARRA"]["value"], 4)
-        self.assertEqual(row["cells"]["KROMKA"]["value"], 4)
-        self.assertEqual(row["cells"]["PRISADKA"]["value"], 4)
-        self.assertEqual(row["cells"]["YIGISH"]["value"], 4)
+        for code in route_codes:
+            self.assertEqual(row["cells"][code]["value"], 4, f"{code} must show quantity in Soni mode")
 
     def test_foiz_mode_status_logic_is_unchanged(self):
         row = self._row("foiz")
@@ -248,3 +304,55 @@ class DashboardMetricsFromPartRouteTests(APITestCase):
         series_2 = self.client.get(f"/api/dashboard/machines/{second_machine.id}/series", self.window)
         self.assertEqual(series_1.data["period_volume"], 1.0)
         self.assertEqual(series_2.data["period_volume"], 2.0)
+
+
+class DashboardPackageMetricsTests(APITestCase):
+    """Dashboard-wide totals must keep package counts in their own bucket —
+    never folded into "piece" the way they used to be — and a package-
+    measured machine card must reflect the real Package completion count,
+    not a part-scan proxy, when it's the sole machine on its stage."""
+
+    def setUp(self):
+        _ensure_stage_operations_seeded()
+        self.user = User.objects.create_user(
+            username="dash-package-admin", phone="+998901113705", password="secret-pass", role=Role.SUPER_ADMIN,
+        )
+        self.client.force_authenticate(user=self.user)
+        self.ombor = Operation.objects.get(code="OMBOR")
+        tsex = Tsex.objects.create(name="Ombor tsex")
+        self.machine = Machine.objects.create(
+            machine_id="TEST-OMBOR-1", name="Test Ombor", operation=self.ombor, tsex=tsex, capacity_per_hour="5",
+        )
+        self.order = Order.objects.create(product_name="Package dashboard test", created_by=self.user)
+        detail = OrderDetail.objects.create(order=self.order, name="Fasad", quantity=2, length_mm=1000, width_mm=500)
+        create_part_for_order_detail(detail)
+        now = timezone.now()
+        self.window = {"from": (now - timedelta(hours=1)).isoformat(), "to": (now + timedelta(hours=1)).isoformat()}
+
+    def _finish_order(self):
+        approve_order(self.order.id)
+        for _ in range(len(ROUTE_TEMPLATES[DEFAULT_ROUTE_KEY])):
+            complete_current_stage(self.order.id, completed_by=self.user)
+
+    def test_overview_keeps_package_separate_from_piece(self):
+        self._finish_order()
+
+        response = self.client.get("/api/dashboard/overview", self.window)
+
+        self.assertEqual(response.data["output"]["package"], 1.0, "exactly one Package synced for this order")
+        self.assertEqual(response.data["output"]["piece"], 2.0, "PRISADKA's own 2-piece total must stay separate")
+
+    def test_sole_machine_on_package_stage_gets_credited_the_real_package_count(self):
+        self._finish_order()
+
+        response = self.client.get("/api/dashboard/machines", self.window)
+        card = next(m for m in response.data if m["id"] == self.machine.id)
+
+        self.assertEqual(card["unit"], "package")
+        self.assertEqual(card["unit_label"], "qadoq")
+        self.assertEqual(card["period_volume"], 1.0)
+        self.assertEqual(card["period_efficiency"], 10.0, "1 package / (5 qadoq/h * 2h window) * 100")
+
+        series_response = self.client.get(f"/api/dashboard/machines/{self.machine.id}/series", self.window)
+        self.assertEqual(series_response.data["period_volume"], 1.0)
+        self.assertEqual(series_response.data["unit_label"], "qadoq")

@@ -199,6 +199,32 @@ class OrderApiTests(APITestCase):
         self.assertEqual(ids, {active.id, finished.id})
         self.assertNotIn(approved.id, ids)
 
+    def test_delivered_order_display_status_label_is_topshirildi(self):
+        delivered = Order.objects.create(
+            product_name="Delivered", created_by=self.user, status=Order.Status.DELIVERED,
+        )
+
+        response = self.client.get("/api/orders/")
+
+        self.assertEqual(response.status_code, 200, response.data)
+        rows = {row["id"]: row for row in response.data["results"]}
+        self.assertEqual(rows[delivered.id]["display_status"]["label"], "Topshirildi")
+
+    def test_delivered_order_is_excluded_from_production_stage_filter(self):
+        stage = Operation.objects.filter(is_active=True).order_by("order_index", "id").first()
+        delivered = Order.objects.create(
+            product_name="Delivered", created_by=self.user, status=Order.Status.DELIVERED,
+        )
+        OrderStageProgress.objects.create(
+            order=delivered, stage=stage, status=OrderStageProgress.Status.COMPLETED,
+        )
+
+        response = self.client.get("/api/orders/", {"production_stage": stage.id})
+
+        self.assertEqual(response.status_code, 200, response.data)
+        ids = {row["id"] for row in response.data["results"]}
+        self.assertNotIn(delivered.id, ids)
+
     def test_approval_without_active_stage_is_rejected_atomically(self):
         Operation.objects.update(is_active=False)
         order = Order.objects.create(product_name="No stages", created_by=self.user)

@@ -1,5 +1,7 @@
 from django.db import models
 
+from .units import MEASURE_UNIT_CHOICES
+
 
 class Operation(models.Model):
 
@@ -7,12 +9,7 @@ class Operation(models.Model):
     name = models.CharField(max_length=100)
     measure_unit = models.CharField(
         max_length=16,
-        choices=[
-            ("m2", "m²"),
-            ("meter", "metr"),
-            ("piece", "dona"),
-            ("package", "qadoq"),
-        ],
+        choices=MEASURE_UNIT_CHOICES,
     )
     qr_scan_required = models.BooleanField(default=True)
     order_index = models.PositiveSmallIntegerField(default=0)

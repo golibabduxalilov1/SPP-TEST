@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import toast from "react-hot-toast";
 import { adminApi } from "../../api/client";
@@ -10,18 +11,21 @@ import { Field, Input, Select } from "../../components/ui/Input";
 import { PageLoader } from "../../components/ui/Misc";
 import Badge, { StatusBadge } from "../../components/ui/Badge";
 import Modal from "../../components/ui/Modal";
-import SegmentedControl from "../../components/ui/SegmentedControl";
 import { useTutorial } from "../../tutorial/TutorialContext";
 import { machinesSteps } from "../../tutorial/content/machines";
+import { measureUnitLabel } from "../../lib/units";
 
-const WS_STATUS_LABELS = { active: "Ishlayapti", inactive: "Noaktiv", maintenance: "Ta'mirda", stopped: "To'xtagan" };
-const MACHINE_STATUS_LABELS = { active: "active", inactive: "inactive", maintenance: "maintenance", broken: "broken" };
+const MACHINE_STATUS_LABELS = { active: "Faol", inactive: "Nofaol", maintenance: "Ta'mirda", broken: "Buzilgan" };
 
 const TABS = [
   { value: "tsexes", label: "Tsexlar" },
-  { value: "workstations", label: "Postlar" },
-  { value: "machines", label: "Stanoklar" },
+  { value: "machines", label: "Dastgohlar" },
 ];
+
+const TAB_HEADERS = {
+  tsexes: { eyebrow: "Infratuzilma", title: "Tsexlar", subtitle: "Ishlab chiqarish bo'linmalari" },
+  machines: { eyebrow: "Infratuzilma", title: "Stanoklar", subtitle: "Tsexlardagi dastgohlar ro'yxati" },
+};
 
 function getErrorMessage(error) {
   const data = error.response?.data;
@@ -55,18 +59,15 @@ function RowActions({ onEdit, onDelete, editLabel, deleteLabel }) {
 }
 
 export default function Machines() {
-  const [tab, setTab] = useState(TABS[0].value);
+  const [searchParams] = useSearchParams();
+  const [tab, setTab] = useState(() => searchParams.get("tab") || TABS[0].value);
   const [tsexes, setTsexes] = useState([]);
-  const [workstations, setWorkstations] = useState([]);
   const [machines, setMachines] = useState([]);
   const [operations, setOperations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [tsexModalOpen, setTsexModalOpen] = useState(false);
   const [editingTsex, setEditingTsex] = useState(null);
   const [deletingTsex, setDeletingTsex] = useState(null);
-  const [wsModalOpen, setWsModalOpen] = useState(false);
-  const [editingWorkstation, setEditingWorkstation] = useState(null);
-  const [deletingWorkstation, setDeletingWorkstation] = useState(null);
   const [machineModalOpen, setMachineModalOpen] = useState(false);
   const [editingMachine, setEditingMachine] = useState(null);
   const [deletingMachine, setDeletingMachine] = useState(null);
@@ -80,17 +81,21 @@ export default function Machines() {
     if (step?.tab) setTab(step.tab);
   }, [isActive, pageKey, steps, stepIndex]);
 
+  useEffect(() => {
+    const requestedTab = searchParams.get("tab");
+    if (requestedTab && requestedTab !== tab) setTab(requestedTab);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
   async function load() {
     setLoading(true);
     try {
-      const [t, w, m, o] = await Promise.all([
+      const [t, m, o] = await Promise.all([
         adminApi.get("/tsexes/"),
-        adminApi.get("/workstations/"),
         adminApi.get("/machines/"),
         adminApi.get("/operations/", { params: { is_active: true } }),
       ]);
       setTsexes(t.data.results || t.data);
-      setWorkstations(w.data.results || w.data);
       setMachines(m.data.results || m.data);
       setOperations(o.data.results || o.data);
     } catch (error) {
@@ -119,21 +124,6 @@ export default function Machines() {
     setEditingTsex(null);
   }
 
-  function openCreateWsModal() {
-    setEditingWorkstation(null);
-    setWsModalOpen(true);
-  }
-
-  function openEditWsModal(ws) {
-    setEditingWorkstation(ws);
-    setWsModalOpen(true);
-  }
-
-  function closeWsModal() {
-    setWsModalOpen(false);
-    setEditingWorkstation(null);
-  }
-
   function openCreateMachineModal() {
     setEditingMachine(null);
     setMachineModalOpen(true);
@@ -151,11 +141,11 @@ export default function Machines() {
 
   if (loading) return <PageLoader />;
 
+  const header = TAB_HEADERS[tab] || TAB_HEADERS.tsexes;
+
   return (
     <div className="space-y-6">
-      <PageHeader eyebrow="Infratuzilma" title="Tsex va stanoklar" subtitle="Bo'linmalar, postlar va stanoklar" />
-
-      <SegmentedControl options={TABS} value={tab} onChange={setTab} />
+      <PageHeader eyebrow={header.eyebrow} title={header.title} subtitle={header.subtitle} />
 
       {tab === "tsexes" && (
       <Card>
@@ -197,54 +187,12 @@ export default function Machines() {
       </Card>
       )}
 
-      {tab === "workstations" && (
-      <Card>
-        <CardHeader
-          title="Postlar"
-          subtitle={`${workstations.length} ta post`}
-          actions={<Button data-tutorial="machines-add-workstation" size="sm" onClick={openCreateWsModal}><Plus size={15} /> Post qo'shish</Button>}
-        />
-        <CardBody data-tutorial="machines-workstations-table" className="p-0">
-          <Table>
-            <Thead>
-              <tr>
-                <Th>Nomi</Th>
-                <Th>Tsex</Th>
-                <Th>Bosqich</Th>
-                <Th>Status</Th>
-                <Th className="text-right">Amallar</Th>
-              </tr>
-            </Thead>
-            <Tbody>
-              {workstations.length === 0 && <EmptyRow colSpan={5} />}
-              {workstations.map((w) => (
-                <Tr key={w.id}>
-                  <Td className="font-medium">{w.name}</Td>
-                  <Td>{w.tsex_name}</Td>
-                  <Td>{w.operation_name}</Td>
-                  <Td><StatusBadge status={w.status} labels={WS_STATUS_LABELS} /></Td>
-                  <Td className="whitespace-nowrap">
-                    <RowActions
-                      onEdit={() => openEditWsModal(w)}
-                      onDelete={() => setDeletingWorkstation(w)}
-                      editLabel={`${w.name} postini tahrirlash`}
-                      deleteLabel={`${w.name} postini o'chirish`}
-                    />
-                  </Td>
-                </Tr>
-              ))}
-            </Tbody>
-          </Table>
-        </CardBody>
-      </Card>
-      )}
-
       {tab === "machines" && (
       <Card>
         <CardHeader
-          title="Stanoklar"
-          subtitle={`${machines.length} ta stanok`}
-          actions={<Button data-tutorial="machines-add-machine" size="sm" onClick={openCreateMachineModal}><Plus size={15} /> Stanok qo'shish</Button>}
+          title="Dastgohlar"
+          subtitle={`${machines.length} ta dastgoh`}
+          actions={<Button data-tutorial="machines-add-machine" size="sm" onClick={openCreateMachineModal}><Plus size={15} /> Dastgoh qo'shish</Button>}
         />
         <CardBody data-tutorial="machines-machines-table" className="p-0">
           <Table>
@@ -253,9 +201,9 @@ export default function Machines() {
                 <Th>ID</Th>
                 <Th>Nomi</Th>
                 <Th>Bosqich</Th>
-                <Th>Post</Th>
+                <Th>Tsex</Th>
                 <Th>Quvvat/soat</Th>
-                <Th>Status</Th>
+                <Th>Holat</Th>
                 <Th className="text-right">Amallar</Th>
               </tr>
             </Thead>
@@ -266,7 +214,7 @@ export default function Machines() {
                   <Td className="font-mono text-xs">{m.machine_id}</Td>
                   <Td className="font-medium">{m.name}</Td>
                   <Td>{m.operation_name}</Td>
-                  <Td>{m.workstation_name}</Td>
+                  <Td>{m.tsex_name}</Td>
                   <Td>{m.capacity_per_hour ?? "—"}</Td>
                   <Td><StatusBadge status={m.status} labels={MACHINE_STATUS_LABELS} /></Td>
                   <Td className="whitespace-nowrap">
@@ -292,20 +240,11 @@ export default function Machines() {
         onSaved={load}
       />
       <DeleteTsexModal tsex={deletingTsex} onClose={() => setDeletingTsex(null)} onDeleted={load} />
-      <WorkstationModal
-        open={wsModalOpen}
-        workstation={editingWorkstation}
-        onClose={closeWsModal}
-        tsexes={tsexes}
-        operations={operations}
-        onSaved={load}
-      />
-      <DeleteWorkstationModal workstation={deletingWorkstation} onClose={() => setDeletingWorkstation(null)} onDeleted={load} />
       <MachineModal
         open={machineModalOpen}
         machine={editingMachine}
         onClose={closeMachineModal}
-        workstations={workstations}
+        tsexes={tsexes}
         operations={operations}
         onSaved={load}
       />
@@ -391,7 +330,7 @@ function DeleteTsexModal({ tsex, onClose, onDeleted }) {
     <Modal open={Boolean(tsex)} onClose={onClose} title="Tsexni o'chirish" size="sm">
       <p className="text-sm leading-6 text-(--ink-soft)">
         <strong className="font-semibold text-(--ink)">{tsex?.name}</strong> tsexini o'chirmoqchimisiz?
-        Bu tsexga bog'liq postlar bo'lsa, o'chirish rad etilishi mumkin.
+        Bu tsexga bog'liq dastgohlar bo'lsa, o'chirish rad etilishi mumkin.
       </p>
       <div className="mt-5 flex justify-end gap-2">
         <Button type="button" variant="secondary" onClick={onClose} disabled={deleting}>Bekor qilish</Button>
@@ -401,33 +340,41 @@ function DeleteTsexModal({ tsex, onClose, onDeleted }) {
   );
 }
 
-function WorkstationModal({ open, workstation, onClose, tsexes, operations, onSaved }) {
-  const emptyForm = { name: "", tsex: "", operation: "", status: "active" };
+function MachineModal({ open, machine, onClose, tsexes, operations, onSaved }) {
+  const emptyForm = { machine_id: "", name: "", tsex: "", operation: "", capacity_per_hour: "", status: "active" };
   const [form, setForm] = useState(emptyForm);
   const [submitting, setSubmitting] = useState(false);
-  const isEditing = Boolean(workstation);
+  const isEditing = Boolean(machine);
 
   useEffect(() => {
     if (!open) return;
-    setForm(workstation ? {
-      name: workstation.name || "",
-      tsex: workstation.tsex || "",
-      operation: workstation.operation || "",
-      status: workstation.status || "active",
+    setForm(machine ? {
+      machine_id: machine.machine_id || "",
+      name: machine.name || "",
+      tsex: machine.tsex || "",
+      operation: machine.operation || "",
+      capacity_per_hour: machine.capacity_per_hour ?? "",
+      status: machine.status || "active",
     } : emptyForm);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workstation, open]);
+  }, [machine, open]);
+
+  const selectedOperation = operations.find((o) => String(o.id) === String(form.operation));
+  const capacityLabel = selectedOperation
+    ? `Quvvat (${measureUnitLabel(selectedOperation.measure_unit)}/soat)`
+    : "Quvvat (soatiga)";
 
   async function submit(e) {
     e.preventDefault();
     setSubmitting(true);
     try {
+      const payload = { ...form, capacity_per_hour: form.capacity_per_hour || null };
       if (isEditing) {
-        await adminApi.patch(`/workstations/${workstation.id}/`, form);
-        toast.success("Post ma'lumotlari yangilandi");
+        await adminApi.patch(`/machines/${machine.id}/`, payload);
+        toast.success("Dastgoh ma'lumotlari yangilandi");
       } else {
-        await adminApi.post("/workstations/", form);
-        toast.success("Post yaratildi");
+        await adminApi.post("/machines/", payload);
+        toast.success("Dastgoh yaratildi");
       }
       await onSaved();
       onClose();
@@ -439,8 +386,11 @@ function WorkstationModal({ open, workstation, onClose, tsexes, operations, onSa
   }
 
   return (
-    <Modal open={open} onClose={onClose} title={isEditing ? "Postni tahrirlash" : "Yangi post"}>
+    <Modal open={open} onClose={onClose} title={isEditing ? "Dastgohni tahrirlash" : "Yangi dastgoh"}>
       <form onSubmit={submit} className="space-y-4">
+        <Field label="Dastgoh ID">
+          <Input required value={form.machine_id} onChange={(e) => setForm({ ...form, machine_id: e.target.value })} />
+        </Field>
         <Field label="Nomi">
           <Input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
         </Field>
@@ -456,121 +406,14 @@ function WorkstationModal({ open, workstation, onClose, tsexes, operations, onSa
             {operations.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
           </Select>
         </Field>
-        <Field label="Status">
-          <Select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
-            {Object.entries(WS_STATUS_LABELS).map(([k, v]) => (
-              <option key={k} value={k}>{v}</option>
-            ))}
-          </Select>
-        </Field>
-        <Button type="submit" loading={submitting} className="w-full">
-          {isEditing ? "Saqlash" : "Yaratish"}
-        </Button>
-      </form>
-    </Modal>
-  );
-}
-
-function DeleteWorkstationModal({ workstation, onClose, onDeleted }) {
-  const [deleting, setDeleting] = useState(false);
-
-  async function remove() {
-    setDeleting(true);
-    try {
-      await adminApi.delete(`/workstations/${workstation.id}/`);
-      toast.success("Post o'chirildi");
-      await onDeleted();
-      onClose();
-    } catch (error) {
-      toast.error(getErrorMessage(error));
-    } finally {
-      setDeleting(false);
-    }
-  }
-
-  return (
-    <Modal open={Boolean(workstation)} onClose={onClose} title="Postni o'chirish" size="sm">
-      <p className="text-sm leading-6 text-(--ink-soft)">
-        <strong className="font-semibold text-(--ink)">{workstation?.name}</strong> postini o'chirmoqchimisiz?
-        Bu postga bog'liq stanoklar bo'lsa, o'chirish rad etilishi mumkin.
-      </p>
-      <div className="mt-5 flex justify-end gap-2">
-        <Button type="button" variant="secondary" onClick={onClose} disabled={deleting}>Bekor qilish</Button>
-        <Button type="button" variant="danger" onClick={remove} loading={deleting}>O'chirish</Button>
-      </div>
-    </Modal>
-  );
-}
-
-function MachineModal({ open, machine, onClose, workstations, operations, onSaved }) {
-  const emptyForm = { machine_id: "", name: "", workstation: "", operation: "", capacity_per_hour: "", status: "active" };
-  const [form, setForm] = useState(emptyForm);
-  const [submitting, setSubmitting] = useState(false);
-  const isEditing = Boolean(machine);
-
-  useEffect(() => {
-    if (!open) return;
-    setForm(machine ? {
-      machine_id: machine.machine_id || "",
-      name: machine.name || "",
-      workstation: machine.workstation || "",
-      operation: machine.operation || "",
-      capacity_per_hour: machine.capacity_per_hour ?? "",
-      status: machine.status || "active",
-    } : emptyForm);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [machine, open]);
-
-  async function submit(e) {
-    e.preventDefault();
-    setSubmitting(true);
-    try {
-      const payload = { ...form, capacity_per_hour: form.capacity_per_hour || null };
-      if (isEditing) {
-        await adminApi.patch(`/machines/${machine.id}/`, payload);
-        toast.success("Stanok ma'lumotlari yangilandi");
-      } else {
-        await adminApi.post("/machines/", payload);
-        toast.success("Stanok yaratildi");
-      }
-      await onSaved();
-      onClose();
-    } catch (error) {
-      toast.error(getErrorMessage(error));
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  return (
-    <Modal open={open} onClose={onClose} title={isEditing ? "Stanokni tahrirlash" : "Yangi stanok"}>
-      <form onSubmit={submit} className="space-y-4">
-        <Field label="Stanok ID">
-          <Input required value={form.machine_id} onChange={(e) => setForm({ ...form, machine_id: e.target.value })} />
-        </Field>
-        <Field label="Nomi">
-          <Input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-        </Field>
-        <Field label="Post">
-          <Select required value={form.workstation} onChange={(e) => setForm({ ...form, workstation: e.target.value })}>
-            <option value="">Tanlang</option>
-            {workstations.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
-          </Select>
-        </Field>
-        <Field label="Bosqich">
-          <Select required value={form.operation} onChange={(e) => setForm({ ...form, operation: e.target.value })}>
-            <option value="">Tanlang</option>
-            {operations.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
-          </Select>
-        </Field>
-        <Field label="Status">
+        <Field label="Holat">
           <Select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
             {Object.entries(MACHINE_STATUS_LABELS).map(([k, v]) => (
               <option key={k} value={k}>{v}</option>
             ))}
           </Select>
         </Field>
-        <Field label="Quvvat (soatiga)" hint="Ixtiyoriy — dashboarddagi samaradorlik hisobi uchun">
+        <Field label={capacityLabel} hint="Ixtiyoriy — dashboarddagi samaradorlik hisobi uchun">
           <Input
             type="number"
             step="0.01"
@@ -594,7 +437,7 @@ function DeleteMachineModal({ machine, onClose, onDeleted }) {
     setDeleting(true);
     try {
       await adminApi.delete(`/machines/${machine.id}/`);
-      toast.success("Stanok o'chirildi");
+      toast.success("Dastgoh o'chirildi");
       await onDeleted();
       onClose();
     } catch (error) {
@@ -605,7 +448,7 @@ function DeleteMachineModal({ machine, onClose, onDeleted }) {
   }
 
   return (
-    <Modal open={Boolean(machine)} onClose={onClose} title="Stanokni o'chirish" size="sm">
+    <Modal open={Boolean(machine)} onClose={onClose} title="Dastgohni o'chirish" size="sm">
       <p className="text-sm leading-6 text-(--ink-soft)">
         <strong className="font-semibold text-(--ink)">{machine?.name}</strong> stanogini o'chirmoqchimisiz?
         Bu amalni ortga qaytarib bo'lmaydi.

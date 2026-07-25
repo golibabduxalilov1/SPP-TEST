@@ -20,9 +20,9 @@ function CompletedOrdersPanel({ workerId, from, to }) {
     setLoading(true);
     adminApi
       .get(`/reports/orders/workers/${workerId}/completed`, { params: { from, to } })
-      .then(({ data }) => cancelled! && setOrders(data))
-      .catch(() => cancelled! && setOrders([]))
-      .finally(() => cancelled! && setLoading(false));
+      .then(({ data }) => !cancelled && setOrders(data))
+      .catch(() => !cancelled && setOrders([]))
+      .finally(() => !cancelled && setLoading(false));
     return () => {
       cancelled = true;
     };

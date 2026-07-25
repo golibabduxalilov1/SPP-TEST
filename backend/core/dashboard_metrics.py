@@ -6,12 +6,13 @@ from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
 from manufacturing.models import Machine
+from manufacturing.units import MEASURE_UNIT_LABELS as UNIT_LABEL
+from manufacturing.units import stage_value
 from orders.models import PartRoute
+from packaging.models import Package
 from terminalapp.models import ScanEvent
 
 from .tablo import detail_contribution, part_contribution
-
-UNIT_LABEL = {"m2": "kv.m", "meter": "metr", "piece": "dona", "package": "dona"}
 
 
 def _parse_dt(value, default):
@@ -58,14 +59,27 @@ def _completed_routes(date_from, date_to):
 
 
 def _route_value(route, unit):
+    """Per-completed-route figure for a route's own stage. m2/meter come
+    straight off the linked detail; piece counts routes 1:1. Package-measured
+    stages (e.g. OMBOR) have no per-route/per-machine package attribution in
+    the data model — a route here is one *part* scanned into a package, not
+    one whole package — so as a justified fallback this counts 1 per
+    completed route too (packaging throughput), while window-wide package
+    totals (see `overview` below) use the real Package count instead."""
     part = route.part
     detail = getattr(part, "order_detail", None)
     quantity, area, edge = detail_contribution(detail) if detail is not None else part_contribution(part)
-    if unit == "m2":
-        return area
-    if unit == "meter":
-        return edge
-    return quantity
+    return stage_value(unit, quantity=quantity, area=area, edge=edge, package_count=quantity)
+
+
+def _completed_packages(date_from, date_to):
+    """Packages that finished (reached the warehouse) within the window —
+    the real "existing qadoq" count, one per order's OMBOR completion."""
+    return Package.objects.filter(
+        status=Package.Status.WAREHOUSE,
+        completed_at__gte=date_from,
+        completed_at__lte=date_to,
+    )
 
 
 def overview(date_from, date_to):
@@ -79,15 +93,21 @@ def overview(date_from, date_to):
     oee = round((accepted_count / total) * 100, 1) if total else 100.0
 
     routes = list(_completed_routes(date_from, date_to))
+    # Each unit is kept in its own bucket — never summed together — so e.g.
+    # 10 m2 + 20 dona never becomes a meaningless combined "30".
     m2_total = sum((_route_value(r, "m2") for r in routes if r.operation.measure_unit == "m2"), Decimal("0"))
     meter_total = sum((_route_value(r, "meter") for r in routes if r.operation.measure_unit == "meter"), Decimal("0"))
-    piece_total = sum(
-        (_route_value(r, "piece") for r in routes if r.operation.measure_unit in ("piece", "package")), Decimal("0")
-    )
+    piece_total = sum((_route_value(r, "piece") for r in routes if r.operation.measure_unit == "piece"), Decimal("0"))
+    package_total = Decimal(_completed_packages(date_from, date_to).count())
 
     return {
         "oee": oee,
-        "output": {"m2": float(m2_total), "meter": float(meter_total), "piece": float(piece_total)},
+        "output": {
+            "m2": float(m2_total),
+            "meter": float(meter_total),
+            "piece": float(piece_total),
+            "package": float(package_total),
+        },
         "active_machines": Machine.objects.filter(status="active").count(),
         "total_machines": Machine.objects.count(),
     }
@@ -112,16 +132,24 @@ def machines_summary(date_from, date_to):
     results = []
     for machine in machines:
         unit = machine.operation.measure_unit
-        routes = list(routes_by_machine.get(machine.id, []))
-        # A completion with no machine recorded (e.g. a bulk "Bosqichni
-        # yakunlash" click, which isn't tied to any physical equipment) can
-        # only be credited to a specific machine when its stage has exactly
-        # one active machine — otherwise there's no way to know which one
-        # actually did the work, so it's left off every machine card (it
-        # still counts in the window-wide overview totals).
-        if len(machines_by_operation[machine.operation_id]) == 1:
-            routes += unassigned_routes_by_operation.get(machine.operation_id, [])
-        volume = sum((_route_value(r, unit) for r in routes), Decimal("0"))
+        is_sole_machine_for_stage = len(machines_by_operation[machine.operation_id]) == 1
+        if unit == "package":
+            # Package has no machine attribution at all (not even optional)
+            # in the data model — same single-machine convention as
+            # unassigned routes below: only credit the real package count to
+            # a machine when it's the only one on this operation.
+            volume = Decimal(_completed_packages(date_from, date_to).count()) if is_sole_machine_for_stage else Decimal("0")
+        else:
+            routes = list(routes_by_machine.get(machine.id, []))
+            # A completion with no machine recorded (e.g. a bulk "Bosqichni
+            # yakunlash" click, which isn't tied to any physical equipment) can
+            # only be credited to a specific machine when its stage has exactly
+            # one active machine — otherwise there's no way to know which one
+            # actually did the work, so it's left off every machine card (it
+            # still counts in the window-wide overview totals).
+            if is_sole_machine_for_stage:
+                routes += unassigned_routes_by_operation.get(machine.operation_id, [])
+            volume = sum((_route_value(r, unit) for r in routes), Decimal("0"))
         efficiency = None
         if machine.capacity_per_hour:
             capacity_total = machine.capacity_per_hour * Decimal(str(window_hours))
@@ -159,18 +187,28 @@ def machine_series(machine, date_from, date_to, interval_minutes):
         buckets = [date_from]
 
     bucket_values = [Decimal("0") for _ in buckets]
-    routes_qs = _completed_routes(date_from, date_to).filter(operation=machine.operation)
     sibling_count = Machine.objects.filter(operation=machine.operation, status="active").count()
-    # Same fallback rule as machines_summary: only fold in machine-less
-    # completions when this machine is the sole one for its stage.
-    routes = routes_qs if sibling_count == 1 else routes_qs.filter(machine=machine)
-
     interval_seconds = interval_minutes * 60
-    for route in routes:
-        value = _route_value(route, unit)
-        idx = int((route.completed_at - date_from).total_seconds() // interval_seconds)
-        idx = min(max(idx, 0), len(buckets) - 1)
-        bucket_values[idx] += value
+
+    if unit == "package":
+        # Same single-machine convention as machines_summary: Package has no
+        # machine attribution, so real package counts only bucket onto the
+        # chart when this machine is the sole one for its stage.
+        packages = list(_completed_packages(date_from, date_to)) if sibling_count == 1 else []
+        for package in packages:
+            idx = int((package.completed_at - date_from).total_seconds() // interval_seconds)
+            idx = min(max(idx, 0), len(buckets) - 1)
+            bucket_values[idx] += 1
+    else:
+        routes_qs = _completed_routes(date_from, date_to).filter(operation=machine.operation)
+        # Same fallback rule as machines_summary: only fold in machine-less
+        # completions when this machine is the sole one for its stage.
+        routes = routes_qs if sibling_count == 1 else routes_qs.filter(machine=machine)
+        for route in routes:
+            value = _route_value(route, unit)
+            idx = int((route.completed_at - date_from).total_seconds() // interval_seconds)
+            idx = min(max(idx, 0), len(buckets) - 1)
+            bucket_values[idx] += value
 
     period_volume = sum(bucket_values, Decimal("0"))
     max_value = max(bucket_values) if bucket_values else Decimal("0")

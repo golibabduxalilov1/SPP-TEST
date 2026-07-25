@@ -1,8 +1,8 @@
 from rest_framework.test import APITestCase
 
-from accounts.models import Role, User
+from accounts.models import EmployeeStageMachine, Role, User
 from core.models import AuditLog
-from manufacturing.models import Operation
+from manufacturing.models import Machine, Operation, Tsex
 from orders.models import Order, Part, PartRoute
 from orders.production_workflow import approve_order
 
@@ -160,3 +160,47 @@ class ScanAdvancesBoardStageTests(APITestCase):
         self.order.refresh_from_db()
         self.assertIsNone(self.order.current_stage)
         self.assertEqual(self.order.status, Order.Status.COMPLETED)
+
+
+class TerminalBootstrapMachineScopingTests(APITestCase):
+    """/api/terminal/bootstrap must only surface the machines this specific
+    employee is assigned to *at this stage* (via EmployeeStageMachine) —
+    not every active machine at the stage, and not machines assigned to
+    them at a different stage."""
+
+    def setUp(self):
+        tsex = Tsex.objects.create(name="Bootstrap tsex")
+        self.arra = Operation.objects.create(code="BOOT-ARRA", name="Arra", measure_unit="m2", order_index=1)
+        self.kromka = Operation.objects.create(code="BOOT-KROMKA", name="Kromka", measure_unit="meter", order_index=2)
+        self.arra_1 = Machine.objects.create(machine_id="BOOT-ARRA-1", name="Arra-1", operation=self.arra, tsex=tsex)
+        self.arra_2 = Machine.objects.create(machine_id="BOOT-ARRA-2", name="Arra-2", operation=self.arra, tsex=tsex)
+        self.kromka_1 = Machine.objects.create(machine_id="BOOT-KROMKA-1", name="Kromka-1", operation=self.kromka, tsex=tsex)
+
+        self.employee = User.objects.create_user(
+            username="bootstrap-op", phone="+998901113601", password="secret-pass", role=Role.OPERATOR,
+            department=tsex, multi_stage_enabled=True,
+        )
+        self.employee.assigned_operations.set([self.arra, self.kromka])
+        EmployeeStageMachine.objects.create(employee=self.employee, machine=self.arra_1)
+        EmployeeStageMachine.objects.create(employee=self.employee, machine=self.kromka_1)
+        self.client.force_authenticate(user=self.employee)
+
+    def test_bootstrap_scopes_machines_to_the_requested_stage(self):
+        response = self.client.get("/api/terminal/bootstrap", {"operation_id": self.arra.id})
+        self.assertEqual(response.status_code, 200, response.data)
+        machine_ids = {m["id"] for m in response.data["machines"]}
+        self.assertEqual(machine_ids, {self.arra_1.id}, "must not include arra_2 (unassigned) or kromka_1 (other stage)")
+
+        response = self.client.get("/api/terminal/bootstrap", {"operation_id": self.kromka.id})
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual({m["id"] for m in response.data["machines"]}, {self.kromka_1.id})
+
+    def test_unassigned_employee_sees_every_active_machine_at_the_stage(self):
+        fallback_employee = User.objects.create_user(
+            username="bootstrap-fallback", phone="+998901113602", password="secret-pass", role=Role.OPERATOR,
+        )
+        self.client.force_authenticate(user=fallback_employee)
+
+        response = self.client.get("/api/terminal/bootstrap", {"operation_id": self.arra.id})
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual({m["id"] for m in response.data["machines"]}, {self.arra_1.id, self.arra_2.id})

@@ -15,7 +15,9 @@ from .serializers import (
 )
 
 _USER_MANAGEMENT_ROLES = {Role.SUPER_ADMIN, Role.ADMIN}
-_WORKPLACE_ONLY_FIELDS = {"department", "assigned_machines"}
+_WORKPLACE_ONLY_FIELDS = {
+    "department", "assigned_machines", "multi_stage_enabled", "assigned_operation", "assigned_operations",
+}
 
 
 class AdminLoginView(TokenObtainPairView):
@@ -44,7 +46,7 @@ class TerminalPinLookupView(APIView):
         serializer.is_valid(raise_exception=True)
         pin_code = serializer.validated_data["pin_code"]
 
-        user = User.objects.filter(pin_code=pin_code, is_active_employee=True).first()
+        user = User.objects.get_by_pin(pin_code)
         if not user or not user.can_use_terminal:
             return Response({"detail": "PIN kod noto'g'ri"}, status=status.HTTP_401_UNAUTHORIZED)
 
@@ -77,7 +79,7 @@ class TerminalLoginView(APIView):
 
         user = None
         if data.get("pin_code"):
-            user = User.objects.filter(pin_code=data["pin_code"], is_active_employee=True).first()
+            user = User.objects.get_by_pin(data["pin_code"])
         elif data.get("badge_token"):
             user = User.objects.filter(badge_token=data["badge_token"], is_active_employee=True).first()
 
@@ -161,7 +163,7 @@ class UserViewSet(viewsets.ModelViewSet):
                 raise PermissionDenied("Sizda xodimlarni tahrirlash huquqi yo'q, faqat ko'rish mumkin.")
             if requester_role == Role.MANAGER:
                 if not set(serializer.validated_data.keys()) <= _WORKPLACE_ONLY_FIELDS:
-                    raise PermissionDenied("Sizda faqat xodimni bo'lim va stanokka biriktirish huquqi bor.")
+                    raise PermissionDenied("Sizda faqat xodimni bo'lim va dastgohga biriktirish huquqi bor.")
             elif requester_role not in _USER_MANAGEMENT_ROLES:
                 raise PermissionDenied("Xodimni tahrirlash huquqingiz yo'q.")
             if serializer.validated_data.get("role") == Role.SUPER_ADMIN and requester_role == Role.ADMIN:

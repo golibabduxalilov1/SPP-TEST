@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Factory, ListTree, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import toast from "react-hot-toast";
 import { adminApi } from "../../api/client";
@@ -6,19 +7,24 @@ import { Card, CardBody, CardHeader } from "../../components/ui/Card";
 import { Table, Thead, Tbody, Th, Tr, Td, EmptyRow } from "../../components/ui/Table";
 import Button from "../../components/ui/Button";
 import PageHeader from "../../components/ui/PageHeader";
-import { Field, Input, Textarea } from "../../components/ui/Input";
+import { Field, Input, Select, Textarea } from "../../components/ui/Input";
 import { PageLoader } from "../../components/ui/Misc";
 import Modal from "../../components/ui/Modal";
-import SegmentedControl from "../../components/ui/SegmentedControl";
 import EditableDetailsTable from "../../components/admin/EditableDetailsTable";
 import Badge from "../../components/ui/Badge";
 import Toggle from "../../components/ui/Toggle";
 import { useAuthStore } from "../../store/authStore";
+import { DEFAULT_MEASURE_UNIT, MEASURE_UNIT_OPTIONS, measureUnitLabel } from "../../lib/units";
 
 const TABS = [
   { value: "product-types", label: "Mahsulot turlari" },
   { value: "production-stages", label: "Ishlab chiqarish bosqichlari" },
 ];
+
+const TAB_HEADERS = {
+  "product-types": { title: "Mahsulot turlari", subtitle: "Mahsulot turlari va ularning standart detallari" },
+  "production-stages": { title: "Ishlab chiqarish bosqichlari", subtitle: "Ishlab chiqarish jarayonidagi bosqichlar" },
+};
 
 function getErrorMessage(error) {
   const data = error.response?.data;
@@ -31,14 +37,22 @@ function getErrorMessage(error) {
 }
 
 export default function References() {
-  const [tab, setTab] = useState(TABS[0].value);
+  const [searchParams] = useSearchParams();
+  const [tab, setTab] = useState(() => searchParams.get("tab") || TABS[0].value);
   const user = useAuthStore((state) => state.user);
   const canManageStages = Boolean(user?.is_superuser || ["super_admin", "admin"].includes(user?.role));
 
+  useEffect(() => {
+    const requestedTab = searchParams.get("tab");
+    if (requestedTab && requestedTab !== tab) setTab(requestedTab);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
+  const header = TAB_HEADERS[tab] || TAB_HEADERS["product-types"];
+
   return (
     <div className="space-y-6">
-      <PageHeader eyebrow="Справочники" title="Справочники" subtitle="Mahsulot turlari, standart detallar va ishlab chiqarish bosqichlari" />
-      <SegmentedControl options={TABS} value={tab} onChange={setTab} />
+      <PageHeader eyebrow="Ma'lumotnomalar" title={header.title} subtitle={header.subtitle} />
       {tab === "product-types" && <ProductTypesTab />}
       {tab === "production-stages" && <ProductionStagesTab canManage={canManageStages} />}
     </div>
@@ -115,12 +129,13 @@ function ProductionStagesTab({ canManage }) {
                 <tr>
                   <Th className="w-24">Tartib</Th>
                   <Th>Nomi</Th>
+                  <Th>O'lchov birligi</Th>
                   <Th>Holati</Th>
                   {canManage && <Th className="text-right">Amallar</Th>}
                 </tr>
               </Thead>
               <Tbody>
-                {stages.length === 0 && <EmptyRow colSpan={canManage ? 4 : 3} message="Ishlab chiqarish bosqichlari yo'q" />}
+                {stages.length === 0 && <EmptyRow colSpan={canManage ? 5 : 4} message="Ishlab chiqarish bosqichlari yo'q" />}
                 {stages.map((stage) => (
                   <Tr key={stage.id}>
                     <Td>
@@ -135,9 +150,11 @@ function ProductionStagesTab({ canManage }) {
                         </span>
                         <div className="min-w-0">
                           <p className="font-semibold text-(--ink)">{stage.name}</p>
-                          {stage.is_default && <p className="text-xs text-(--ink-faint)">Default bosqich</p>}
                         </div>
                       </div>
+                    </Td>
+                    <Td>
+                      <Badge tone="gray">{measureUnitLabel(stage.measure_unit)}</Badge>
                     </Td>
                     <Td>
                       <div className="flex items-center gap-3">
@@ -168,9 +185,9 @@ function ProductionStagesTab({ canManage }) {
                           <Button
                             type="button" variant="ghost" size="sm" magnetic={false}
                             onClick={() => setDeletingStage(stage)}
-                            disabled={stage.is_default}
+                            disabled={stage.can_delete === false}
                             aria-label={`${stage.name} o'chirish`}
-                            title={stage.is_default ? "Default bosqichni o'chirib bo'lmaydi" : "O'chirish"}
+                            title={stage.can_delete === false ? "Bu bosqichga bog'liq ma'lumotlar bor — o'chirib bo'lmaydi" : "O'chirish"}
                             className="min-h-9! min-w-9! rounded-lg! border-(--border-strong)! px-0! text-status-red! hover:bg-(--color-status-red-bg)!"
                           >
                             <Trash2 size={14} strokeWidth={2.2} />
@@ -203,7 +220,7 @@ function ProductionStagesTab({ canManage }) {
 }
 
 function ProductionStageModal({ open, stage, nextOrderIndex, onClose, onSaved }) {
-  const [form, setForm] = useState({ name: "", order_index: 1, is_active: true });
+  const [form, setForm] = useState({ name: "", order_index: 1, measure_unit: DEFAULT_MEASURE_UNIT, is_active: true });
   const [saving, setSaving] = useState(false);
   const isEditing = Boolean(stage);
 
@@ -212,10 +229,12 @@ function ProductionStageModal({ open, stage, nextOrderIndex, onClose, onSaved })
     setForm(stage ? {
       name: stage.name,
       order_index: stage.order_index,
+      measure_unit: stage.measure_unit,
       is_active: stage.is_active,
     } : {
       name: "",
       order_index: nextOrderIndex,
+      measure_unit: DEFAULT_MEASURE_UNIT,
       is_active: true,
     });
   }, [stage, open, nextOrderIndex]);
@@ -258,6 +277,17 @@ function ProductionStageModal({ open, stage, nextOrderIndex, onClose, onSaved })
             value={form.order_index}
             onChange={(e) => setForm({ ...form, order_index: e.target.value })}
           />
+        </Field>
+        <Field label="O'lchov birligi" required hint="Tablo, dashboard va hisobotlarda ushbu bosqichning hajmi shu birlikda hisoblanadi.">
+          <Select
+            required
+            value={form.measure_unit}
+            onChange={(e) => setForm({ ...form, measure_unit: e.target.value })}
+          >
+            {MEASURE_UNIT_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
+          </Select>
         </Field>
         <div className="rounded-xl border border-(--border-subtle) bg-(--surface-muted) px-4 py-3">
           <Toggle

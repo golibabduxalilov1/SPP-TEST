@@ -37,6 +37,11 @@ class OperationSerializer(serializers.ModelSerializer):
     def validate_order_index(self, value):
         if value < 1:
             raise serializers.ValidationError("Tartib raqami 1 yoki undan katta bo'lishi kerak.")
+        qs = Operation.objects.filter(order_index=value)
+        if self.instance:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise serializers.ValidationError("Bu tartib raqami boshqa bosqichda band. Boshqa raqam tanlang.")
         return value
 
     @staticmethod

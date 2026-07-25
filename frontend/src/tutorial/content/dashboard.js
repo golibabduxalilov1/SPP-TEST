@@ -2,7 +2,7 @@ export const dashboardSteps = [
   {
     target: "dashboard-stats",
     title: "Asosiy ko'rsatkichlar",
-    content: "O'rtacha samaradorlik (OEE), jami ishlab chiqarish hajmi va aktiv stanoklar soni shu kartalarda real vaqtda ko'rinadi.",
+    content: "O'rtacha samaradorlik (OEE), jami ishlab chiqarish hajmi va faol dastgohlar soni shu kartalarda real vaqtda ko'rinadi.",
   },
   {
     target: "dashboard-filters",
@@ -11,12 +11,12 @@ export const dashboardSteps = [
   },
   {
     target: "dashboard-machines",
-    title: "Stanoklar holati",
-    content: "Har bir aktiv stanokning joriy ish holati va samaradorligi shu kartalar to'plamida ko'rsatiladi.",
+    title: "Dastgohlar holati",
+    content: "Har bir faol dastgohning joriy ish holati va samaradorligi shu kartalar to'plamida ko'rsatiladi.",
   },
   {
     target: "dashboard-top-performers",
     title: "Eng yaxshi natijalar",
-    content: "Tanlangan davr uchun eng samarali xodimlar va stanoklar reytingi shu jadvalda joylashgan.",
+    content: "Tanlangan davr uchun eng samarali xodimlar va dastgohlar reytingi shu jadvalda joylashgan.",
   },
 ];

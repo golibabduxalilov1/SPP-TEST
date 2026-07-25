@@ -10,6 +10,7 @@ from .services import assign_route, create_part_for_order_detail, sync_part_from
 ORDER_SPECIAL_STATUS_LABELS = {
     Order.Status.DRAFT: "Yangi",
     Order.Status.APPROVED: "Tasdiqlangan",
+    Order.Status.DELIVERED: "Topshirildi",
     Order.Status.CANCELLED: "Bekor qilingan",
 }
 

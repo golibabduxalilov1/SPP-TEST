@@ -5,7 +5,7 @@ import { CheckCircle2, Clock, Table2, Terminal } from "lucide-react";
 import toast from "react-hot-toast";
 import { adminApi } from "../../api/client";
 import { useAuthStore } from "../../store/authStore";
-import { Card, CardBody, CardHeader } from "../../components/ui/Card";
+import { Card, CardBody } from "../../components/ui/Card";
 import { Table } from "../../components/ui/Table";
 import Button from "../../components/ui/Button";
 import { PageLoader, EmptyState } from "../../components/ui/Misc";
@@ -29,17 +29,20 @@ const STATUS_LABEL = {
 
 const COMPLETE_STAGE_ROLES = ["super_admin", "admin", "director", "manager", "master", "technologist"];
 
-const UNIT_LABEL = {
-  m2: "m²",
-  meter: "m",
-  piece: "dona",
-  package: "quti",
-};
+// Mirrors backend/core/tablo.py::_stage_value — Hajm shows each stage's own
+// unit (from its measure_unit, via the API's unit_label), Soni is always
+// dona, Foiz has no unit.
+function displayUnit(op, mode) {
+  if (mode === "foiz") return null;
+  if (mode === "soni") return "dona";
+  return op.unit_label;
+}
 
-function formatCell(cell, mode) {
+function formatCell(cell, op, mode) {
   if (cell.status === "not_required" || cell.value === null) return "—";
   if (mode === "foiz") return `${cell.value}%`;
-  return cell.value;
+  const unit = displayUnit(op, mode);
+  return unit ? `${cell.value} ${unit}` : `${cell.value}`;
 }
 
 // Client-side aggregation over the already-fetched table — no extra backend call.
@@ -182,17 +185,10 @@ export default function Tablo() {
         </div>
       </div>
 
-      <Card>
-        <CardHeader
-          data-tutorial="tablo-legend"
-          title="Tablo"
-          subtitle="Yashil — bajarilgan, sariq — jarayonda, kulrang — kutilmoqda yoki hali boshlanmagan"
-        />
+      <Card data-tutorial="tablo-legend">
         <CardBody data-tutorial="tablo-table" className="p-0">
           {loading || !data ? (
             <PageLoader />
-          ) : data.rows.length === 0 ? (
-            <EmptyState title="Aktiv buyurtma yo'q" />
           ) : (
             <Table className="min-w-225!" label="Ishlab chiqarish tablosi">
                 <thead className="sticky top-0 bg-(--surface-muted) text-xs tracking-wide text-(--ink-soft) uppercase">
@@ -217,12 +213,19 @@ export default function Tablo() {
                         <p className="tabular text-base font-bold text-(--accent-strong)">
                           {totals[op.code] === null ? "—" : totals[op.code]}
                         </p>
-                        {totals[op.code] !== null && mode !== "foiz" && (
-                          <p className="text-[10px] font-medium text-(--ink-faint)">{UNIT_LABEL[op.measure_unit] || op.measure_unit}</p>
+                        {totals[op.code] !== null && displayUnit(op, mode) && (
+                          <p className="text-[10px] font-medium text-(--ink-faint)">{displayUnit(op, mode)}</p>
                         )}
                       </td>
                     ))}
                   </tr>
+                  {data.rows.length === 0 && (
+                    <tr>
+                      <td colSpan={3 + data.operations.length} className="px-3 py-10">
+                        <EmptyState title="Hozircha faol buyurtmalar yo'q" />
+                      </td>
+                    </tr>
+                  )}
                   {data.rows.map((row) => (
                     <tr key={row.order_id} className="transition-colors hover:bg-(--accent-soft)">
                       <td className="sticky left-0 z-10 w-10 min-w-10 bg-(--surface) px-3 py-3">{row.index}</td>
@@ -239,7 +242,7 @@ export default function Tablo() {
                               <div className="flex min-h-12 flex-col items-center justify-center gap-0.5 rounded-lg bg-status-green px-2 py-1.5 text-white">
                                 <div className="flex items-center gap-1.5">
                                   <CheckCircle2 size={15} />
-                                  <p className="tabular text-sm font-bold">{formatCell(cell, mode)}</p>
+                                  <p className="tabular text-sm font-bold">{formatCell(cell, op, mode)}</p>
                                 </div>
                                 <p className="text-[10px] font-medium text-white/80">{STATUS_LABEL.completed}</p>
                               </div>
@@ -256,7 +259,7 @@ export default function Tablo() {
                                 )}
                               >
                                 <p className={clsx("tabular text-sm font-bold", cell.status === "in_progress" ? "text-status-yellow" : "text-status-red")}>
-                                  {formatCell(cell, mode)}
+                                  {formatCell(cell, op, mode)}
                                 </p>
                                 <p className={clsx("text-[10px] font-medium opacity-70", cell.status === "in_progress" ? "text-status-yellow" : "text-status-red")}>
                                   {STATUS_LABEL[cell.status]}

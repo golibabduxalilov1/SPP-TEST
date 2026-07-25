@@ -1,9 +1,10 @@
+from django.contrib.auth.hashers import make_password
 from rest_framework.test import APITestCase
 
 from manufacturing.models import Machine, Operation, Tsex
 from orders.models import Order, Part
 
-from .models import Role, User
+from .models import EmployeeStageMachine, EmploymentStatus, Role, TERMINAL_ROLES, User
 
 
 class LoginTests(APITestCase):
@@ -125,7 +126,7 @@ class TerminalPinValidationTests(APITestCase):
             phone="+998901112208",
             password="secret-pass",
             role=Role.OPERATOR,
-            pin_code="0123",
+            pin_code_hash=make_password("0123"),
         )
 
     def test_four_digit_pin_is_accepted(self):
@@ -317,7 +318,7 @@ class SuperAdminFullAccessTests(APITestCase):
             "/api/employees/",
             {
                 "username": "yangi-xodim", "phone": "+998901112402", "role": Role.OPERATOR, "password": "secret-pass",
-                "department": tsex.id, "assigned_machines": [machine.id],
+                "department": tsex.id, "assigned_operation": operation.id, "assigned_machines": [machine.id], "pin_code": "5566",
             },
             format="json",
         )
@@ -372,7 +373,7 @@ class OperatorDepartmentMachineValidationTests(APITestCase):
     def _create_operator(self, **overrides):
         payload = {
             "username": "dept-operator", "phone": "+998901112702", "role": Role.OPERATOR,
-            "password": "secret-pass",
+            "password": "secret-pass", "pin_code": "4321",
         }
         payload.update(overrides)
         return self.client.post("/api/employees/", payload, format="json")
@@ -382,22 +383,57 @@ class OperatorDepartmentMachineValidationTests(APITestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn("department", response.data)
 
+    def test_operator_without_stage_is_rejected(self):
+        response = self._create_operator(department=self.tsex_a.id, assigned_machines=[self.machine_a.id])
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("assigned_operation", response.data)
+
     def test_operator_without_machine_is_rejected(self):
-        response = self._create_operator(department=self.tsex_a.id)
+        response = self._create_operator(department=self.tsex_a.id, assigned_operation=self.operation.id)
         self.assertEqual(response.status_code, 400)
         self.assertIn("assigned_machines", response.data)
 
     def test_operator_machine_from_other_department_is_rejected(self):
-        response = self._create_operator(department=self.tsex_a.id, assigned_machines=[self.machine_b.id])
+        response = self._create_operator(
+            department=self.tsex_a.id, assigned_operation=self.operation.id, assigned_machines=[self.machine_b.id],
+        )
         self.assertEqual(response.status_code, 400)
         self.assertIn("assigned_machines", response.data)
 
+    def test_operator_machine_from_other_stage_is_rejected(self):
+        other_stage = Operation.objects.create(code="DEPT-OP-2", name="Boshqa bosqich", measure_unit="piece")
+        other_stage_machine = Machine.objects.create(
+            machine_id="M-DEPT-A-2", name="Stanok A2", operation=other_stage, tsex=self.tsex_a,
+        )
+        response = self._create_operator(
+            department=self.tsex_a.id, assigned_operation=self.operation.id, assigned_machines=[other_stage_machine.id],
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("assigned_machines", response.data)
+
+    def test_operator_without_pin_is_rejected(self):
+        response = self._create_operator(
+            department=self.tsex_a.id, assigned_operation=self.operation.id,
+            assigned_machines=[self.machine_a.id], pin_code="",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("pin_code", response.data)
+
     def test_operator_with_valid_department_and_machine_succeeds(self):
-        response = self._create_operator(department=self.tsex_a.id, assigned_machines=[self.machine_a.id])
+        response = self._create_operator(
+            department=self.tsex_a.id, assigned_operation=self.operation.id, assigned_machines=[self.machine_a.id],
+        )
         self.assertEqual(response.status_code, 201, response.data)
         employee = User.objects.get(id=response.data["id"])
         self.assertEqual(employee.department_id, self.tsex_a.id)
         self.assertEqual(employee.assigned_operation_id, self.operation.id)
+        self.assertTrue(employee.pin_code_hash)
+        self.assertNotEqual(employee.pin_code_hash, "4321")
+        self.assertTrue(
+            EmployeeStageMachine.objects.filter(
+                employee=employee, machine=self.machine_a, stage=self.operation,
+            ).exists()
+        )
 
     def test_manager_department_is_optional(self):
         response = self.client.post(
@@ -456,12 +492,16 @@ class ManagementRolePermissionScopeTests(APITestCase):
         self.client.force_authenticate(user=self.manager)
         response = self.client.patch(
             f"/api/employees/{self.operator.id}/",
-            {"department": self.tsex.id, "assigned_machines": [self.machine.id]},
+            {
+                "department": self.tsex.id, "assigned_operation": self.operation.id,
+                "assigned_machines": [self.machine.id],
+            },
             format="json",
         )
         self.assertEqual(response.status_code, 200, response.data)
         self.operator.refresh_from_db()
         self.assertEqual(self.operator.department_id, self.tsex.id)
+        self.assertEqual(self.operator.assigned_operation_id, self.operation.id)
 
     def test_manager_cannot_edit_other_fields(self):
         self.client.force_authenticate(user=self.manager)
@@ -493,4 +533,358 @@ class LegacyRoleMigrationTests(APITestCase):
         self.assertEqual(
             set(dict(Role.choices).keys()),
             {"super_admin", "admin", "director", "manager", "operator", "warehouse"},
+        )
+
+
+class PinSecurityAndRoleGatingTests(APITestCase):
+    """PIN hashing, per-role PIN requirements, and active-employee-scoped
+    uniqueness — the core of the role/PIN redesign."""
+
+    def setUp(self):
+        self.admin = User.objects.create_user(
+            username="pin-admin", phone="+998901113001", password="secret-pass", role=Role.ADMIN,
+        )
+        self.tsex = Tsex.objects.create(name="PIN bo'lim")
+        self.operation = Operation.objects.create(code="PIN-OP", name="PIN bosqich", measure_unit="piece")
+        self.machine = Machine.objects.create(machine_id="M-PIN", name="Stanok", operation=self.operation, tsex=self.tsex)
+        self.client.force_authenticate(user=self.admin)
+
+    def _operator_payload(self, phone, pin_code, username="pin-operator"):
+        return {
+            "username": username, "phone": phone, "role": Role.OPERATOR, "password": "secret-pass",
+            "department": self.tsex.id, "assigned_operation": self.operation.id, "assigned_machines": [self.machine.id],
+            "pin_code": pin_code,
+        }
+
+    def test_pin_is_never_stored_in_plaintext(self):
+        response = self.client.post(
+            "/api/employees/", self._operator_payload("+998901113002", "7788"), format="json",
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+        employee = User.objects.get(id=response.data["id"])
+        self.assertNotEqual(employee.pin_code_hash, "7788")
+        self.assertNotIn("pin_code", response.data)
+        self.assertTrue(response.data["has_pin"])
+
+    def test_terminal_login_still_works_with_hashed_pin(self):
+        self.client.post("/api/employees/", self._operator_payload("+998901113003", "6655"), format="json")
+        response = self.client.post(
+            "/api/auth/terminal-login", {"pin_code": "6655", "device_id": "dev-1"}, format="json",
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data["employee"]["phone"], "+998901113003")
+
+    def test_pin_cannot_be_reused_by_another_active_employee(self):
+        self.client.post("/api/employees/", self._operator_payload("+998901113004", "9911", "pin-op-a"), format="json")
+        response = self.client.post(
+            "/api/employees/", self._operator_payload("+998901113005", "9911", "pin-op-b"), format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("pin_code", response.data)
+
+    def test_pin_can_be_reused_once_previous_holder_is_inactive(self):
+        first = self.client.post(
+            "/api/employees/", self._operator_payload("+998901113006", "3344", "pin-op-c"), format="json",
+        )
+        self.client.patch(f"/api/employees/{first.data['id']}/", {"is_active_employee": False}, format="json")
+        response = self.client.post(
+            "/api/employees/", self._operator_payload("+998901113007", "3344", "pin-op-d"), format="json",
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+
+    def test_super_admin_admin_director_cannot_have_pin(self):
+        for role, phone in [(Role.SUPER_ADMIN, "+998901113008"), (Role.ADMIN, "+998901113009"), (Role.DIRECTOR, "+998901113010")]:
+            with self.subTest(role=role):
+                response = self.client.post(
+                    "/api/employees/",
+                    {"username": f"no-pin-{role}", "phone": phone, "role": role, "password": "secret-pass", "pin_code": "1122"},
+                    format="json",
+                )
+                self.assertEqual(response.status_code, 400, response.data)
+                self.assertIn("pin_code", response.data)
+
+    def test_super_admin_admin_director_require_password_on_create(self):
+        response = self.client.post(
+            "/api/employees/",
+            {"username": "no-pass-director", "phone": "+998901113011", "role": Role.DIRECTOR},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400, response.data)
+        self.assertIn("password", response.data)
+
+    def test_manager_pin_is_optional(self):
+        response = self.client.post(
+            "/api/employees/",
+            {"username": "manager-no-pin", "phone": "+998901113012", "role": Role.MANAGER, "password": "secret-pass"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertFalse(response.data["has_pin"])
+
+    def test_manager_role_can_use_terminal(self):
+        self.assertIn(Role.MANAGER, TERMINAL_ROLES)
+
+    def test_warehouse_requires_pin_only_when_using_terminal(self):
+        without_terminal = self.client.post(
+            "/api/employees/",
+            {"username": "wh-no-terminal", "phone": "+998901113013", "role": Role.WAREHOUSE, "password": "secret-pass"},
+            format="json",
+        )
+        self.assertEqual(without_terminal.status_code, 201, without_terminal.data)
+
+        rejected = self.client.post(
+            "/api/employees/",
+            {
+                "username": "wh-terminal-no-pin", "phone": "+998901113014", "role": Role.WAREHOUSE,
+                "uses_terminal": True,
+            },
+            format="json",
+        )
+        self.assertEqual(rejected.status_code, 400, rejected.data)
+        self.assertIn("pin_code", rejected.data)
+
+        accepted = self.client.post(
+            "/api/employees/",
+            {
+                "username": "wh-terminal-pin", "phone": "+998901113015", "role": Role.WAREHOUSE,
+                "uses_terminal": True, "pin_code": "4455",
+            },
+            format="json",
+        )
+        self.assertEqual(accepted.status_code, 201, accepted.data)
+
+    def test_warehouse_can_use_admin_login_only_without_terminal(self):
+        no_terminal = User.objects.create_user(
+            username="wh-login-ok", phone="+998901113016", password="secret-pass", role=Role.WAREHOUSE,
+        )
+        with_terminal = User.objects.create_user(
+            username="wh-login-blocked", phone="+998901113017", password="secret-pass", role=Role.WAREHOUSE,
+            uses_terminal=True,
+        )
+        self.assertTrue(no_terminal.can_use_admin)
+        self.assertFalse(with_terminal.can_use_admin)
+
+
+class InactiveEmployeeTerminalAccessTests(APITestCase):
+    """Nofaol, ta'tildagi yoki bo'shatilgan xodim PIN bilan terminalga kira olmasin."""
+
+    def setUp(self):
+        self.tsex = Tsex.objects.create(name="Bo'lim")
+        self.operation = Operation.objects.create(code="INACTIVE-OP", name="Bosqich", measure_unit="piece")
+        self.machine = Machine.objects.create(
+            machine_id="M-INACTIVE", name="Stanok", operation=self.operation, tsex=self.tsex,
+        )
+        self.employee = User.objects.create_user(
+            username="status-operator", phone="+998901113101", password="secret-pass", role=Role.OPERATOR,
+            department=self.tsex, pin_code_hash=make_password("2233"), assigned_operation=self.operation,
+        )
+        EmployeeStageMachine.objects.create(employee=self.employee, machine=self.machine)
+
+    def test_active_employee_can_be_found_by_pin(self):
+        self.assertEqual(User.objects.get_by_pin("2233"), self.employee)
+
+    def test_vacation_status_deactivates_and_blocks_pin_login(self):
+        self.employee.employment_status = EmploymentStatus.VACATION
+        self.employee.save()
+        self.employee.refresh_from_db()
+        self.assertFalse(self.employee.is_active_employee)
+        self.assertIsNone(User.objects.get_by_pin("2233"))
+
+    def test_sick_status_deactivates_and_blocks_pin_login(self):
+        self.employee.employment_status = EmploymentStatus.SICK
+        self.employee.save()
+        self.assertIsNone(User.objects.get_by_pin("2233"))
+
+    def test_terminated_status_deactivates_and_blocks_pin_login(self):
+        self.employee.employment_status = EmploymentStatus.TERMINATED
+        self.employee.save()
+        self.assertIsNone(User.objects.get_by_pin("2233"))
+
+    def test_directly_deactivated_employee_blocks_pin_login(self):
+        self.employee.is_active_employee = False
+        self.employee.save()
+        self.assertIsNone(User.objects.get_by_pin("2233"))
+
+    def test_wrong_pin_does_not_match(self):
+        self.assertIsNone(User.objects.get_by_pin("0000"))
+
+
+class LegacyPinMigrationDataIntegrityTests(APITestCase):
+    """Guards against reintroducing plaintext PIN storage."""
+
+    def test_plaintext_pin_field_no_longer_exists(self):
+        field_names = {f.name for f in User._meta.get_fields()}
+        self.assertNotIn("pin_code", field_names)
+        self.assertIn("pin_code_hash", field_names)
+
+
+class MultiStageMachineAssignmentTests(APITestCase):
+    """Xodimlar formasi: bosqich(lar) endi klient tomonidan aniq tanlanadi
+    (top-down), stanoklar esa har bir (xodim, bosqich) juftligi uchun
+    alohida EmployeeStageMachine qatorlarida saqlanadi — machine.operation
+    orqali emas, xodimning O'ZI shu bosqichga biriktirilgan bo'lishi kerak."""
+
+    def setUp(self):
+        self.admin = User.objects.create_user(
+            username="multi-admin", phone="+998901113201", password="secret-pass", role=Role.ADMIN,
+        )
+        self.tsex = Tsex.objects.create(name="Multi bo'lim")
+        self.arra = Operation.objects.create(code="MULTI-ARRA", name="Arra", measure_unit="m2")
+        self.kromka = Operation.objects.create(code="MULTI-KROMKA", name="Kromka", measure_unit="meter")
+        self.arra_machine = Machine.objects.create(machine_id="M-MULTI-ARRA", name="Arra-1", operation=self.arra, tsex=self.tsex)
+        self.kromka_machine_1 = Machine.objects.create(
+            machine_id="M-MULTI-KROMKA-1", name="Kromka-1", operation=self.kromka, tsex=self.tsex,
+        )
+        self.kromka_machine_2 = Machine.objects.create(
+            machine_id="M-MULTI-KROMKA-2", name="Kromka-2", operation=self.kromka, tsex=self.tsex,
+        )
+        self.client.force_authenticate(user=self.admin)
+
+    def _create_operator(self, **overrides):
+        payload = {
+            "username": "multi-operator", "phone": "+998901113202", "role": Role.OPERATOR,
+            "password": "secret-pass", "pin_code": "1357", "department": self.tsex.id,
+        }
+        payload.update(overrides)
+        return self.client.post("/api/employees/", payload, format="json")
+
+    def test_multi_stage_with_per_stage_machine_counts(self):
+        response = self._create_operator(
+            multi_stage_enabled=True,
+            assigned_operations=[self.arra.id, self.kromka.id],
+            assigned_machines=[self.arra_machine.id, self.kromka_machine_1.id, self.kromka_machine_2.id],
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+        employee = User.objects.get(id=response.data["id"])
+
+        self.assertTrue(employee.multi_stage_enabled)
+        self.assertIsNone(employee.assigned_operation_id)
+        self.assertEqual(
+            set(employee.assigned_operations.values_list("id", flat=True)), {self.arra.id, self.kromka.id},
+        )
+        rows = list(
+            EmployeeStageMachine.objects.filter(employee=employee).values("stage_id", "machine_id")
+        )
+        self.assertEqual(len(rows), 3)
+        self.assertEqual(
+            {r["machine_id"] for r in rows if r["stage_id"] == self.arra.id}, {self.arra_machine.id},
+        )
+        self.assertEqual(
+            {r["machine_id"] for r in rows if r["stage_id"] == self.kromka.id},
+            {self.kromka_machine_1.id, self.kromka_machine_2.id},
+        )
+        self.assertEqual(employee.assigned_machines.filter(operation=self.kromka).count(), 2)
+        self.assertEqual(employee.assigned_machines.filter(operation=self.arra).count(), 1)
+
+    def test_machine_outside_selected_stages_is_rejected_even_in_same_tsex(self):
+        response = self._create_operator(
+            multi_stage_enabled=False,
+            assigned_operation=self.arra.id,
+            # kromka_machine_1 is in the same tsex, but Arra-only was selected.
+            assigned_machines=[self.arra_machine.id, self.kromka_machine_1.id],
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("assigned_machines", response.data)
+
+    def test_toggling_multi_stage_off_clears_assigned_operations(self):
+        create = self._create_operator(
+            multi_stage_enabled=True,
+            assigned_operations=[self.arra.id, self.kromka.id],
+            assigned_machines=[self.arra_machine.id, self.kromka_machine_1.id],
+        )
+        self.assertEqual(create.status_code, 201, create.data)
+        employee_id = create.data["id"]
+
+        update = self.client.patch(
+            f"/api/employees/{employee_id}/",
+            {
+                "multi_stage_enabled": False, "assigned_operation": self.arra.id,
+                "assigned_operations": [], "assigned_machines": [self.arra_machine.id],
+            },
+            format="json",
+        )
+        self.assertEqual(update.status_code, 200, update.data)
+        employee = User.objects.get(id=employee_id)
+        self.assertFalse(employee.multi_stage_enabled)
+        self.assertEqual(employee.assigned_operation_id, self.arra.id)
+        self.assertEqual(employee.assigned_operations.count(), 0)
+        self.assertEqual(EmployeeStageMachine.objects.filter(employee=employee).count(), 1)
+
+    def test_toggling_multi_stage_on_clears_assigned_operation(self):
+        create = self._create_operator(
+            multi_stage_enabled=False, assigned_operation=self.arra.id,
+            assigned_machines=[self.arra_machine.id],
+        )
+        self.assertEqual(create.status_code, 201, create.data)
+        employee_id = create.data["id"]
+
+        update = self.client.patch(
+            f"/api/employees/{employee_id}/",
+            {
+                "multi_stage_enabled": True, "assigned_operations": [self.arra.id, self.kromka.id],
+                "assigned_machines": [self.arra_machine.id, self.kromka_machine_1.id],
+            },
+            format="json",
+        )
+        self.assertEqual(update.status_code, 200, update.data)
+        employee = User.objects.get(id=employee_id)
+        self.assertTrue(employee.multi_stage_enabled)
+        self.assertIsNone(employee.assigned_operation_id)
+        self.assertEqual(set(employee.assigned_operations.values_list("id", flat=True)), {self.arra.id, self.kromka.id})
+
+    def test_update_diff_syncs_machines_without_disturbing_untouched_rows(self):
+        create = self._create_operator(
+            multi_stage_enabled=True,
+            assigned_operations=[self.arra.id, self.kromka.id],
+            assigned_machines=[self.arra_machine.id, self.kromka_machine_1.id],
+        )
+        self.assertEqual(create.status_code, 201, create.data)
+        employee_id = create.data["id"]
+        untouched_row_id = EmployeeStageMachine.objects.get(
+            employee_id=employee_id, machine=self.kromka_machine_1,
+        ).id
+
+        update = self.client.patch(
+            f"/api/employees/{employee_id}/",
+            {"assigned_machines": [self.kromka_machine_1.id, self.kromka_machine_2.id]},
+            format="json",
+        )
+        self.assertEqual(update.status_code, 200, update.data)
+
+        remaining = set(
+            EmployeeStageMachine.objects.filter(employee_id=employee_id).values_list("machine_id", flat=True)
+        )
+        self.assertEqual(remaining, {self.kromka_machine_1.id, self.kromka_machine_2.id})
+        self.assertEqual(
+            EmployeeStageMachine.objects.get(employee_id=employee_id, machine=self.kromka_machine_1).id,
+            untouched_row_id,
+            "the untouched (employee, kromka_machine_1) row must not be deleted and recreated",
+        )
+
+    def test_stage_consistency_after_sync(self):
+        create = self._create_operator(
+            multi_stage_enabled=True,
+            assigned_operations=[self.arra.id, self.kromka.id],
+            assigned_machines=[self.arra_machine.id, self.kromka_machine_1.id],
+        )
+        self.assertEqual(create.status_code, 201, create.data)
+        for row in EmployeeStageMachine.objects.filter(employee_id=create.data["id"]):
+            self.assertEqual(row.stage_id, row.machine.operation_id)
+
+    def test_terminal_pin_lookup_scopes_machines_per_stage(self):
+        create = self._create_operator(
+            multi_stage_enabled=True,
+            assigned_operations=[self.arra.id, self.kromka.id],
+            assigned_machines=[self.arra_machine.id, self.kromka_machine_1.id, self.kromka_machine_2.id],
+        )
+        self.assertEqual(create.status_code, 201, create.data)
+
+        response = self.client.post("/api/auth/terminal-pin-lookup", {"pin_code": "1357"}, format="json")
+        self.assertEqual(response.status_code, 200, response.data)
+
+        by_code = {op["code"]: op for op in response.data["operations"]}
+        self.assertEqual({m["id"] for m in by_code["MULTI-ARRA"]["machines"]}, {self.arra_machine.id})
+        self.assertEqual(
+            {m["id"] for m in by_code["MULTI-KROMKA"]["machines"]},
+            {self.kromka_machine_1.id, self.kromka_machine_2.id},
         )

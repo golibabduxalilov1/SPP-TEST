@@ -18,9 +18,19 @@ import { employeesSteps } from "../../tutorial/content/employees";
 import { formatUzPhone, normalizeUzPhone } from "../../lib/phone";
 
 const ROLE_OPTIONS = [
-  ["super_admin", "Super Admin"], ["admin", "Admin"], ["director", "Rahbar / Direktor"], ["manager", "Ishlab chiqarish menejeri"],
-  ["master", "Master / Tsex boshlig'i"], ["technologist", "Texnolog / Konstruktor"], ["operator", "Operator / Usta"],
-  ["packaging", "Qadoqlash operatori"], ["warehouse", "Omborchi"], ["sysadmin", "Tizim administratori"],
+  ["super_admin", "Super Admin"], ["admin", "Admin"], ["director", "Rahbar"], ["manager", "Ishlab chiqarish menejeri"],
+  ["operator", "Operator / Usta"], ["warehouse", "Omborchi"],
+];
+
+// Rollar shu ro'yxatda bo'lsa, PIN kod maydoni umuman ko'rsatilmaydi — ular
+// faqat login/parol orqali boshqaruv paneliga kiradi (backend: NO_PIN_ROLES).
+const NO_PIN_ROLES = ["super_admin", "admin", "director"];
+
+// PIN faqat shu rollarda (yoki Omborchi terminaldan foydalansa) mumkin.
+const PIN_CAPABLE_ROLES = ["manager", "operator", "warehouse"];
+
+const EMPLOYMENT_STATUS_OPTIONS = [
+  ["faol", "Faol"], ["vacation", "Ta'til"], ["sick", "Kasallik"], ["terminated", "Bo'shatilgan"],
 ];
 
 const EMPTY_FORM = {
@@ -29,11 +39,19 @@ const EMPTY_FORM = {
   last_name: "",
   role: "operator",
   phone: "+998 ",
+  is_active_employee: true,
+  employment_status: "faol",
   pin_code: "",
   password: "",
-  multi_stage_enabled: false,
-  assigned_workstation: "",
-  assigned_workstations: [],
+  department: "",
+  managed_departments: [],
+  multiStageEnabled: false,
+  assigned_operation: "",
+  assigned_operations: [],
+  // Per selected stage: { [operationId]: { multi: bool, machines: [machineId, ...] } }
+  // — each stage's "Bir nechta stanok" toggle is independent of every other stage's.
+  stageMachineConfig: {},
+  uses_terminal: false,
 };
 
 function getErrorMessage(error) {
@@ -102,6 +120,15 @@ export default function Employees() {
     }
   }
 
+  function departmentLabel(employee) {
+    if (employee.role === "operator") return employee.department_name || "—";
+    if (employee.role === "manager") {
+      const names = (employee.managed_departments_detail || []).map((t) => t.name);
+      return names.length ? names.join(", ") : "—";
+    }
+    return "—";
+  }
+
   if (loading) return <PageLoader />;
 
   return (
@@ -119,8 +146,9 @@ export default function Employees() {
           <Table>
             <Thead>
               <tr>
-                <Th>Login</Th>
+                <Th>Foydalanuvchi nomi</Th>
                 <Th>Rol</Th>
+                <Th>Bo'lim</Th>
                 <Th>PIN</Th>
                 <Th>Telefon</Th>
                 <Th>Holat</Th>
@@ -128,17 +156,25 @@ export default function Employees() {
               </tr>
             </Thead>
             <Tbody>
-              {employees.length === 0 && <EmptyRow colSpan={6} />}
+              {employees.length === 0 && <EmptyRow colSpan={7} />}
               {employees.map((employee) => (
                 <Tr key={employee.id}>
                   <Td className="font-medium">{employee.username}</Td>
                   <Td>{employee.role_display}</Td>
-                  <Td className="font-mono">{employee.pin_code || "—"}</Td>
+                  <Td>{departmentLabel(employee)}</Td>
+                  <Td>
+                    {PIN_CAPABLE_ROLES.includes(employee.role) ? (
+                      <Badge tone={employee.has_pin ? "green" : "gray"}>{employee.has_pin ? "Bor" : "Yo'q"}</Badge>
+                    ) : "—"}
+                  </Td>
                   <Td>{employee.phone || "—"}</Td>
                   <Td>
-                    <Badge tone={employee.is_active_employee ? "green" : "gray"}>
-                      {employee.is_active_employee ? "Aktiv" : "Noaktiv"}
-                    </Badge>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <Badge tone={employee.is_active_employee ? "green" : "gray"}>
+                        {employee.is_active_employee ? "Aktiv" : "Noaktiv"}
+                      </Badge>
+                      {employee.needs_assignment_warning && <Badge tone="orange">Biriktirish kerak</Badge>}
+                    </div>
                   </Td>
                   <Td className="whitespace-nowrap">
                     {employee.id === currentUser?.id ? (
@@ -230,37 +266,168 @@ export default function Employees() {
 function EmployeeModal({ open, employee, currentUser, onClose, onSaved }) {
   const [form, setForm] = useState(EMPTY_FORM);
   const [submitting, setSubmitting] = useState(false);
-  const [workstations, setWorkstations] = useState([]);
+  const [tsexes, setTsexes] = useState([]);
+  const [machines, setMachines] = useState([]);
+  const [operations, setOperations] = useState([]);
   const isEditing = Boolean(employee);
   const isEditingSelf = isEditing && employee?.id === currentUser?.id;
   const roleOptions = currentUser?.role === "admin"
     ? ROLE_OPTIONS.filter(([key]) => key !== "super_admin")
     : ROLE_OPTIONS;
 
+  const role = form.role;
+  const isOperator = role === "operator";
+  const isManager = role === "manager";
+  const isWarehouse = role === "warehouse";
+  const noPinRole = NO_PIN_ROLES.includes(role);
+  const showPin = isOperator || isManager || (isWarehouse && form.uses_terminal);
+  const showPassword = !isOperator && !(isWarehouse && form.uses_terminal);
+  const passwordRequired = !isEditing && noPinRole;
+  const showEmploymentStatus = isOperator || isWarehouse;
+
   useEffect(() => {
     if (!open) return;
-    adminApi.get("/workstations/").then(({ data }) => setWorkstations(data.results || data)).catch(() => {});
-    setForm(employee ? {
-      username: employee.username || "",
-      first_name: employee.first_name || "",
-      last_name: employee.last_name || "",
-      role: employee.role || "operator",
-      phone: formatUzPhone(employee.phone || ""),
-      pin_code: employee.pin_code || "",
-      password: "",
-      is_active_employee: employee.is_active_employee,
-      multi_stage_enabled: employee.multi_stage_enabled || false,
-      assigned_workstation: employee.assigned_workstation ?? "",
-      assigned_workstations: (employee.assigned_workstations_detail || []).map((w) => w.id),
-    } : { ...EMPTY_FORM });
+    Promise.all([
+      adminApi.get("/tsexes/", { params: { is_active: true } }),
+      adminApi.get("/machines/"),
+      adminApi.get("/operations/", { params: { is_active: true } }),
+    ]).then(([t, m, o]) => {
+      setTsexes(t.data.results || t.data);
+      setMachines(m.data.results || m.data);
+      setOperations(o.data.results || o.data);
+    }).catch(() => {});
+    if (employee) {
+      // Reconstruct the per-stage machine config from the flat assigned_machines_detail
+      // list (each machine detail already carries its own operation_id) — the server
+      // has no separate "multi" flag, so it's inferred as on whenever >1 machine is
+      // already assigned to that stage.
+      const stageMachineConfig = {};
+      for (const m of employee.assigned_machines_detail || []) {
+        const key = m.operation_id;
+        if (!stageMachineConfig[key]) stageMachineConfig[key] = { multi: false, machines: [] };
+        stageMachineConfig[key].machines.push(m.id);
+      }
+      for (const cfg of Object.values(stageMachineConfig)) {
+        cfg.multi = cfg.machines.length > 1;
+      }
+      setForm({
+        username: employee.username || "",
+        first_name: employee.first_name || "",
+        last_name: employee.last_name || "",
+        role: employee.role || "operator",
+        phone: formatUzPhone(employee.phone || ""),
+        is_active_employee: employee.is_active_employee,
+        employment_status: employee.employment_status || "faol",
+        pin_code: "",
+        password: "",
+        department: employee.department ?? "",
+        managed_departments: (employee.managed_departments_detail || []).map((t) => t.id),
+        multiStageEnabled: employee.multi_stage_enabled || false,
+        assigned_operation: employee.assigned_operation ?? "",
+        assigned_operations: (employee.assigned_operations_detail || []).map((op) => op.id),
+        stageMachineConfig,
+        uses_terminal: employee.uses_terminal || false,
+      });
+    } else {
+      setForm({ ...EMPTY_FORM });
+    }
   }, [employee, open]);
 
-  function toggleAssignedWorkstation(id) {
+  // Tsex tanlanmaguncha stanoklar ro'yxati chiqmaydi; tanlangandan keyin ham
+  // faqat shu tsexga tegishli stanoklar ko'rsatiladi.
+  const availableMachines = form.department
+    ? machines.filter((m) => String(m.tsex) === String(form.department))
+    : [];
+
+  function machinesForStage(stageId) {
+    return availableMachines.filter((m) => String(m.operation) === String(stageId));
+  }
+
+  // 1-Daraja: "Bir nechta bosqich" OFF bo'lsa bitta, ON bo'lsa bir nechta
+  // bosqich — har bir tanlangan bosqich uchun pastda o'z stanok bloki chiqadi.
+  const selectedStageIds = form.multiStageEnabled
+    ? form.assigned_operations.map(String)
+    : (form.assigned_operation ? [String(form.assigned_operation)] : []);
+
+  function updateForm(patch) {
+    setForm((f) => {
+      const next = { ...f, ...patch };
+      if ("department" in patch) {
+        // Tsex o'zgarganda endi noto'g'ri tsexga tegishli bo'lib qolgan
+        // stanok tanlovlari har bir bosqich blokidan tozalanadi.
+        const validMachineIds = new Set(
+          machines
+            .filter((m) => !next.department || String(m.tsex) === String(next.department))
+            .map((m) => m.id)
+        );
+        const nextConfig = {};
+        for (const [stageId, cfg] of Object.entries(next.stageMachineConfig)) {
+          nextConfig[stageId] = { ...cfg, machines: cfg.machines.filter((id) => validMachineIds.has(id)) };
+        }
+        next.stageMachineConfig = nextConfig;
+      }
+      return next;
+    });
+  }
+
+  function setMultiStageEnabled(enabled) {
+    setForm((f) => {
+      if (enabled) {
+        const initial = f.assigned_operation ? [Number(f.assigned_operation)] : [];
+        return { ...f, multiStageEnabled: true, assigned_operations: initial, assigned_operation: "" };
+      }
+      const first = f.assigned_operations[0] ?? "";
+      return { ...f, multiStageEnabled: false, assigned_operation: first, assigned_operations: [] };
+    });
+  }
+
+  function toggleStageSelection(stageId) {
     setForm((f) => ({
       ...f,
-      assigned_workstations: f.assigned_workstations.includes(id)
-        ? f.assigned_workstations.filter((x) => x !== id)
-        : [...f.assigned_workstations, id],
+      assigned_operations: f.assigned_operations.includes(stageId)
+        ? f.assigned_operations.filter((id) => id !== stageId)
+        : [...f.assigned_operations, stageId],
+    }));
+  }
+
+  // 2-Daraja: shu bosqichning O'ZINING "Bir nechta stanok" toggle'i —
+  // boshqa bosqichlar blokidan mustaqil.
+  function toggleStageMulti(stageId) {
+    setForm((f) => {
+      const current = f.stageMachineConfig[stageId] || { multi: false, machines: [] };
+      const multi = !current.multi;
+      // Multi'ni OFF qilganda faqat birinchi tanlangan stanok qoladi (select bitta qiymat kutadi).
+      const machinesList = multi ? current.machines : current.machines.slice(0, 1);
+      return { ...f, stageMachineConfig: { ...f.stageMachineConfig, [stageId]: { multi, machines: machinesList } } };
+    });
+  }
+
+  function toggleStageMachine(stageId, machineId) {
+    setForm((f) => {
+      const current = f.stageMachineConfig[stageId] || { multi: false, machines: [] };
+      const machinesList = current.machines.includes(machineId)
+        ? current.machines.filter((id) => id !== machineId)
+        : [...current.machines, machineId];
+      return { ...f, stageMachineConfig: { ...f.stageMachineConfig, [stageId]: { ...current, machines: machinesList } } };
+    });
+  }
+
+  function setSingleStageMachine(stageId, machineId) {
+    setForm((f) => {
+      const current = f.stageMachineConfig[stageId] || { multi: false, machines: [] };
+      return {
+        ...f,
+        stageMachineConfig: { ...f.stageMachineConfig, [stageId]: { ...current, machines: machineId ? [machineId] : [] } },
+      };
+    });
+  }
+
+  function toggleManagedDepartment(id) {
+    setForm((f) => ({
+      ...f,
+      managed_departments: f.managed_departments.includes(id)
+        ? f.managed_departments.filter((x) => x !== id)
+        : [...f.managed_departments, id],
     }));
   }
 
@@ -269,12 +436,30 @@ function EmployeeModal({ open, employee, currentUser, onClose, onSaved }) {
     setSubmitting(true);
     try {
       const payload = {
-        ...form,
+        username: form.username,
+        first_name: form.first_name,
+        last_name: form.last_name,
+        role: form.role,
         phone: normalizeUzPhone(form.phone),
-        pin_code: form.pin_code.trim() === "" ? null : form.pin_code.trim(),
-        assigned_workstation: form.multi_stage_enabled || form.assigned_workstation === "" ? null : form.assigned_workstation,
-        assigned_workstations: form.multi_stage_enabled ? form.assigned_workstations : [],
+        is_active_employee: form.is_active_employee,
       };
+      if (showPassword) payload.password = form.password;
+      if (showPin && form.pin_code.trim() !== "") payload.pin_code = form.pin_code.trim();
+      if (isOperator) {
+        payload.department = form.department === "" ? null : form.department;
+        payload.multi_stage_enabled = form.multiStageEnabled;
+        payload.assigned_operation = form.multiStageEnabled ? null : (form.assigned_operation || null);
+        payload.assigned_operations = form.multiStageEnabled ? form.assigned_operations : [];
+        payload.assigned_machines = selectedStageIds.flatMap((stageId) => form.stageMachineConfig[stageId]?.machines ?? []);
+        payload.employment_status = form.employment_status;
+      }
+      if (isWarehouse) {
+        payload.uses_terminal = form.uses_terminal;
+        payload.employment_status = form.employment_status;
+      }
+      if (isManager) {
+        payload.managed_departments = form.managed_departments;
+      }
       if (isEditing) {
         await adminApi.patch(`/employees/${employee.id}/`, payload);
         toast.success("Xodim ma'lumotlari yangilandi");
@@ -294,27 +479,87 @@ function EmployeeModal({ open, employee, currentUser, onClose, onSaved }) {
   return (
     <Modal open={open} onClose={onClose} title={isEditing ? "Xodimni tahrirlash" : "Yangi xodim"}>
       <form onSubmit={submit} className="space-y-4">
+        {/* 1. Shaxsiy ma'lumotlar */}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field label="Ism"><Input required value={form.first_name} onChange={(e) => setForm({ ...form, first_name: e.target.value })} /></Field>
           <Field label="Familiya"><Input value={form.last_name} onChange={(e) => setForm({ ...form, last_name: e.target.value })} /></Field>
         </div>
-        <Field label="Login"><Input required value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} /></Field>
+        <Field label="Foydalanuvchi nomi"><Input required value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} /></Field>
+        <Field label="Telefon" required hint={isEditingSelf ? "O'zingizning raqamingizni o'zgartira olmaysiz" : undefined}>
+          <Input
+            required
+            disabled={isEditingSelf}
+            value={form.phone}
+            onChange={(e) => setForm({ ...form, phone: formatUzPhone(e.target.value) })}
+            placeholder="+998 90 123 45 67"
+          />
+        </Field>
+
+        {/* 2. Rol va holat */}
         <Field label="Rol" hint={isEditingSelf ? "O'zingizning rolingizni o'zgartira olmaysiz" : undefined}>
-          <Select disabled={isEditingSelf} value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
+          <Select disabled={isEditingSelf} value={form.role} onChange={(e) => updateForm({ role: e.target.value })}>
             {roleOptions.map(([key, value]) => <option key={key} value={key}>{value}</option>)}
           </Select>
         </Field>
-        <Field label="Holat">
-          <Select
-            value={String(form.is_active_employee)}
-            onChange={(e) => setForm({ ...form, is_active_employee: e.target.value === "true" })}
+        {/* Yangi xodim yaratilganda holat har doim "Aktiv/Faol" bo'lib boshlanadi —
+            tanlash faqat mavjud xodimni tahrirlashda kerak bo'ladi. */}
+        {isEditing && (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Field label="Holat">
+              <Select
+                value={String(form.is_active_employee)}
+                onChange={(e) => setForm({ ...form, is_active_employee: e.target.value === "true" })}
+              >
+                <option value="true">Aktiv</option>
+                <option value="false">Nofaol</option>
+              </Select>
+            </Field>
+            {showEmploymentStatus && (
+              <Field label="Ish holati">
+                <Select value={form.employment_status} onChange={(e) => setForm({ ...form, employment_status: e.target.value })}>
+                  {EMPLOYMENT_STATUS_OPTIONS.map(([key, value]) => <option key={key} value={key}>{value}</option>)}
+                </Select>
+              </Field>
+            )}
+          </div>
+        )}
+        {showPassword && (
+          <Field
+            label="Parol (boshqaruv paneli uchun)"
+            required={passwordRequired}
+            hint={isEditing ? "O'zgartirmaslik uchun bo'sh qoldiring" : passwordRequired ? "Ushbu rol uchun parol majburiy" : "Bo'sh qoldirilsa, tasodifiy parol yaratiladi"}
           >
-            <option value="true">Aktiv</option>
-            <option value="false">Noaktiv</option>
-          </Select>
-        </Field>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <Field label="PIN kod (terminal uchun)" hint="4 ta raqam kiriting">
+            <Input
+              type="password"
+              required={passwordRequired}
+              value={form.password}
+              onChange={(e) => setForm({ ...form, password: e.target.value })}
+            />
+          </Field>
+        )}
+
+        {/* 3. PIN kod */}
+        {isWarehouse && (
+          <div className="rounded-xl border border-(--border-subtle) p-3.5">
+            <Toggle
+              label="Terminaldan foydalanadi"
+              checked={form.uses_terminal}
+              onChange={(e) => setForm({ ...form, uses_terminal: e.target.checked, pin_code: "" })}
+            />
+          </div>
+        )}
+        {showPin && (
+          <Field
+            label="PIN kod (terminal uchun)"
+            required={isOperator || (isWarehouse && form.uses_terminal)}
+            hint={
+              isEditing && employee?.has_pin
+                ? "PIN o'rnatilgan — o'zgartirmaslik uchun bo'sh qoldiring"
+                : isEditing
+                  ? "PIN belgilanmagan — 4 ta raqam kiriting"
+                  : "4 ta raqam kiriting"
+            }
+          >
             <Input
               value={form.pin_code}
               onChange={(e) => setForm({ ...form, pin_code: e.target.value.replace(/\D/g, "").slice(0, 4) })}
@@ -325,61 +570,111 @@ function EmployeeModal({ open, employee, currentUser, onClose, onSaved }) {
               title="PIN kod 4 ta raqamdan iborat bo'lishi kerak"
             />
           </Field>
-          <Field label="Telefon" required hint={isEditingSelf ? "O'zingizning raqamingizni o'zgartira olmaysiz" : undefined}>
-            <Input
-              required
-              disabled={isEditingSelf}
-              value={form.phone}
-              onChange={(e) => setForm({ ...form, phone: formatUzPhone(e.target.value) })}
-              placeholder="+998 90 123 45 67"
-            />
+        )}
+
+        {/* 4. Tsex */}
+        {isOperator && (
+          <Field label="Tsex" required>
+            <Select value={form.department} onChange={(e) => updateForm({ department: e.target.value })}>
+              <option value="">Tanlang</option>
+              {tsexes.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </Select>
           </Field>
-        </div>
-        <Field
-          label="Parol (admin panel uchun)"
-          hint={isEditing ? "O'zgartirmaslik uchun bo'sh qoldiring" : "Bo'sh qoldirilsa, tasodifiy parol yaratiladi"}
-        >
-          <Input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
-        </Field>
-
-        <div className="rounded-xl border border-(--border-subtle) p-3.5">
-          <Toggle
-            label="Bir nechta bosqich"
-            checked={form.multi_stage_enabled}
-            onChange={(e) => setForm({ ...form, multi_stage_enabled: e.target.checked })}
-          />
-          <p className="mt-1.5 text-xs text-(--ink-soft)">
-            Terminalga PIN bilan kirganda xodim avtomatik shu bosqich(lar)ga yo'naltiriladi.
-          </p>
-
-          {form.multi_stage_enabled ? (
-            <div className="mt-3 max-h-48 space-y-2 overflow-y-auto">
-              {workstations.map((w) => (
-                <label key={w.id} className="flex cursor-pointer items-center gap-2.5 text-sm text-(--ink)">
-                  <Checkbox
-                    checked={form.assigned_workstations.includes(w.id)}
-                    onChange={() => toggleAssignedWorkstation(w.id)}
-                  />
-                  {w.name} — {w.operation_name} ({w.tsex_name})
+        )}
+        {isManager && (
+          <div className="rounded-xl border border-(--border-subtle) p-3.5">
+            <Label>Biriktirilgan tsexlar</Label>
+            <div className="mt-2 max-h-40 space-y-2 overflow-y-auto">
+              {tsexes.map((t) => (
+                <label key={t.id} className="flex cursor-pointer items-center gap-2.5 text-sm text-(--ink)">
+                  <Checkbox checked={form.managed_departments.includes(t.id)} onChange={() => toggleManagedDepartment(t.id)} />
+                  {t.name}
                 </label>
               ))}
-              {workstations.length === 0 && <p className="text-xs text-(--ink-faint)">Postlar topilmadi</p>}
+              {tsexes.length === 0 && <p className="text-xs text-(--ink-faint)">Tsexlar topilmadi</p>}
             </div>
-          ) : (
+          </div>
+        )}
+
+        {/* 5. Ishlab chiqarish bosqichi — 1-daraja on/off: bitta yoki bir nechta */}
+        {isOperator && (
+          <div className="rounded-xl border border-(--border-subtle) p-3.5">
+            <Toggle
+              label="Bir nechta bosqich"
+              checked={form.multiStageEnabled}
+              onChange={(e) => setMultiStageEnabled(e.target.checked)}
+            />
             <div className="mt-3">
-              <Label>Bosqich</Label>
-              <Select
-                value={form.assigned_workstation}
-                onChange={(e) => setForm({ ...form, assigned_workstation: e.target.value })}
-              >
-                <option value="">Tayinlanmagan</option>
-                {workstations.map((w) => (
-                  <option key={w.id} value={w.id}>{w.name} — {w.operation_name} ({w.tsex_name})</option>
-                ))}
-              </Select>
+              <Label required>Ishlab chiqarish bosqichi</Label>
+              {!form.multiStageEnabled ? (
+                <Select
+                  className="mt-2"
+                  value={form.assigned_operation}
+                  onChange={(e) => setForm((f) => ({ ...f, assigned_operation: e.target.value }))}
+                >
+                  <option value="">Tanlang</option>
+                  {operations.map((op) => <option key={op.id} value={op.id}>{op.name}</option>)}
+                </Select>
+              ) : (
+                <div className="mt-2 max-h-40 space-y-2 overflow-y-auto">
+                  {operations.map((op) => (
+                    <label key={op.id} className="flex cursor-pointer items-center gap-2.5 text-sm text-(--ink)">
+                      <Checkbox checked={form.assigned_operations.includes(op.id)} onChange={() => toggleStageSelection(op.id)} />
+                      {op.name}
+                    </label>
+                  ))}
+                  {operations.length === 0 && <p className="text-xs text-(--ink-faint)">Bosqichlar topilmadi</p>}
+                </div>
+              )}
             </div>
-          )}
-        </div>
+          </div>
+        )}
+
+        {/* 6. Har bir tanlangan bosqich uchun ALOHIDA stanok bloki — 2-daraja
+            on/off: har birining "Bir nechta stanok" toggle'i mustaqil. */}
+        {isOperator && !form.department && (
+          <p className="text-xs text-(--ink-faint)">Dastgoh tanlash uchun avval tsexni tanlang.</p>
+        )}
+        {isOperator && form.department && selectedStageIds.length === 0 && (
+          <p className="text-xs text-(--ink-faint)">Dastgoh tanlash uchun avval ishlab chiqarish bosqichini tanlang.</p>
+        )}
+        {isOperator && form.department && selectedStageIds.map((stageId) => {
+          const stage = operations.find((op) => String(op.id) === stageId);
+          const stageMachines = machinesForStage(stageId);
+          const config = form.stageMachineConfig[stageId] || { multi: false, machines: [] };
+          return (
+            <div key={stageId} className="rounded-xl border border-(--border-subtle) p-3.5">
+              <Label required>{stage ? `${stage.name} uchun dastgoh` : "Dastgoh"}</Label>
+              <Toggle
+                className="mt-2"
+                label="Bir nechta dastgoh"
+                checked={config.multi}
+                onChange={() => toggleStageMulti(stageId)}
+              />
+              {stageMachines.length === 0 ? (
+                <p className="mt-2 text-xs text-(--ink-faint)">Tanlangan tsex va bosqichga tegishli dastgoh topilmadi.</p>
+              ) : config.multi ? (
+                <div className="mt-2 max-h-40 space-y-2 overflow-y-auto">
+                  {stageMachines.map((m) => (
+                    <label key={m.id} className="flex cursor-pointer items-center gap-2.5 text-sm text-(--ink)">
+                      <Checkbox checked={config.machines.includes(m.id)} onChange={() => toggleStageMachine(stageId, m.id)} />
+                      {m.name}
+                    </label>
+                  ))}
+                </div>
+              ) : (
+                <Select
+                  className="mt-2"
+                  value={config.machines[0] ?? ""}
+                  onChange={(e) => setSingleStageMachine(stageId, e.target.value ? Number(e.target.value) : null)}
+                >
+                  <option value="">Tanlang</option>
+                  {stageMachines.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+                </Select>
+              )}
+            </div>
+          );
+        })}
 
         <Button type="submit" loading={submitting} className="w-full">
           {isEditing ? "Saqlash" : "Yaratish"}

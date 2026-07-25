@@ -62,6 +62,61 @@ class OperationApiTests(APITestCase):
         refreshed_codes = [stage["code"] for stage in refreshed_response.data["operations"]]
         self.assertNotIn(create_response.data["code"], refreshed_codes)
 
+    def test_stage_can_be_created_with_explicit_measure_unit(self):
+        self.client.force_authenticate(user=self.super_admin)
+
+        response = self.client.post(
+            "/api/operations/",
+            {"name": "Qirralash", "order_index": 10, "measure_unit": "meter", "is_active": True},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201, response.data)
+        operation = Operation.objects.get(pk=response.data["id"])
+        self.assertEqual(operation.measure_unit, "meter")
+        self.assertEqual(response.data["measure_unit"], "meter")
+
+    def test_stage_measure_unit_can_be_edited(self):
+        operation = Operation.objects.create(
+            code="UNIT_EDIT", name="Birlik tahriri", measure_unit="piece", order_index=10,
+        )
+        self.client.force_authenticate(user=self.super_admin)
+
+        response = self.client.patch(
+            f"/api/operations/{operation.id}/", {"measure_unit": "package"}, format="json",
+        )
+
+        self.assertEqual(response.status_code, 200, response.data)
+        operation.refresh_from_db()
+        self.assertEqual(operation.measure_unit, "package")
+
+    def test_invalid_measure_unit_is_rejected_on_create(self):
+        self.client.force_authenticate(user=self.super_admin)
+
+        response = self.client.post(
+            "/api/operations/",
+            {"name": "Noto'g'ri birlik", "order_index": 10, "measure_unit": "kilogram"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400, response.data)
+        self.assertIn("measure_unit", response.data)
+
+    def test_invalid_measure_unit_is_rejected_on_update(self):
+        operation = Operation.objects.create(
+            code="UNIT_GUARD", name="Birlik qo'riqchisi", measure_unit="piece", order_index=10,
+        )
+        self.client.force_authenticate(user=self.super_admin)
+
+        response = self.client.patch(
+            f"/api/operations/{operation.id}/", {"measure_unit": "litre"}, format="json",
+        )
+
+        self.assertEqual(response.status_code, 400, response.data)
+        self.assertIn("measure_unit", response.data)
+        operation.refresh_from_db()
+        self.assertEqual(operation.measure_unit, "piece", "rejected update must not change the stored value")
+
     def test_name_update_keeps_stable_code(self):
         operation = Operation.objects.create(
             code="POLIROVKA", name="Polirovka", measure_unit="piece", order_index=10,
@@ -247,6 +302,40 @@ class OperationApiTests(APITestCase):
         self.assertEqual(response.status_code, 200, response.data)
         codes = [row["code"] for row in response.data]
         self.assertIn(create_response.data["code"], codes)
+
+    def test_duplicate_order_index_is_rejected_on_create(self):
+        Operation.objects.create(
+            code="TAKEN_SLOT", name="Band tartib", measure_unit="piece", order_index=15,
+        )
+        self.client.force_authenticate(user=self.super_admin)
+
+        response = self.client.post(
+            "/api/operations/",
+            {"name": "Yangi band bosqich", "order_index": 15, "is_active": True},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400, response.data)
+        self.assertIn("order_index", response.data)
+
+    def test_duplicate_order_index_is_rejected_on_update(self):
+        Operation.objects.create(
+            code="SLOT_A", name="Bosqich A", measure_unit="piece", order_index=16,
+        )
+        stage_b = Operation.objects.create(
+            code="SLOT_B", name="Bosqich B", measure_unit="piece", order_index=17,
+        )
+        self.client.force_authenticate(user=self.super_admin)
+
+        conflicting = self.client.patch(
+            f"/api/operations/{stage_b.id}/", {"order_index": 16}, format="json",
+        )
+        self.assertEqual(conflicting.status_code, 400, conflicting.data)
+
+        unchanged = self.client.patch(
+            f"/api/operations/{stage_b.id}/", {"order_index": 17}, format="json",
+        )
+        self.assertEqual(unchanged.status_code, 200, unchanged.data)
 
     def test_new_stage_appears_in_production_report_after_use(self):
         self.client.force_authenticate(user=self.super_admin)

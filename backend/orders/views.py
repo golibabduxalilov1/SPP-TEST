@@ -50,9 +50,11 @@ class OrderViewSet(viewsets.ModelViewSet):
             return queryset
 
         # The Orders page presents a single effective production stage. Draft,
-        # approved and cancelled are separate lifecycle states, so they must not
-        # also appear under a stage merely because current_stage is populated.
-        special_statuses = [Order.Status.DRAFT, Order.Status.APPROVED, Order.Status.CANCELLED]
+        # approved, delivered and cancelled are separate lifecycle states, so they
+        # must not also appear under a stage merely because current_stage is populated.
+        special_statuses = [
+            Order.Status.DRAFT, Order.Status.APPROVED, Order.Status.DELIVERED, Order.Status.CANCELLED,
+        ]
         return queryset.exclude(status__in=special_statuses).filter(
             Q(current_stage_id=production_stage)
             | Q(current_stage__isnull=True, last_completed_stage_id=production_stage)

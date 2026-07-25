@@ -10,6 +10,7 @@ import { Input } from "../../components/ui/Input";
 import Badge from "../../components/ui/Badge";
 import { EmptyState } from "../../components/ui/Misc";
 import QrCameraScanner from "../../components/terminal/QrCameraScanner";
+import SegmentedControl from "../../components/ui/SegmentedControl";
 
 const ERROR_MESSAGES = {
   invalid_qr: "QR topilmadi",
@@ -17,12 +18,12 @@ const ERROR_MESSAGES = {
   previous_not_completed: "Xatolik: oldingi bosqich tugamagan",
   duplicate_scan: "Bu detal bu bosqichda avval skanerlangan",
   order_closed: "Buyurtma yopilgan",
-  device_not_allowed: "Bu qurilma ushbu postga ruxsat etilmagan",
+  device_not_allowed: "Bu dastgoh ushbu bosqichga ruxsat etilmagan",
   review_required: "Tekshirish talab qilinadi — masterga murojaat qiling",
 };
 
 export default function TerminalScan() {
-  const { workstation, parts, online, refreshBootstrap, refreshPendingCount } = useTerminalStore();
+  const { stage, machine, machines, setMachine, parts, online, refreshBootstrap, refreshPendingCount } = useTerminalStore();
   const [value, setValue] = useState("");
   const [lastResult, setLastResult] = useState(null);
   const [cameraError, setCameraError] = useState("");
@@ -43,7 +44,8 @@ export default function TerminalScan() {
   async function processToken(qrToken) {
     const clientScanId = uuid();
     const scannedAtClient = new Date().toISOString();
-    const operationCode = workstation.operation_code;
+    const operationCode = stage.code;
+    const machineId = machine?.id ?? null;
 
     if (online) {
       try {
@@ -51,7 +53,7 @@ export default function TerminalScan() {
           client_scan_id: clientScanId,
           qr_token: qrToken,
           operation_code: operationCode,
-          workstation_id: workstation.id,
+          machine_id: machineId,
           scanned_at_client: scannedAtClient,
         });
         setLastResult({ status: "synced", qrToken });
@@ -71,6 +73,7 @@ export default function TerminalScan() {
       client_scan_id: clientScanId,
       qr_token: qrToken,
       operation_code: operationCode,
+      machine_id: machineId,
       scanned_at_client: scannedAtClient,
       kind: "route",
     });
@@ -81,8 +84,16 @@ export default function TerminalScan() {
   return (
     <div className="max-w-xl mx-auto space-y-4">
       <Card>
-        <CardHeader title={workstation?.name} subtitle={`Bosqich: ${workstation?.operation_name}`} />
+        <CardHeader title={stage?.name} subtitle={machine ? `Dastgoh: ${machine.name}` : undefined} />
         <CardBody>
+          {machines.length > 1 && (
+            <SegmentedControl
+              className="mb-4 w-full"
+              options={machines.map((m) => ({ value: m.id, label: m.name }))}
+              value={machine?.id}
+              onChange={(id) => setMachine(machines.find((m) => m.id === id) || null)}
+            />
+          )}
           <div className="relative mx-auto aspect-square w-full max-w-xs overflow-hidden rounded-2xl border-2 border-(--border-strong) bg-black [&>div>video]:h-full [&>div>video]:w-full [&>div>video]:object-cover">
             <QrCameraScanner onDecode={processToken} onError={() => setCameraError("Kameraga ruxsat berilmadi yoki kamera topilmadi. QR tokenni qo'lda kiriting.")} className="h-full w-full" />
           </div>

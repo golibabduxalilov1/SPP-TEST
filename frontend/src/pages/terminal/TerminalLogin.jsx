@@ -7,12 +7,12 @@ import { terminalApi } from "../../api/client";
 import { useTerminalStore } from "../../store/terminalStore";
 import Button from "../../components/ui/Button";
 import { Select, Field } from "../../components/ui/Input";
-import { getSavedWorkstationId, saveWorkstationId } from "../../lib/device";
+import { getSavedStageId, saveStageId } from "../../lib/device";
 
 const KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "", "0", "back"];
 
-function targetRoute(ws) {
-  return ws?.operation_code === "QADOQLASH" ? "packaging" : ws?.operation_code === "OMBOR" ? "warehouse" : "scan";
+function targetRoute(stage) {
+  return stage?.code === "QADOQLASH" ? "packaging" : stage?.code === "OMBOR" ? "warehouse" : "scan";
 }
 
 export default function TerminalLogin() {
@@ -20,11 +20,11 @@ export default function TerminalLogin() {
   const [loading, setLoading] = useState(false);
   const [online, setOnline] = useState(navigator.onLine);
   // step: "pin" (numpad only) -> "stage-picker" (multi-stage employee, choose one)
-  // or "fallback-post" (no stage assigned yet — legacy manual post picker).
+  // or "fallback-stage" (no stage assigned yet — manual stage picker).
   const [step, setStep] = useState("pin");
-  const [lookup, setLookup] = useState(null); // { employee, workstations }
-  const [allWorkstations, setAllWorkstations] = useState([]);
-  const [fallbackWorkstationId, setFallbackWorkstationId] = useState("");
+  const [lookup, setLookup] = useState(null); // { employee, operations }
+  const [allStages, setAllStages] = useState([]);
+  const [fallbackStageId, setFallbackStageId] = useState("");
   const lookupPin = useTerminalStore((s) => s.lookupPin);
   const loginWithPin = useTerminalStore((s) => s.loginWithPin);
   const navigate = useNavigate();
@@ -46,12 +46,12 @@ export default function TerminalLogin() {
     setPin((p) => (p.length >= 4 ? p : p + key));
   }
 
-  async function goToWorkstation(ws) {
+  async function goToStage(stage) {
     setLoading(true);
     try {
-      await loginWithPin(pin, ws);
-      saveWorkstationId(ws?.id);
-      navigate(`/terminal/${targetRoute(ws)}`);
+      await loginWithPin(pin, stage);
+      saveStageId(stage?.id);
+      navigate(`/terminal/${targetRoute(stage)}`);
     } catch (err) {
       toast.error(err.response?.data?.detail || "Kirishda xatolik yuz berdi");
       resetToPin();
@@ -70,25 +70,25 @@ export default function TerminalLogin() {
     setLoading(true);
     try {
       const data = await lookupPin(pin);
-      const workstations = data.workstations || [];
-      if (workstations.length === 1) {
-        await goToWorkstation(workstations[0]);
+      const operations = data.operations || [];
+      if (operations.length === 1) {
+        await goToStage(operations[0]);
         return;
       }
-      if (workstations.length > 1) {
+      if (operations.length > 1) {
         setLookup(data);
         setStep("stage-picker");
         setLoading(false);
         return;
       }
-      // No stage assigned to this employee yet — fall back to manual post selection.
-      const { data: stations } = await terminalApi.get("/terminal/workstations");
-      setAllWorkstations(stations);
-      const saved = getSavedWorkstationId();
-      const remembered = saved && stations.some((w) => String(w.id) === saved);
-      setFallbackWorkstationId(remembered ? saved : String(stations[0]?.id || ""));
+      // No stage assigned to this employee yet — fall back to manual stage selection.
+      const { data: stages } = await terminalApi.get("/terminal/operations");
+      setAllStages(stages);
+      const saved = getSavedStageId();
+      const remembered = saved && stages.some((s) => String(s.id) === saved);
+      setFallbackStageId(remembered ? saved : String(stages[0]?.id || ""));
       setLookup(data);
-      setStep("fallback-post");
+      setStep("fallback-stage");
       setLoading(false);
     } catch (err) {
       toast.error(err.response?.data?.detail || "PIN noto'g'ri");
@@ -98,8 +98,8 @@ export default function TerminalLogin() {
   }
 
   async function submitFallback() {
-    const ws = allWorkstations.find((w) => String(w.id) === fallbackWorkstationId);
-    await goToWorkstation(ws);
+    const stage = allStages.find((s) => String(s.id) === fallbackStageId);
+    await goToStage(stage);
   }
 
   return (
@@ -178,23 +178,23 @@ export default function TerminalLogin() {
             Salom, {lookup.employee.first_name}! Bosqichni tanlang:
           </p>
           <div className="space-y-2.5">
-            {lookup.workstations.map((ws) => (
+            {lookup.operations.map((op) => (
               <button
-                key={ws.id}
+                key={op.id}
                 type="button"
                 disabled={loading}
-                onClick={() => goToWorkstation(ws)}
+                onClick={() => goToStage(op)}
                 className="focus-ring flex min-h-16 w-full flex-col items-start justify-center rounded-2xl border border-white/15 bg-white/10 px-4 py-3 text-left transition-colors duration-200 hover:border-(--accent-bright) hover:bg-[color-mix(in_srgb,var(--accent)_35%,transparent)] disabled:pointer-events-none disabled:opacity-50"
               >
-                <span className="font-display text-base font-semibold">{ws.operation_name}</span>
-                <span className="text-xs text-white/55">{ws.name} — {ws.tsex}</span>
+                <span className="font-display text-base font-semibold">{op.name}</span>
+                <span className="text-xs text-white/55">{op.machines?.length || 0} ta dastgoh</span>
               </button>
             ))}
           </div>
         </div>
       )}
 
-      {step === "fallback-post" && (
+      {step === "fallback-stage" && (
         <div className="glass-dark relative w-full max-w-xs rounded-3xl p-6 elevation-lg">
           <button
             type="button"
@@ -204,21 +204,21 @@ export default function TerminalLogin() {
             <ArrowLeft size={15} /> Orqaga
           </button>
           <p className="mb-4 text-sm text-white/70">
-            Sizga hali bosqich tayinlanmagan — postni qo'lda tanlang.
+            Sizga hali bosqich tayinlanmagan — bosqichni qo'lda tanlang.
           </p>
-          <Field label={<span className="text-white/70">Post</span>}>
+          <Field label={<span className="text-white/70">Bosqich</span>}>
             <Select
-              value={fallbackWorkstationId}
-              onChange={(e) => setFallbackWorkstationId(e.target.value)}
+              value={fallbackStageId}
+              onChange={(e) => setFallbackStageId(e.target.value)}
               className="border-white/15 bg-white/10 text-white [&>option]:text-(--ink)"
             >
-              {allWorkstations.length === 0 && <option>Postlar yuklanmoqda...</option>}
-              {allWorkstations.map((w) => (
-                <option key={w.id} value={w.id}>{w.name} — {w.tsex}</option>
+              {allStages.length === 0 && <option>Bosqichlar yuklanmoqda...</option>}
+              {allStages.map((s) => (
+                <option key={s.id} value={s.id}>{s.name}</option>
               ))}
             </Select>
           </Field>
-          <Button className="mt-4 w-full" size="xl" magnetic={false} disabled={loading || !fallbackWorkstationId} loading={loading} onClick={submitFallback}>
+          <Button className="mt-4 w-full" size="xl" magnetic={false} disabled={loading || !fallbackStageId} loading={loading} onClick={submitFallback}>
             Kirish
           </Button>
         </div>

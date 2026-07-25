@@ -29,7 +29,7 @@ function WorkerList({ rows, emptyLabel }) {
 export default function TopBottomWorkers({ workers }) {
   const withActivity = workers.filter((w) => w.completed_count > 0);
   const top = [...withActivity].sort((a, b) => b.completed_count - a.completed_count).slice(0, 5);
-  const bottom = [...workers].sort((a, b) => a.completed_count - b.completed_count).slice(0, 5);
+  const bottom = [...withActivity].sort((a, b) => a.completed_count - b.completed_count).slice(0, 5);
 
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">

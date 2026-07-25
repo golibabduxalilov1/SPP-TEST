@@ -13,12 +13,11 @@ import MachineCard from "../../components/dashboard/MachineCard";
 import TopPerformers from "../../components/dashboard/TopPerformers";
 import { useTutorial } from "../../tutorial/TutorialContext";
 import { dashboardSteps } from "../../tutorial/content/dashboard";
+import { MEASURE_UNIT_OPTIONS } from "../../lib/units";
 
-const OUTPUT_UNITS = [
-  { key: "meter", label: "metr" },
-  { key: "piece", label: "dona" },
-  { key: "m2", label: "kv.m" },
-];
+// Jami ishlab chiqarish stat-card — one figure per unit, never summed
+// together (10 m² + 20 dona must never become a meaningless "30").
+const OUTPUT_UNITS = MEASURE_UNIT_OPTIONS.map(({ value, label }) => ({ key: value, label }));
 
 function defaultRange() {
   const now = new Date();
@@ -159,7 +158,7 @@ export default function Dashboard() {
         <StatCard
           index={2}
           icon={Activity}
-          label="Aktiv stanoklar"
+          label="Faol dastgohlar"
           value={`${overview.active_machines} / ${overview.total_machines}`}
           tone="blue"
         />
@@ -171,7 +170,7 @@ export default function Dashboard() {
 
       <div data-tutorial="dashboard-machines">
         {machines.length === 0 ? (
-          <EmptyState title="Aktiv stanok topilmadi" />
+          <EmptyState title="Faol dastgoh topilmadi" />
         ) : (
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
             {machines.map((m) => (

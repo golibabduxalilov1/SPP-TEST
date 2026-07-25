@@ -1,5 +1,6 @@
 import uuid
 
+from django.contrib.auth.hashers import check_password
 from django.contrib.auth.models import AbstractUser
 from django.contrib.auth.models import UserManager as DjangoUserManager
 from django.core.validators import RegexValidator
@@ -25,8 +26,27 @@ class Role(models.TextChoices):
     WAREHOUSE = "warehouse", "Omborchi"
 
 
+class EmploymentStatus(models.TextChoices):
+    ACTIVE = "faol", "Faol"
+    VACATION = "vacation", "Ta'til"
+    SICK = "sick", "Kasallik"
+    TERMINATED = "terminated", "Bo'shatilgan"
+
+
+class Specialization(models.TextChoices):
+    OPERATOR = "operator", "Operator"
+    MASTER = "master", "Usta"
+    ADJUSTER = "adjuster", "Sozlovchi"
+    WELDER = "welder", "Payvandchi"
+    CUTTER = "cutter", "Kesuvchi"
+    ASSEMBLER = "assembler", "Yig'uvchi"
+    PACKER = "packer", "Qadoqlovchi"
+    OTHER = "other", "Boshqa"
+
+
 # Roles allowed to use the terminal (PIN/QR-badge based session, not the admin panel).
-TERMINAL_ROLES = {Role.OPERATOR, Role.WAREHOUSE}
+# Ishlab chiqarish menejeri terminaldan foydalanishi ixtiyoriy, lekin ruxsat etilgan.
+TERMINAL_ROLES = {Role.OPERATOR, Role.WAREHOUSE, Role.MANAGER}
 
 # Roles allowed to use the admin/web panel.
 ADMIN_ROLES = {
@@ -40,6 +60,10 @@ ADMIN_ROLES = {
 # except Admin may not create or promote another user to Super Admin (see UserViewSet).
 SUPER_ADMIN_LEVEL_ROLES = {Role.SUPER_ADMIN, Role.ADMIN}
 
+# Roles that must never carry a terminal PIN, and must supply a password
+# (admin-panel login) when created — they only ever log in with phone+password.
+NO_PIN_ROLES = {Role.SUPER_ADMIN, Role.ADMIN, Role.DIRECTOR}
+
 
 class UserManager(DjangoUserManager):
     def create_superuser(self, username=None, email=None, password=None, **extra_fields):
@@ -47,6 +71,18 @@ class UserManager(DjangoUserManager):
         # never leave it at the model's default role (Operator / Usta).
         extra_fields["role"] = Role.SUPER_ADMIN
         return super().create_superuser(username=username, email=email, password=password, **extra_fields)
+
+    def get_by_pin(self, pin_code):
+        """Identifies an active employee by raw PIN — pin_code_hash is salted, so
+        this can't be a DB filter; it checks the hash of each candidate instead.
+        Terminal login only ever runs this for a handful of active employees."""
+        if not pin_code:
+            return None
+        candidates = self.filter(is_active_employee=True, pin_code_hash__isnull=False).exclude(pin_code_hash="")
+        for candidate in candidates:
+            if check_password(pin_code, candidate.pin_code_hash):
+                return candidate
+        return None
 
 
 class User(AbstractUser):
@@ -57,18 +93,25 @@ class User(AbstractUser):
 
     role = models.CharField(max_length=20, choices=Role.choices, default=Role.OPERATOR)
     phone = models.CharField(max_length=17, unique=True, validators=[phone_validator])
-    pin_code = models.CharField(
-        max_length=4, blank=True, null=True, unique=True,
-        validators=[pin_code_validator], help_text="Terminal PIN kodi (4 ta raqam)",
+    pin_code_hash = models.CharField(
+        max_length=128, blank=True, null=True, help_text="Terminal PIN kodining xavfsiz hashi",
     )
     badge_token = models.CharField(max_length=64, blank=True, unique=False, help_text="QR badge token")
     is_active_employee = models.BooleanField(default=True)
+    employment_status = models.CharField(
+        max_length=16, choices=EmploymentStatus.choices, default=EmploymentStatus.ACTIVE,
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
-    # Ishlab chiqarish bo'limi ("Tsex") — Operator/Usta uchun majburiy, Ishlab
-    # chiqarish menejeri uchun ixtiyoriy, qolgan rollar uchun ishlatilmaydi.
+    # Ishlab chiqarish bo'limi ("Tsex") — Operator/Usta uchun majburiy, qolgan
+    # rollar uchun ishlatilmaydi (Ishlab chiqarish menejeri uchun `managed_departments`ga qarang).
     department = models.ForeignKey(
         "manufacturing.Tsex", on_delete=models.SET_NULL, null=True, blank=True, related_name="employees"
+    )
+    # Ishlab chiqarish menejeriga biriktirilgan (bir yoki bir nechta) tsexlar —
+    # faqat ma'lumot sifatida saqlanadi, boshqa bo'limlarni cheklamaydi.
+    managed_departments = models.ManyToManyField(
+        "manufacturing.Tsex", blank=True, related_name="managers"
     )
 
     # Terminal quick-login (PIN) stage assignment — off by default (single stage).
@@ -79,11 +122,20 @@ class User(AbstractUser):
     assigned_operations = models.ManyToManyField(
         "manufacturing.Operation", blank=True, related_name="+"
     )
-    # The exact machine(s) ("stanok") this employee works on within their
-    # assigned stage(s) — always multi, independent of multi_stage_enabled.
+    # The exact machine(s) ("stanok") this employee works on, scoped per
+    # stage via EmployeeStageMachine (through model) — each stage the
+    # employee is assigned to has its own independent machine list. Never
+    # call .set()/.add() on this manager from serializer code (the through
+    # model has a required `stage` field incompatible with those methods) —
+    # write EmployeeStageMachine rows directly instead.
     assigned_machines = models.ManyToManyField(
-        "manufacturing.Machine", blank=True, related_name="+"
+        "manufacturing.Machine", through="accounts.EmployeeStageMachine", blank=True, related_name="+"
     )
+
+    specialization = models.CharField(max_length=16, choices=Specialization.choices, blank=True, null=True)
+
+    # Omborchi terminaldan foydalanadimi — shunga qarab PIN majburiy bo'ladi.
+    uses_terminal = models.BooleanField(default=False)
 
     def __str__(self):
         return f"{self.get_full_name() or self.phone} ({self.get_role_display()})"
@@ -100,6 +152,11 @@ class User(AbstractUser):
             self.is_superuser = True
         if not self.username:
             self.username = self.phone
+        # Ta'til/kasallik/bo'shatilgan holatidagi xodim hech qanday yo'l bilan
+        # (admin panel, API, shell) faol deb belgilanmasin — terminal va boshqa
+        # tekshiruvlar shu bittagina bayroqqa (is_active_employee) tayanadi.
+        if self.employment_status != EmploymentStatus.ACTIVE:
+            self.is_active_employee = False
         super().save(*args, **kwargs)
 
     @property
@@ -108,7 +165,37 @@ class User(AbstractUser):
 
     @property
     def can_use_admin(self):
-        return self.is_superuser or self.role in ADMIN_ROLES
+        if self.is_superuser or self.role in ADMIN_ROLES:
+            return True
+        # Omborchi terminaldan foydalanmasa, login/parol orqali kira oladi.
+        return self.role == Role.WAREHOUSE and not self.uses_terminal
+
+
+class EmployeeStageMachine(models.Model):
+    """One (employee, machine) work assignment — the through model behind
+    User.assigned_machines. `stage` mirrors `machine.operation_id` (every
+    Machine has a required, fixed operation) so per-stage machine lists can
+    be queried directly without joining through Machine, but it must never
+    be set independently of the machine it's attached to — all writes go
+    through UserSerializer's diff-sync (bulk_create/delete), never .set()/
+    .add() (blocked by the required `stage` field) or a hand-picked stage."""
+
+    employee = models.ForeignKey(User, on_delete=models.CASCADE, related_name="stage_machine_links")
+    stage = models.ForeignKey("manufacturing.Operation", on_delete=models.CASCADE, related_name="+")
+    machine = models.ForeignKey("manufacturing.Machine", on_delete=models.CASCADE, related_name="+")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["employee", "machine"], name="unique_employee_machine"),
+        ]
+
+    def save(self, *args, **kwargs):
+        self.stage_id = self.machine.operation_id
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.employee} @ {self.machine} ({self.stage})"
 
 
 class TerminalSession(models.Model):

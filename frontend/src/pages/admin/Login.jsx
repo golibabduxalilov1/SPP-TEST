@@ -52,7 +52,7 @@ export default function Login() {
             o'z yo'lini biladi.
           </h1>
           <p className="mt-6 max-w-md text-base leading-7 text-white/55">
-            Tsexdan omborgacha — buyurtmalar, stanoklar va xodimlar bitta
+            Tsexdan omborgacha — buyurtmalar, dastgohlar va xodimlar bitta
             aqlli boshqaruv panelida, real vaqtda.
           </p>
           <div className="mt-8 flex items-center gap-6 text-white/45">
