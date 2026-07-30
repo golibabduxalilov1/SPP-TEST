@@ -38,7 +38,7 @@ export default function NewOrder() {
   const navigate = useNavigate();
   const emptyForm = {
     customer_name: "", customer_phone: "+998 ", delivery_address: "",
-    product_name: "", product_type: "", deadline: "", priority: "normal", notes: "",
+    product_name: "", product_type: "", product_quantity: "1", deadline: "", priority: "normal", notes: "",
   };
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
@@ -117,12 +117,18 @@ export default function NewOrder() {
       toast.error("Mahsulot turini tanlang");
       return;
     }
+    const productQuantity = Number(form.product_quantity);
+    if (!Number.isInteger(productQuantity) || productQuantity < 1) {
+      toast.error("Mahsulot sonini to'g'ri kiriting (kamida 1)");
+      return;
+    }
     setSaving(true);
     try {
       await adminApi.post("/orders/", {
         ...form,
         customer_phone: isValidUzPhone(form.customer_phone) ? normalizeUzPhone(form.customer_phone) : "",
         product_type: form.product_type || null,
+        product_quantity: productQuantity,
         deadline: form.deadline || null,
         details: details.map(({ id, ...rest }) => rest),
       });
@@ -211,6 +217,16 @@ export default function NewOrder() {
                 ))}
               </Select>
             </Field>
+            <Field label="Mahsulot soni" required hint="Nechta bir xil shkaf buyurtma qilinmoqda">
+              <Input
+                type="number"
+                required
+                min="1"
+                step="1"
+                value={form.product_quantity}
+                onChange={(e) => setForm({ ...form, product_quantity: e.target.value })}
+              />
+            </Field>
             <div>
               <Label>Detallar</Label>
               <EditableDetailsTable
@@ -218,6 +234,7 @@ export default function NewOrder() {
                 onCreate={addLocalDetail}
                 onUpdate={updateLocalDetail}
                 onDelete={removeLocalDetail}
+                productQuantity={Number(form.product_quantity) || 1}
                 emptyMessage="Detallar yo'q — mahsulot turini tanlang yoki qo'lda qo'shing"
               />
             </div>

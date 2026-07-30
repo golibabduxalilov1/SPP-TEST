@@ -378,3 +378,84 @@ class PartApiTests(APITestCase):
         by_order_qr = self.client.get("/api/parts/", {"search": self.order.qr_token})
         self.assertEqual(by_order_qr.status_code, 200)
         self.assertEqual([row["id"] for row in by_order_qr.data["results"]], [part.id])
+
+
+class OrderProductQuantityTests(APITestCase):
+    """Buyurtmada bir nechta bir xil shkaf: Order.product_quantity ×
+    OrderDetail.quantity = actual Part.quantity that goes to production."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="product-qty-admin",
+            phone="+998901113305",
+            password="secret-pass",
+            role=Role.SUPER_ADMIN,
+        )
+        self.client.force_authenticate(user=self.user)
+
+    def test_default_product_quantity_is_one(self):
+        response = self.client.post(
+            "/api/orders/",
+            {"customer_name": "Aziz", "product_name": "Shkaf"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201, response.data)
+        order = Order.objects.get(id=response.data["id"])
+        self.assertEqual(order.product_quantity, 1)
+
+    def test_three_cabinets_with_four_details_each_produce_twelve_parts_of_each_detail(self):
+        response = self.client.post(
+            "/api/orders/",
+            {
+                "product_name": "Shkaf",
+                "product_quantity": 3,
+                "details": [
+                    {"name": "Yon panel", "quantity": 4},
+                ],
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201, response.data)
+        order = Order.objects.get(id=response.data["id"])
+        self.assertEqual(order.product_quantity, 3)
+        detail = order.details.get(name="Yon panel")
+        self.assertEqual(detail.quantity, 4)
+        self.assertEqual(detail.part.quantity, 12)
+
+    def test_changing_product_quantity_resyncs_existing_part_quantities(self):
+        order = Order.objects.create(product_name="Resync test", created_by=self.user, product_quantity=1)
+        detail = OrderDetail.objects.create(order=order, name="Tokcha", quantity=4)
+        from .services import create_part_for_order_detail
+
+        create_part_for_order_detail(detail)
+        detail.refresh_from_db()
+        self.assertEqual(detail.part.quantity, 4)
+
+        response = self.client.patch(f"/api/orders/{order.id}/", {"product_quantity": 3}, format="json")
+
+        self.assertEqual(response.status_code, 200, response.data)
+        detail.part.refresh_from_db()
+        self.assertEqual(detail.part.quantity, 12)
+
+    def test_zero_negative_and_fractional_product_quantity_are_rejected(self):
+        for invalid_value in (0, -1, 1.5):
+            response = self.client.post(
+                "/api/orders/",
+                {"product_name": "Shkaf", "product_quantity": invalid_value},
+                format="json",
+            )
+            self.assertEqual(response.status_code, 400, response.data)
+            self.assertIn("product_quantity", response.data)
+
+    def test_legacy_orders_default_to_single_product_and_keep_original_part_quantity(self):
+        order = Order.objects.create(product_name="Legacy order", created_by=self.user)
+        detail = OrderDetail.objects.create(order=order, name="Panel", quantity=2)
+        from .services import create_part_for_order_detail
+
+        create_part_for_order_detail(detail)
+
+        self.assertEqual(order.product_quantity, 1)
+        detail.refresh_from_db()
+        self.assertEqual(detail.part.quantity, 2)

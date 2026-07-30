@@ -2,6 +2,7 @@ import random
 import string
 
 from django.conf import settings
+from django.core.validators import MinValueValidator
 from django.db import models
 
 
@@ -53,6 +54,9 @@ class Order(models.Model):
         null=True,
         blank=True,
         related_name="orders",
+    )
+    product_quantity = models.PositiveIntegerField(
+        default=1, validators=[MinValueValidator(1)]
     )
     notes = models.TextField(blank=True)
     deadline = models.DateField(null=True, blank=True)

@@ -15,13 +15,16 @@ TABLO_STATUSES = [
 ]
 
 
-def detail_contribution(detail):
+def detail_contribution(detail, product_quantity=1):
     """A single OrderDetail's (quantity, area_m2, edge_meter) share — the one
     formula every quantity shown on the board (and, via dashboard_metrics,
-    every production stat) is derived from."""
+    every production stat) is derived from. `product_quantity` is the
+    order's `product_quantity` (how many identical products were ordered);
+    it must be passed in by the caller rather than read off `detail.order`
+    so callers that already hold the order avoid an extra query."""
     length = detail.length_mm or Decimal("0")
     width = detail.width_mm or Decimal("0")
-    quantity = detail.quantity
+    quantity = detail.quantity * product_quantity
     area = length * width * quantity / Decimal("1000000")
     edge = (length + width) * Decimal("2") * quantity / Decimal("1000")
     return quantity, area, edge
@@ -61,7 +64,8 @@ def _detail_totals(order, operation=None):
     details = list(order.details.all())
     if details:
         items = [(detail, detail.part.routes.all() if detail.part_id and detail.part else None) for detail in details]
-        return _sum_contributions(items, detail_contribution, operation)
+        contribution_fn = lambda detail: detail_contribution(detail, order.product_quantity)  # noqa: E731
+        return _sum_contributions(items, contribution_fn, operation)
 
     # Imported/legacy orders may only have Parts. Keep them visible while all
     # newly-created orders use OrderDetail as the board's source of truth.

@@ -51,6 +51,13 @@ def assign_active_stages_route(part: Part):
     part.save(update_fields=["current_operation"])
 
 
+def part_quantity_for_detail(detail):
+    """How many physical pieces of this detail production must produce: the
+    detail's per-product count times how many identical products the order
+    is for (`Order.product_quantity`, default 1 for a single product)."""
+    return detail.quantity * detail.order.product_quantity
+
+
 def create_part_for_order_detail(detail):
     """Every 'Mahsulot detallari' row gets its own trackable Part (unique QR + route)."""
     part = Part.objects.create(
@@ -61,7 +68,7 @@ def create_part_for_order_detail(detail):
         length_mm=detail.length_mm,
         width_mm=detail.width_mm,
         thickness_mm=detail.thickness_mm,
-        quantity=detail.quantity,
+        quantity=part_quantity_for_detail(detail),
     )
     assign_active_stages_route(part)
     detail.part = part
@@ -78,8 +85,16 @@ def sync_part_from_order_detail(detail):
         length_mm=detail.length_mm,
         width_mm=detail.width_mm,
         thickness_mm=detail.thickness_mm,
-        quantity=detail.quantity,
+        quantity=part_quantity_for_detail(detail),
     )
+
+
+def sync_parts_quantity_for_order(order):
+    """Re-derive every OrderDetail-linked Part's quantity after
+    `order.product_quantity` changes, so production keeps seeing
+    detail.quantity x order.product_quantity instead of the stale value."""
+    for detail in order.details.filter(part__isnull=False):
+        Part.objects.filter(pk=detail.part_id).update(quantity=part_quantity_for_detail(detail))
 
 
 REQUIRED_IMPORT_COLUMNS = [

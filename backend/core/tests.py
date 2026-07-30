@@ -221,6 +221,33 @@ class ProductionTableModeTests(TestCase):
         )
 
 
+class ProductionTableProductQuantityTests(TestCase):
+    """Tablo/Soni totals must fold in Order.product_quantity (how many
+    identical cabinets were ordered) without double-multiplying — Part.quantity
+    already carries detail.quantity x product_quantity, and OrderDetail-driven
+    rows must land on the exact same number."""
+
+    def setUp(self):
+        _ensure_stage_operations_seeded()
+        self.order = Order.objects.create(product_name="Multi-cabinet test", product_quantity=3)
+        self.detail = OrderDetail.objects.create(order=self.order, name="Yon panel", quantity=4, length_mm=1000, width_mm=500)
+        create_part_for_order_detail(self.detail)
+        approve_order(self.order.id)
+
+    def _row(self, mode="soni"):
+        result = build_production_table(mode=mode)
+        return next(item for item in result["rows"] if item["order_id"] == self.order.id)
+
+    def test_soni_mode_multiplies_detail_quantity_by_product_quantity_once(self):
+        row = self._row("soni")
+        for code in ROUTE_TEMPLATES[DEFAULT_ROUTE_KEY]:
+            self.assertEqual(row["cells"][code]["value"], 12, f"{code} must show 4 x 3 = 12, not 4")
+
+    def test_part_quantity_already_matches_detail_times_product_quantity(self):
+        self.detail.refresh_from_db()
+        self.assertEqual(self.detail.part.quantity, 12)
+
+
 class DashboardMetricsFromPartRouteTests(APITestCase):
     """The Dashboard's per-machine cards and leaderboard used to read only
     ScanEvent, so any stage finished via "Bosqichni yakunlash" (which writes

@@ -94,7 +94,7 @@ export default function OrderDetail() {
         }
       />
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
         <Card className="p-5">
           <p className="text-xs text-(--ink-soft) uppercase font-semibold">Mijoz</p>
           <p className="mt-1 font-medium">{order.customer_name || "—"}</p>
@@ -103,6 +103,10 @@ export default function OrderDetail() {
         <Card className="p-5">
           <p className="text-xs text-(--ink-soft) uppercase font-semibold">Muddat</p>
           <p className="mt-1 font-medium">{order.deadline ? format(new Date(order.deadline), "dd.MM.yyyy") : "Belgilanmagan"}</p>
+        </Card>
+        <Card className="p-5">
+          <p className="text-xs text-(--ink-soft) uppercase font-semibold">Mahsulot soni</p>
+          <p className="mt-1 font-medium">{order.product_quantity} dona</p>
         </Card>
         <Card className="p-5 md:col-span-2 xl:col-span-1">
           <p className="text-xs text-(--ink-soft) uppercase font-semibold">Izoh</p>
@@ -119,6 +123,7 @@ export default function OrderDetail() {
             onUpdate={updateOrderDetail}
             onDelete={deleteOrderDetail}
             onShowQr={setQrDetail}
+            productQuantity={order.product_quantity || 1}
             emptyMessage="Detallar yo'q"
           />
         </CardBody>

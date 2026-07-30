@@ -4,7 +4,9 @@ from customers.models import Customer
 
 from .constants import DEFAULT_ROUTE_KEY, ROUTE_TEMPLATES
 from .models import Label, Order, OrderDetail, OrderStageProgress, Part, PartRoute, Product
-from .services import assign_route, create_part_for_order_detail, sync_part_from_order_detail
+from .services import (
+    assign_route, create_part_for_order_detail, sync_part_from_order_detail, sync_parts_quantity_for_order,
+)
 
 
 ORDER_SPECIAL_STATUS_LABELS = {
@@ -158,7 +160,7 @@ class OrderListSerializer(serializers.ModelSerializer):
         model = Order
         fields = [
             "id", "order_no", "customer_name", "customer_phone", "product_name", "product_type",
-            "product_type_name", "deadline", "priority", "status", "created_at",
+            "product_type_name", "product_quantity", "deadline", "priority", "status", "created_at",
             "parts_total", "parts_completed", "details", "current_stage", "current_stage_name", "stage_status",
             "display_status",
         ]
@@ -198,7 +200,7 @@ class OrderDetailSerializer(serializers.ModelSerializer):
         model = Order
         fields = [
             "id", "order_no", "customer_name", "customer_phone", "product_name", "notes",
-            "product_type", "product_type_name", "deadline", "priority", "status", "qr_token",
+            "product_type", "product_type_name", "product_quantity", "deadline", "priority", "status", "qr_token",
             "created_at", "updated_at", "products", "parts", "details",
             "current_stage", "current_stage_name", "stage_status", "stage_progress",
             "display_status",
@@ -209,6 +211,13 @@ class OrderDetailSerializer(serializers.ModelSerializer):
 
     def get_display_status(self, obj):
         return order_display_status(obj)
+
+    def update(self, instance, validated_data):
+        previous_quantity = instance.product_quantity
+        order = super().update(instance, validated_data)
+        if order.product_quantity != previous_quantity:
+            sync_parts_quantity_for_order(order)
+        return order
 
 
 class LabelSerializer(serializers.ModelSerializer):

@@ -54,7 +54,7 @@ def _completed_routes(date_from, date_to):
             completed_at__gte=date_from,
             completed_at__lte=date_to,
         )
-        .select_related("operation", "part", "part__order_detail", "completed_by")
+        .select_related("operation", "part", "part__order", "part__order_detail", "completed_by")
     )
 
 
@@ -68,7 +68,9 @@ def _route_value(route, unit):
     totals (see `overview` below) use the real Package count instead."""
     part = route.part
     detail = getattr(part, "order_detail", None)
-    quantity, area, edge = detail_contribution(detail) if detail is not None else part_contribution(part)
+    quantity, area, edge = (
+        detail_contribution(detail, part.order.product_quantity) if detail is not None else part_contribution(part)
+    )
     return stage_value(unit, quantity=quantity, area=area, edge=edge, package_count=quantity)
 
 

@@ -38,7 +38,8 @@ function getErrorMessage(error) {
  * and the Order detail page's "Detallar" section. `onCreate/onUpdate/onDelete`
  * may hit a real endpoint or just mutate local state — the table doesn't care.
  */
-export default function EditableDetailsTable({ rows, onCreate, onUpdate, onDelete, onShowQr, emptyMessage = "Detallar yo'q" }) {
+export default function EditableDetailsTable({ rows, onCreate, onUpdate, onDelete, onShowQr, productQuantity = 1, emptyMessage = "Detallar yo'q" }) {
+  const showTotalColumn = productQuantity > 1;
   const [editingId, setEditingId] = useState(null);
   const [draft, setDraft] = useState(EMPTY_DRAFT);
   const [busy, setBusy] = useState(false);
@@ -103,16 +104,17 @@ export default function EditableDetailsTable({ rows, onCreate, onUpdate, onDelet
             <Th>Uzunlik</Th>
             <Th>Kenglik</Th>
             <Th>Qalinlik</Th>
-            <Th>Miqdor</Th>
+            <Th>Miqdor (1 mahsulot uchun)</Th>
+            {showTotalColumn && <Th>Jami (barcha mahsulotlar uchun)</Th>}
             <Th>Material</Th>
             <Th className="text-right">Amallar</Th>
           </tr>
         </Thead>
         <Tbody>
-          {rows.length === 0 && editingId !== "new" && <EmptyRow colSpan={7} message={emptyMessage} />}
+          {rows.length === 0 && editingId !== "new" && <EmptyRow colSpan={showTotalColumn ? 8 : 7} message={emptyMessage} />}
           {rows.map((row) =>
             editingId === row.id ? (
-              <EditRow key={row.id} draft={draft} setDraft={setDraft} busy={busy} onSave={save} onCancel={cancel} />
+              <EditRow key={row.id} draft={draft} setDraft={setDraft} busy={busy} onSave={save} onCancel={cancel} showTotalColumn={showTotalColumn} />
             ) : (
               <Tr key={row.id}>
                 <Td className="font-medium">{row.name}</Td>
@@ -120,6 +122,7 @@ export default function EditableDetailsTable({ rows, onCreate, onUpdate, onDelet
                 <Td>{row.width_mm ?? "—"}</Td>
                 <Td>{row.thickness_mm ?? "—"}</Td>
                 <Td>{row.quantity}</Td>
+                {showTotalColumn && <Td className="font-semibold">{(row.quantity || 0) * productQuantity} dona</Td>}
                 <Td>{row.material_type || "—"}</Td>
                 <Td>
                   <div className="ml-auto flex w-fit items-center gap-1.5">
@@ -155,10 +158,18 @@ export default function EditableDetailsTable({ rows, onCreate, onUpdate, onDelet
             )
           )}
           {editingId === "new" && (
-            <EditRow draft={draft} setDraft={setDraft} busy={busy} onSave={save} onCancel={cancel} />
+            <EditRow draft={draft} setDraft={setDraft} busy={busy} onSave={save} onCancel={cancel} showTotalColumn={showTotalColumn} />
           )}
         </Tbody>
       </Table>
+      {rows.length > 0 && (
+        <p className="text-xs font-medium text-(--ink-soft)">
+          Buyurtma bo'yicha jami detal soni:{" "}
+          <span className="font-semibold text-(--ink)">
+            {rows.reduce((sum, row) => sum + (Number(row.quantity) || 0) * productQuantity, 0)} dona
+          </span>
+        </p>
+      )}
       {editingId === null && (
         <Button type="button" variant="secondary" size="sm" onClick={startAdd}>
           <Plus size={15} /> Qo'shimcha detal qo'shish
@@ -168,7 +179,7 @@ export default function EditableDetailsTable({ rows, onCreate, onUpdate, onDelet
   );
 }
 
-function EditRow({ draft, setDraft, busy, onSave, onCancel }) {
+function EditRow({ draft, setDraft, busy, onSave, onCancel, showTotalColumn }) {
   return (
     <Tr>
       <Td>
@@ -186,6 +197,7 @@ function EditRow({ draft, setDraft, busy, onSave, onCancel }) {
       <Td>
         <Input type="number" min="1" value={draft.quantity} onChange={(e) => setDraft({ ...draft, quantity: e.target.value })} className="min-h-9! w-16!" />
       </Td>
+      {showTotalColumn && <Td className="text-(--ink-faint)">—</Td>}
       <Td>
         <Input value={draft.material_type} onChange={(e) => setDraft({ ...draft, material_type: e.target.value })} placeholder="LDSP" className="min-h-9! w-24!" />
       </Td>

@@ -144,13 +144,14 @@ export default function Orders() {
                   <Th>Mijoz</Th>
                   <Th>Muddat</Th>
                   <Th>Prioritet</Th>
+                  <Th>Mahsulot soni</Th>
                   <Th>Detallar</Th>
                   <Th>Status</Th>
                   <Th className="text-right">Amallar</Th>
                 </tr>
               </Thead>
               <Tbody>
-                {orders.length === 0 && <EmptyRow colSpan={7} />}
+                {orders.length === 0 && <EmptyRow colSpan={8} />}
                 {orders.map((o) => (
                   <Tr key={o.id}>
                     <Td>
@@ -162,6 +163,7 @@ export default function Orders() {
                     <Td>
                       <Badge tone={PRIORITY_TONES[o.priority]}>{PRIORITY_LABELS[o.priority]}</Badge>
                     </Td>
+                    <Td>{o.product_quantity} dona</Td>
                     <Td>
                       {o.parts_completed}/{o.parts_total}
                     </Td>

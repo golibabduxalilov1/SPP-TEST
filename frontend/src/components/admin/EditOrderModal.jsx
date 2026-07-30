@@ -20,6 +20,7 @@ export default function EditOrderModal({ open, order, onClose, onSaved }) {
       customer_phone: order.customer_phone ? formatUzPhone(order.customer_phone) : "+998 ",
       product_name: order.product_name || "",
       product_type: order.product_type ?? "",
+      product_quantity: String(order.product_quantity ?? 1),
       deadline: order.deadline || "",
       priority: order.priority,
       notes: order.notes || "",
@@ -33,12 +34,18 @@ export default function EditOrderModal({ open, order, onClose, onSaved }) {
       toast.error("Telefon raqamini to'liq kiriting");
       return;
     }
+    const productQuantity = Number(form.product_quantity);
+    if (!Number.isInteger(productQuantity) || productQuantity < 1) {
+      toast.error("Mahsulot sonini to'g'ri kiriting (kamida 1)");
+      return;
+    }
     setSaving(true);
     try {
       await adminApi.patch(`/orders/${order.id}/`, {
         ...form,
         customer_phone: isValidUzPhone(form.customer_phone) ? normalizeUzPhone(form.customer_phone) : "",
         product_type: form.product_type || null,
+        product_quantity: productQuantity,
         deadline: form.deadline || null,
       });
       toast.success("Buyurtma yangilandi");
@@ -76,6 +83,16 @@ export default function EditOrderModal({ open, order, onClose, onSaved }) {
               <option key={pt.id} value={pt.id}>{pt.name}</option>
             ))}
           </Select>
+        </Field>
+        <Field label="Mahsulot soni" required hint="O'zgartirilsa, detallar soni qayta hisoblanadi">
+          <Input
+            type="number"
+            required
+            min="1"
+            step="1"
+            value={form.product_quantity}
+            onChange={(e) => setForm({ ...form, product_quantity: e.target.value })}
+          />
         </Field>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field label="Yetkazib berish muddati">
