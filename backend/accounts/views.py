@@ -80,11 +80,20 @@ class TerminalLoginView(APIView):
         user = None
         if data.get("pin_code"):
             user = User.objects.get_by_pin(data["pin_code"])
+            if not user or not user.can_use_terminal:
+                return Response({"detail": "PIN yoki badge noto'g'ri"}, status=status.HTTP_401_UNAUTHORIZED)
         elif data.get("badge_token"):
-            user = User.objects.filter(badge_token=data["badge_token"], is_active_employee=True).first()
-
-        if not user or not user.can_use_terminal:
-            return Response({"detail": "PIN yoki badge noto'g'ri"}, status=status.HTTP_401_UNAUTHORIZED)
+            # Looked up without an is_active_employee filter (unlike get_by_pin)
+            # so an inactive employee's own QR is recognized and rejected with
+            # a specific message, rather than looking like an unknown/invalid token.
+            user = User.objects.filter(badge_token=data["badge_token"]).first()
+            if not user or not user.can_use_terminal:
+                return Response({"detail": "PIN yoki badge noto'g'ri"}, status=status.HTTP_401_UNAUTHORIZED)
+            if not user.is_active_employee:
+                return Response(
+                    {"detail": "Bu xodim nofaol. QR koddan foydalanish mumkin emas."},
+                    status=status.HTTP_401_UNAUTHORIZED,
+                )
 
         # A single employee may only hold one active terminal session at a time.
         TerminalSession.objects.filter(employee=user, is_active=True).update(

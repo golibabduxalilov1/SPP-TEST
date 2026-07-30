@@ -11,7 +11,7 @@ class ProductionWorkflowError(Exception):
     """A user-facing order workflow validation error."""
 
 
-OMBOR_STAGE_CODE = "OMBOR"
+QADOQLASH_STAGE_CODE = "QADOQLASH"
 
 
 def _complete_all_routes_for_stage(order, stage, completed_by):
@@ -188,7 +188,7 @@ def complete_current_stage(order_id, completed_by=None):
         order.status = Order.Status.COMPLETED
         order.save(update_fields=["current_stage", "stage_status", "status", "updated_at"])
 
-    if completed_stage.code == OMBOR_STAGE_CODE:
+    if completed_stage.code == QADOQLASH_STAGE_CODE:
         # Deferred import: packaging.services imports complete_current_stage
         # from this module at load time, so importing it back at module
         # level here would be circular. The order/package sync stays inside

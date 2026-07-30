@@ -1,11 +1,7 @@
 from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticated
 
-from rest_framework.exceptions import ValidationError
-
-from accounts.permissions import CanManageProduction, IsSuperAdmin
-from orders.models import Order
-from orders.production_workflow import advance_orders_past_deactivated_stage
+from accounts.permissions import CanManageProduction
 from .models import Device, Machine, Operation, Printer, Tsex
 from .serializers import (
     DeviceSerializer, MachineSerializer, OperationSerializer,
@@ -13,7 +9,12 @@ from .serializers import (
 )
 
 
-class OperationViewSet(viewsets.ModelViewSet):
+class OperationViewSet(viewsets.ReadOnlyModelViewSet):
+    """Standard production stages are fixed by data migration and are
+    read-only at runtime — no admin CRUD, see PROJECT spec on stage
+    standardization. GET-only; POST/PUT/PATCH/DELETE are not routed, so DRF
+    returns 405 for them automatically."""
+
     queryset = Operation.objects.all()
     serializer_class = OperationSerializer
     permission_classes = [IsAuthenticated]
@@ -21,41 +22,6 @@ class OperationViewSet(viewsets.ModelViewSet):
     filterset_fields = ["is_active"]
     search_fields = ["name", "code"]
     ordering_fields = ["order_index", "name"]
-
-    def get_permissions(self):
-        if self.request.method not in ("GET", "HEAD", "OPTIONS"):
-            return [IsAuthenticated(), IsSuperAdmin()]
-        return [IsAuthenticated()]
-
-    def perform_update(self, serializer):
-        was_active = serializer.instance.is_active
-        instance = serializer.save()
-        if was_active and not instance.is_active:
-            advance_orders_past_deactivated_stage(instance)
-
-    def perform_destroy(self, instance):
-        active_statuses = [
-            Order.Status.APPROVED,
-            Order.Status.IN_PRODUCTION,
-            Order.Status.PARTIALLY_READY,
-        ]
-        if instance.part_routes.filter(part__order__status__in=active_statuses).exists():
-            raise ValidationError({
-                "detail": "Bu bosqichga faol buyurtma yoki detallar bog'langan. O'chirish o'rniga uni nofaol qilib belgilang."
-            })
-
-        if (
-            instance.part_routes.exists()
-            or instance.current_parts.exists()
-            or instance.current_orders.exists()
-            or instance.order_stage_progress.exists()
-            or instance.machines.exists()
-        ):
-            raise ValidationError({
-                "detail": "Bu bosqichga tarixiy yoki sozlama ma'lumotlari bog'langan. O'chirish o'rniga uni nofaol qilib belgilang."
-            })
-
-        instance.delete()
 
 
 class TsexViewSet(viewsets.ModelViewSet):

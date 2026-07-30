@@ -82,9 +82,11 @@ class ProductionTableRemainingQuantityTests(TestCase):
         create_part_for_order_detail(tokcha)
         approve_order(order.id)
 
+        # ARRA is meter-measured (standard spec): fasad edge = (1000+1000)*2*1/1000 = 4.0,
+        # tokcha edge = (1000+850)*2*1/1000 = 3.7, total 7.7m
         row = self._row_for(order.id)
         self.assertEqual(row["cells"]["ARRA"]["status"], "in_progress")
-        self.assertEqual(row["cells"]["ARRA"]["value"], 1.85)  # 1.0 + 0.85 m2
+        self.assertEqual(row["cells"]["ARRA"]["value"], 7.7)
 
         result = process_scan(
             client_scan_id="scan-fasad", qr_token=fasad.part.qr_token, operation_code="ARRA",
@@ -94,7 +96,7 @@ class ProductionTableRemainingQuantityTests(TestCase):
 
         row = self._row_for(order.id)
         self.assertEqual(row["cells"]["ARRA"]["status"], "in_progress", "order must not advance yet — tokcha unscanned")
-        self.assertEqual(row["cells"]["ARRA"]["value"], 0.85, "fasad's 1.0 m2 share must be subtracted")
+        self.assertEqual(row["cells"]["ARRA"]["value"], 3.7, "fasad's 4.0m share must be subtracted")
 
         result = process_scan(
             client_scan_id="scan-tokcha", qr_token=tokcha.part.qr_token, operation_code="ARRA",
@@ -104,10 +106,13 @@ class ProductionTableRemainingQuantityTests(TestCase):
 
         row = self._row_for(order.id)
         self.assertEqual(row["cells"]["ARRA"]["status"], "completed", "last detail scanned — stage must auto-advance")
-        self.assertEqual(row["cells"]["ARRA"]["value"], 1.85, "completed cell must show the full original total")
-        self.assertEqual(row["cells"]["KROMKA"]["status"], "in_progress")
-        # KROMKA is meter-measured: (1000+1000)*2*1/1000 + (1000+850)*2*1/1000 = 4.0 + 3.7 = 7.7m
-        self.assertEqual(row["cells"]["KROMKA"]["value"], 7.7, "meter-measured stage must show edge length, not area")
+        self.assertEqual(row["cells"]["ARRA"]["value"], 7.7, "completed cell must show the full original total")
+        # The next standard stage after ARRA (order_index 1) is ARRA_AVTOMAT
+        # (order_index 2), not KROMKA (order_index 3) — the board advances to
+        # the immediate next active stage in the route, one at a time.
+        self.assertEqual(row["cells"]["ARRA_AVTOMAT"]["status"], "in_progress")
+        # ARRA_AVTOMAT is also meter-measured: (1000+1000)*2*1/1000 + (1000+850)*2*1/1000 = 4.0 + 3.7 = 7.7m
+        self.assertEqual(row["cells"]["ARRA_AVTOMAT"]["value"], 7.7, "meter-measured stage must show edge length, not area")
 
 
 class ProductionTableModeTests(TestCase):
@@ -139,16 +144,16 @@ class ProductionTableModeTests(TestCase):
         # Each stage's expected value is driven entirely by its own
         # measure_unit (m2/meter/piece/package), never by its code.
         route_codes = ROUTE_TEMPLATES[DEFAULT_ROUTE_KEY]
-        for code in ("ARRA", "KROMKA", "PRISADKA", "OMBOR"):
+        for code in ("ARRA", "KROMKA", "PRISADKA", "QADOQLASH"):
             self.assertIn(code, route_codes, f"this test needs {code} in the default route to be meaningful")
 
         row = self._row("hajm")
-        # 1000mm x 500mm x 4: area = 2.0 m2, edge = (1000+500)*2*4/1000 = 12.0m
-        self.assertEqual(row["cells"]["ARRA"]["value"], 2.0, "m2-measured stage must show area")
+        # ARRA is meter-measured (standard spec): edge = (1000+500)*2*4/1000 = 12.0m
+        self.assertEqual(row["cells"]["ARRA"]["value"], 12.0, "meter-measured stage must show edge length")
         self.assertEqual(row["cells"]["KROMKA"]["value"], 12.0, "meter-measured stage must show edge length")
         self.assertEqual(row["cells"]["PRISADKA"]["value"], 4, "piece-measured stage must show quantity")
-        # OMBOR (package-measured): order hasn't reached it yet, so 0 real packages exist.
-        self.assertEqual(row["cells"]["OMBOR"]["value"], 0, "package-measured stage must show existing package count, not area")
+        # QADOQLASH (package-measured): order hasn't reached it yet, so 0 real packages exist.
+        self.assertEqual(row["cells"]["QADOQLASH"]["value"], 0, "package-measured stage must show existing package count, not area")
 
     def test_hajm_mode_piece_rule_is_measure_unit_driven(self):
         # Any user-created stage measured in "piece" gets the dona-instead-
@@ -167,8 +172,8 @@ class ProductionTableModeTests(TestCase):
         self.assertEqual(row["cells"]["CUSTOM_PIECE"]["value"], 4, "piece-measured stage must show quantity, not area")
         self.assertEqual(row["cells"]["CUSTOM_AREA"]["value"], 2.0, "m2-measured stage must show area")
 
-    def test_hajm_mode_package_shows_real_package_count_once_ombor_completes(self):
-        # Completing every stage through OMBOR triggers
+    def test_hajm_mode_package_shows_real_package_count_once_qadoqlash_completes(self):
+        # Completing every stage through QADOQLASH triggers
         # packaging.services.sync_order_into_warehouse, which creates exactly
         # one Package for the order — that real count, not a hidden m2/piece
         # figure, is what a package-measured stage must show.
@@ -178,7 +183,7 @@ class ProductionTableModeTests(TestCase):
 
         self.assertEqual(Package.objects.filter(order=self.order).count(), 1)
         row = self._row("hajm")
-        self.assertEqual(row["cells"]["OMBOR"]["value"], 1, "package-measured stage must show the real package count")
+        self.assertEqual(row["cells"]["QADOQLASH"]["value"], 1, "package-measured stage must show the real package count")
 
     def test_soni_mode_shows_quantity_everywhere(self):
         route_codes = ROUTE_TEMPLATES[DEFAULT_ROUTE_KEY]
@@ -204,9 +209,10 @@ class ProductionTableModeTests(TestCase):
         )
         create_part_for_order_detail(second)
 
-        # Whole-order total before any scans: 2.0 (fasad) + 0.64 (tokcha) = 2.64 m2
+        # ARRA is meter-measured: fasad edge = (1000+500)*2*4/1000 = 12.0,
+        # tokcha edge = (800+400)*2*2/1000 = 4.8, whole-order total = 16.8m
         row = self._row("hajm")
-        self.assertEqual(row["cells"]["ARRA"]["value"], 2.64)
+        self.assertEqual(row["cells"]["ARRA"]["value"], 16.8)
 
         process_scan(
             client_scan_id="scan-hajm-fasad", qr_token=self.detail.part.qr_token, operation_code="ARRA",
@@ -216,8 +222,8 @@ class ProductionTableModeTests(TestCase):
         row = self._row("hajm")
         self.assertEqual(row["cells"]["ARRA"]["status"], "in_progress")
         self.assertEqual(
-            row["cells"]["ARRA"]["value"], 0.64,
-            "fasad's 2.0 m2 share already scanned at ARRA must drop out of the remaining total",
+            row["cells"]["ARRA"]["value"], 4.8,
+            "fasad's 12.0m share already scanned at ARRA must drop out of the remaining total",
         )
 
 
@@ -282,19 +288,19 @@ class DashboardMetricsFromPartRouteTests(APITestCase):
 
         machines_response = self.client.get("/api/dashboard/machines", self.window)
         card = next(m for m in machines_response.data if m["id"] == self.machine.id)
-        self.assertEqual(card["period_volume"], 1.0, "1000mm x 1000mm x 1 = 1.0 m2, same formula Tablo uses")
-        self.assertEqual(card["period_efficiency"], 25.0, "1.0 m2 / (2 m2/h * 2h window) * 100")
+        self.assertEqual(card["period_volume"], 4.0, "1000mm x 1000mm x 1: edge = (1000+1000)*2*1/1000 = 4.0m, same formula Tablo uses")
+        self.assertEqual(card["period_efficiency"], 100.0, "4.0m / (2 meter/h * 2h window) * 100")
 
         series_response = self.client.get(f"/api/dashboard/machines/{self.machine.id}/series", self.window)
-        self.assertEqual(series_response.data["period_volume"], 1.0)
+        self.assertEqual(series_response.data["period_volume"], 4.0)
 
         overview_response = self.client.get("/api/dashboard/overview", self.window)
-        self.assertEqual(overview_response.data["output"]["m2"], 1.0)
+        self.assertEqual(overview_response.data["output"]["meter"], 4.0)
 
         leaderboard_response = self.client.get("/api/dashboard/leaderboard", {"from": self.window["from"], "to": self.window["to"]})
         row = next(r for r in leaderboard_response.data if r["employee_id"] == self.user.id)
         self.assertEqual(row["output"], 1, "the admin who clicked the button gets credited, not left off entirely")
-        self.assertEqual(row["efficiency"], 25.0)
+        self.assertEqual(row["efficiency"], 100.0)
 
     def test_two_machines_sharing_a_stage_report_independent_stats(self):
         """Two machines assigned to the same stage (e.g. Arra-1 and Arra-2)
@@ -321,16 +327,18 @@ class DashboardMetricsFromPartRouteTests(APITestCase):
             route.machine = machine
             route.save(update_fields=["status", "completed_at", "completed_by", "machine"])
 
+        # ARRA is meter-measured: detail_a edge = (1000+1000)*2*1/1000 = 4.0,
+        # detail_b edge = (2000+1000)*2*1/1000 = 6.0
         machines_response = self.client.get("/api/dashboard/machines", self.window)
         card_1 = next(m for m in machines_response.data if m["id"] == self.machine.id)
         card_2 = next(m for m in machines_response.data if m["id"] == second_machine.id)
-        self.assertEqual(card_1["period_volume"], 1.0, "machine 1 must only reflect its own 1000x1000 detail")
-        self.assertEqual(card_2["period_volume"], 2.0, "machine 2 must only reflect its own 2000x1000 detail")
+        self.assertEqual(card_1["period_volume"], 4.0, "machine 1 must only reflect its own 1000x1000 detail")
+        self.assertEqual(card_2["period_volume"], 6.0, "machine 2 must only reflect its own 2000x1000 detail")
 
         series_1 = self.client.get(f"/api/dashboard/machines/{self.machine.id}/series", self.window)
         series_2 = self.client.get(f"/api/dashboard/machines/{second_machine.id}/series", self.window)
-        self.assertEqual(series_1.data["period_volume"], 1.0)
-        self.assertEqual(series_2.data["period_volume"], 2.0)
+        self.assertEqual(series_1.data["period_volume"], 4.0)
+        self.assertEqual(series_2.data["period_volume"], 6.0)
 
 
 class DashboardPackageMetricsTests(APITestCase):
@@ -345,10 +353,10 @@ class DashboardPackageMetricsTests(APITestCase):
             username="dash-package-admin", phone="+998901113705", password="secret-pass", role=Role.SUPER_ADMIN,
         )
         self.client.force_authenticate(user=self.user)
-        self.ombor = Operation.objects.get(code="OMBOR")
-        tsex = Tsex.objects.create(name="Ombor tsex")
+        self.qadoqlash = Operation.objects.get(code="QADOQLASH")
+        tsex = Tsex.objects.create(name="Qadoqlash tsex")
         self.machine = Machine.objects.create(
-            machine_id="TEST-OMBOR-1", name="Test Ombor", operation=self.ombor, tsex=tsex, capacity_per_hour="5",
+            machine_id="TEST-QADOQLASH-1", name="Test Qadoqlash", operation=self.qadoqlash, tsex=tsex, capacity_per_hour="5",
         )
         self.order = Order.objects.create(product_name="Package dashboard test", created_by=self.user)
         detail = OrderDetail.objects.create(order=self.order, name="Fasad", quantity=2, length_mm=1000, width_mm=500)
@@ -367,7 +375,9 @@ class DashboardPackageMetricsTests(APITestCase):
         response = self.client.get("/api/dashboard/overview", self.window)
 
         self.assertEqual(response.data["output"]["package"], 1.0, "exactly one Package synced for this order")
-        self.assertEqual(response.data["output"]["piece"], 2.0, "PRISADKA's own 2-piece total must stay separate")
+        # Two standard stages are piece-measured (PRISADKA, YIGISH), each
+        # contributing its own 2-piece total to the same "piece" bucket.
+        self.assertEqual(response.data["output"]["piece"], 4.0, "PRISADKA + YIGISH's 2-piece totals must stay separate from package")
 
     def test_sole_machine_on_package_stage_gets_credited_the_real_package_count(self):
         self._finish_order()

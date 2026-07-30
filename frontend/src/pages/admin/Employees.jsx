@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
-import { Ban, CheckCircle2, Pencil, Plus, Trash2 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Ban, CheckCircle2, Pencil, Plus, Printer, QrCode, Trash2 } from "lucide-react";
+import { QRCodeCanvas } from "qrcode.react";
 import toast from "react-hot-toast";
 import { adminApi } from "../../api/client";
 import { useAuthStore } from "../../store/authStore";
@@ -71,6 +72,7 @@ export default function Employees() {
   const [editingEmployee, setEditingEmployee] = useState(null);
   const [deletingEmployee, setDeletingEmployee] = useState(null);
   const [togglingId, setTogglingId] = useState(null);
+  const [qrEmployee, setQrEmployee] = useState(null);
   const currentUser = useAuthStore((state) => state.user);
   const { registerAndAutoStart } = useTutorial();
 
@@ -205,6 +207,18 @@ export default function Employees() {
                           variant="ghost"
                           size="sm"
                           magnetic={false}
+                          onClick={() => setQrEmployee(employee)}
+                          aria-label={`${employee.username} xodimining QR kodi`}
+                          title="QR kod"
+                          className="min-h-9! min-w-9! rounded-lg! border-(--border-strong)! px-0! text-(--accent-strong)! hover:bg-(--accent-soft)!"
+                        >
+                          <QrCode size={14} strokeWidth={2.2} />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          magnetic={false}
                           onClick={() => toggleActive(employee)}
                           loading={togglingId === employee.id}
                           aria-label={`${employee.username} xodimini ${employee.is_active_employee ? "nofaol" : "faol"} qilish`}
@@ -253,17 +267,71 @@ export default function Employees() {
         currentUser={currentUser}
         onClose={closeEmployeeModal}
         onSaved={load}
+        onCreated={setQrEmployee}
       />
       <DeleteEmployeeModal
         employee={deletingEmployee}
         onClose={() => setDeletingEmployee(null)}
         onDeleted={load}
       />
+      <EmployeeQRModal employee={qrEmployee} onClose={() => setQrEmployee(null)} />
     </div>
   );
 }
 
-function EmployeeModal({ open, employee, currentUser, onClose, onSaved }) {
+function EmployeeQRModal({ employee, onClose }) {
+  const canvasRef = useRef(null);
+
+  function download() {
+    const canvas = canvasRef.current;
+    if (!canvas || !employee) return;
+    const link = document.createElement("a");
+    link.href = canvas.toDataURL("image/png");
+    link.download = `xodim-${employee.id}-qr.png`;
+    link.click();
+  }
+
+  function print() {
+    const canvas = canvasRef.current;
+    if (!canvas || !employee) return;
+    const dataUrl = canvas.toDataURL("image/png");
+    const win = window.open("", "_blank", "width=420,height=520");
+    if (!win) return;
+    const fullName = [employee.first_name, employee.last_name].filter(Boolean).join(" ") || employee.username;
+    win.document.write(
+      `<title>QR — ${fullName}</title>` +
+        `<body style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;margin:0;font-family:sans-serif;gap:12px;">` +
+        `<img src="${dataUrl}" style="width:280px;height:280px" onload="window.print()" />` +
+        `<p style="font-size:14px;font-weight:600;color:#222;">${fullName}</p>` +
+        `</body>`
+    );
+    win.document.close();
+  }
+
+  if (!employee) return null;
+  const fullName = [employee.first_name, employee.last_name].filter(Boolean).join(" ") || employee.username;
+
+  return (
+    <Modal open={Boolean(employee)} onClose={onClose} title={`Xodim QR kodi — ${fullName}`} size="sm">
+      <div className="flex flex-col items-center gap-4">
+        <div className="rounded-2xl border border-(--border-subtle) bg-white p-4">
+          <QRCodeCanvas ref={canvasRef} value={employee.badge_token} size={200} level="M" />
+        </div>
+        <p className="text-center text-sm text-(--ink-soft)">{fullName}</p>
+        <div className="flex w-full flex-col gap-2 sm:flex-row">
+          <Button className="flex-1" variant="secondary" onClick={download}>
+            Yuklab olish
+          </Button>
+          <Button className="flex-1" onClick={print}>
+            <Printer size={15} /> Chop etish
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function EmployeeModal({ open, employee, currentUser, onClose, onSaved, onCreated }) {
   const [form, setForm] = useState(EMPTY_FORM);
   const [submitting, setSubmitting] = useState(false);
   const [tsexes, setTsexes] = useState([]);
@@ -464,8 +532,9 @@ function EmployeeModal({ open, employee, currentUser, onClose, onSaved }) {
         await adminApi.patch(`/employees/${employee.id}/`, payload);
         toast.success("Xodim ma'lumotlari yangilandi");
       } else {
-        await adminApi.post("/employees/", payload);
+        const { data } = await adminApi.post("/employees/", payload);
         toast.success("Xodim qo'shildi");
+        onCreated?.(data);
       }
       await onSaved();
       onClose();

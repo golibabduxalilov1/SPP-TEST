@@ -61,7 +61,7 @@ def _completed_routes(date_from, date_to):
 def _route_value(route, unit):
     """Per-completed-route figure for a route's own stage. m2/meter come
     straight off the linked detail; piece counts routes 1:1. Package-measured
-    stages (e.g. OMBOR) have no per-route/per-machine package attribution in
+    stages (e.g. QADOQLASH) have no per-route/per-machine package attribution in
     the data model — a route here is one *part* scanned into a package, not
     one whole package — so as a justified fallback this counts 1 per
     completed route too (packaging throughput), while window-wide package
@@ -76,7 +76,7 @@ def _route_value(route, unit):
 
 def _completed_packages(date_from, date_to):
     """Packages that finished (reached the warehouse) within the window —
-    the real "existing qadoq" count, one per order's OMBOR completion."""
+    the real "existing qadoq" count, one per order's QADOQLASH completion."""
     return Package.objects.filter(
         status=Package.Status.WAREHOUSE,
         completed_at__gte=date_from,

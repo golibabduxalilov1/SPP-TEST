@@ -1,64 +1,22 @@
 from rest_framework import serializers
-from django.utils.text import slugify
 
 from .models import Device, Machine, Operation, Printer, Tsex
+from .units import MEASURE_UNIT_LABELS
 
 
 class OperationSerializer(serializers.ModelSerializer):
-    can_delete = serializers.SerializerMethodField()
+    measure_unit_label = serializers.SerializerMethodField()
 
     class Meta:
         model = Operation
         fields = [
-            "id", "code", "name", "measure_unit", "qr_scan_required",
-            "order_index", "is_active", "can_delete",
+            "id", "code", "name", "measure_unit", "measure_unit_label",
+            "qr_scan_required", "order_index", "is_active",
         ]
-        read_only_fields = ["code", "can_delete"]
-        extra_kwargs = {
-            "measure_unit": {"required": False},
-            "qr_scan_required": {"required": False},
-        }
+        read_only_fields = fields
 
-    def get_can_delete(self, obj):
-        return not (
-            obj.part_routes.exists()
-            or obj.current_parts.exists()
-            or obj.current_orders.exists()
-            or obj.order_stage_progress.exists()
-            or obj.machines.exists()
-        )
-
-    def validate_name(self, value):
-        value = value.strip()
-        if not value:
-            raise serializers.ValidationError("Bosqich nomini kiriting.")
-        return value
-
-    def validate_order_index(self, value):
-        if value < 1:
-            raise serializers.ValidationError("Tartib raqami 1 yoki undan katta bo'lishi kerak.")
-        qs = Operation.objects.filter(order_index=value)
-        if self.instance:
-            qs = qs.exclude(pk=self.instance.pk)
-        if qs.exists():
-            raise serializers.ValidationError("Bu tartib raqami boshqa bosqichda band. Boshqa raqam tanlang.")
-        return value
-
-    @staticmethod
-    def _unique_code(name):
-        base = slugify(name).replace("-", "_").upper()[:24] or "BOSQICH"
-        code = base
-        suffix = 2
-        while Operation.objects.filter(code=code).exists():
-            tail = f"_{suffix}"
-            code = f"{base[:32 - len(tail)]}{tail}"
-            suffix += 1
-        return code
-
-    def create(self, validated_data):
-        validated_data.setdefault("measure_unit", "piece")
-        validated_data["code"] = self._unique_code(validated_data["name"])
-        return super().create(validated_data)
+    def get_measure_unit_label(self, obj):
+        return MEASURE_UNIT_LABELS.get(obj.measure_unit, obj.measure_unit)
 
 
 class TsexSerializer(serializers.ModelSerializer):

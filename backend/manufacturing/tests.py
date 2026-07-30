@@ -1,14 +1,49 @@
 from rest_framework.test import APITestCase
 
 from accounts.models import Role, User
-from orders.models import Order, OrderDetail, Part, PartRoute
-from orders.production_workflow import approve_order
-from orders.services import create_part_for_order_detail
+from orders.constants import OPERATION_SEEDS, STANDARD_OPERATION_CODES
 
 from .models import Operation
 
 
-class OperationApiTests(APITestCase):
+class StandardOperationSeedTests(APITestCase):
+    """After a fresh migration, the database must contain exactly the 13
+    standard production stages, active, with the codes/order/measure units
+    fixed by spec — this is what makes the stage list "standard" instead of
+    admin-editable."""
+
+    def test_all_thirteen_standard_stages_exist_and_are_active(self):
+        self.assertEqual(len(OPERATION_SEEDS), 13)
+        for seed in OPERATION_SEEDS:
+            operation = Operation.objects.get(code=seed["code"])
+            self.assertEqual(operation.name, seed["name"])
+            self.assertEqual(operation.measure_unit, seed["measure_unit"])
+            self.assertEqual(operation.order_index, seed["order_index"])
+            self.assertTrue(operation.is_active)
+
+    def test_order_index_is_1_to_13_in_spec_order(self):
+        codes_by_index = list(
+            Operation.objects.filter(code__in=STANDARD_OPERATION_CODES)
+            .order_by("order_index")
+            .values_list("code", flat=True)
+        )
+        self.assertEqual(codes_by_index, STANDARD_OPERATION_CODES)
+        indexes = list(
+            Operation.objects.filter(code__in=STANDARD_OPERATION_CODES)
+            .order_by("order_index")
+            .values_list("order_index", flat=True)
+        )
+        self.assertEqual(indexes, list(range(1, 14)))
+
+    def test_measure_units_match_spec(self):
+        expected = {seed["code"]: seed["measure_unit"] for seed in OPERATION_SEEDS}
+        actual = dict(
+            Operation.objects.filter(code__in=STANDARD_OPERATION_CODES).values_list("code", "measure_unit")
+        )
+        self.assertEqual(actual, expected)
+
+
+class OperationApiIsReadOnlyTests(APITestCase):
     def setUp(self):
         self.super_admin = User.objects.create_user(
             username="stage-admin",
@@ -16,348 +51,56 @@ class OperationApiTests(APITestCase):
             password="secret-pass",
             role=Role.SUPER_ADMIN,
         )
-        self.manager = User.objects.create_user(
-            username="stage-manager",
-            phone="+998901119002",
-            password="secret-pass",
-            role=Role.MANAGER,
-        )
-
-    def test_super_admin_can_create_stage_without_managing_internal_code(self):
         self.client.force_authenticate(user=self.super_admin)
 
-        response = self.client.post(
-            "/api/operations/",
-            {"name": "Silliqlash", "order_index": 10, "is_active": True},
-            format="json",
-        )
-
-        self.assertEqual(response.status_code, 201, response.data)
-        operation = Operation.objects.get(pk=response.data["id"])
-        self.assertEqual(operation.code, "SILLIQLASH")
-        self.assertEqual(operation.measure_unit, "piece")
-        self.assertTrue(operation.is_active)
-
-    def test_created_active_stage_automatically_appears_in_production_table(self):
-        self.client.force_authenticate(user=self.super_admin)
-        create_response = self.client.post(
-            "/api/operations/",
-            {"name": "Avtomatik tablo bosqichi", "order_index": 10, "is_active": True},
-            format="json",
-        )
-        self.assertEqual(create_response.status_code, 201, create_response.data)
-
-        table_response = self.client.get("/api/production/table")
-
-        self.assertEqual(table_response.status_code, 200, table_response.data)
-        codes = [stage["code"] for stage in table_response.data["operations"]]
-        self.assertIn(create_response.data["code"], codes)
-
-        self.client.patch(
-            f"/api/operations/{create_response.data['id']}/",
-            {"is_active": False},
-            format="json",
-        )
-        refreshed_response = self.client.get("/api/production/table")
-        refreshed_codes = [stage["code"] for stage in refreshed_response.data["operations"]]
-        self.assertNotIn(create_response.data["code"], refreshed_codes)
-
-    def test_stage_can_be_created_with_explicit_measure_unit(self):
-        self.client.force_authenticate(user=self.super_admin)
-
-        response = self.client.post(
-            "/api/operations/",
-            {"name": "Qirralash", "order_index": 10, "measure_unit": "meter", "is_active": True},
-            format="json",
-        )
-
-        self.assertEqual(response.status_code, 201, response.data)
-        operation = Operation.objects.get(pk=response.data["id"])
-        self.assertEqual(operation.measure_unit, "meter")
-        self.assertEqual(response.data["measure_unit"], "meter")
-
-    def test_stage_measure_unit_can_be_edited(self):
-        operation = Operation.objects.create(
-            code="UNIT_EDIT", name="Birlik tahriri", measure_unit="piece", order_index=10,
-        )
-        self.client.force_authenticate(user=self.super_admin)
-
-        response = self.client.patch(
-            f"/api/operations/{operation.id}/", {"measure_unit": "package"}, format="json",
-        )
+    def test_list_endpoint_returns_thirteen_active_stages_in_order(self):
+        response = self.client.get("/api/operations/")
 
         self.assertEqual(response.status_code, 200, response.data)
-        operation.refresh_from_db()
-        self.assertEqual(operation.measure_unit, "package")
-
-    def test_invalid_measure_unit_is_rejected_on_create(self):
-        self.client.force_authenticate(user=self.super_admin)
-
-        response = self.client.post(
-            "/api/operations/",
-            {"name": "Noto'g'ri birlik", "order_index": 10, "measure_unit": "kilogram"},
-            format="json",
-        )
-
-        self.assertEqual(response.status_code, 400, response.data)
-        self.assertIn("measure_unit", response.data)
-
-    def test_invalid_measure_unit_is_rejected_on_update(self):
-        operation = Operation.objects.create(
-            code="UNIT_GUARD", name="Birlik qo'riqchisi", measure_unit="piece", order_index=10,
-        )
-        self.client.force_authenticate(user=self.super_admin)
-
-        response = self.client.patch(
-            f"/api/operations/{operation.id}/", {"measure_unit": "litre"}, format="json",
-        )
-
-        self.assertEqual(response.status_code, 400, response.data)
-        self.assertIn("measure_unit", response.data)
-        operation.refresh_from_db()
-        self.assertEqual(operation.measure_unit, "piece", "rejected update must not change the stored value")
-
-    def test_name_update_keeps_stable_code(self):
-        operation = Operation.objects.create(
-            code="POLIROVKA", name="Polirovka", measure_unit="piece", order_index=10,
-        )
-        self.client.force_authenticate(user=self.super_admin)
-
-        response = self.client.patch(
-            f"/api/operations/{operation.id}/",
-            {"name": "Yakuniy silliqlash", "order_index": 11},
-            format="json",
-        )
-
-        self.assertEqual(response.status_code, 200, response.data)
-        operation.refresh_from_db()
-        self.assertEqual(operation.code, "POLIROVKA")
-        self.assertEqual(operation.name, "Yakuniy silliqlash")
-        self.assertEqual(operation.order_index, 11)
-
-    def test_non_super_admin_cannot_mutate_stages(self):
-        self.client.force_authenticate(user=self.manager)
-
-        response = self.client.post(
-            "/api/operations/",
-            {"name": "Ruxsatsiz", "order_index": 10},
-            format="json",
-        )
-
-        self.assertEqual(response.status_code, 403)
-
-    def test_authenticated_user_can_list_stages_and_filter_active(self):
-        Operation.objects.create(
-            code="NOFAOL_TEST", name="Nofaol test", measure_unit="piece", order_index=99, is_active=False,
-        )
-        self.client.force_authenticate(user=self.manager)
-
-        response = self.client.get("/api/operations/", {"is_active": "true"})
-
-        self.assertEqual(response.status_code, 200)
         rows = response.data["results"] if isinstance(response.data, dict) else response.data
-        self.assertTrue(rows)
-        self.assertTrue(all(row["is_active"] for row in rows))
+        codes = [row["code"] for row in rows if row["code"] in STANDARD_OPERATION_CODES]
+        self.assertEqual(codes, STANDARD_OPERATION_CODES)
 
-    def test_seed_stage_can_be_deleted_once_unused(self):
-        # OPERATION_SEEDS is only initial demo data — it must not grant the
-        # seeded rows any special runtime protection. Deletion is allowed
-        # purely based on whether anything is actually linked to the stage.
+    def test_retrieve_endpoint_works(self):
         operation = Operation.objects.get(code="ARRA")
-        self.client.force_authenticate(user=self.super_admin)
 
-        response = self.client.delete(f"/api/operations/{operation.id}/")
-
-        self.assertEqual(response.status_code, 204)
-        self.assertFalse(Operation.objects.filter(pk=operation.pk).exists())
-
-    def test_stage_linked_to_active_order_cannot_be_deleted(self):
-        operation = Operation.objects.create(
-            code="ACTIVE_LINK", name="Faol bog'lanish", measure_unit="piece", order_index=20,
-        )
-        order = Order.objects.create(product_name="Test", status=Order.Status.IN_PRODUCTION)
-        part = Part.objects.create(order=order, code="STAGE-PART", name="Detal", current_operation=operation)
-        PartRoute.objects.create(part=part, operation=operation, sequence_index=1)
-        self.client.force_authenticate(user=self.super_admin)
-
-        response = self.client.delete(f"/api/operations/{operation.id}/")
-
-        self.assertEqual(response.status_code, 400)
-        self.assertIn("faol buyurtma", response.data["detail"])
-        self.assertTrue(Operation.objects.filter(pk=operation.pk).exists())
-
-    def test_unused_custom_stage_can_be_deleted(self):
-        operation = Operation.objects.create(
-            code="DELETE_ME", name="O'chiriladigan", measure_unit="piece", order_index=20,
-        )
-        self.client.force_authenticate(user=self.super_admin)
-
-        response = self.client.delete(f"/api/operations/{operation.id}/")
-
-        self.assertEqual(response.status_code, 204)
-        self.assertFalse(Operation.objects.filter(pk=operation.pk).exists())
-
-    def test_deactivating_current_stage_advances_stuck_orders(self):
-        arra = Operation.objects.get(code="ARRA")
-        kromka = Operation.objects.get(code="KROMKA")
-        order = Order.objects.create(product_name="Stuck on deactivated stage")
-        approve_order(order.id)
-        order.refresh_from_db()
-        self.assertEqual(order.current_stage, arra)
-
-        self.client.force_authenticate(user=self.super_admin)
-        response = self.client.patch(f"/api/operations/{arra.id}/", {"is_active": False}, format="json")
+        response = self.client.get(f"/api/operations/{operation.id}/")
 
         self.assertEqual(response.status_code, 200, response.data)
-        order.refresh_from_db()
-        self.assertEqual(order.current_stage, kromka)
-        self.assertEqual(order.stage_status, Order.StageStatus.IN_PROGRESS)
+        self.assertEqual(response.data["code"], "ARRA")
 
-    def test_deactivating_a_stage_orders_are_not_on_does_nothing(self):
-        arra = Operation.objects.get(code="ARRA")
-        kromka = Operation.objects.get(code="KROMKA")
-        order = Order.objects.create(product_name="Not on kromka")
-        approve_order(order.id)
-        order.refresh_from_db()
-        self.assertEqual(order.current_stage, arra)
-
-        self.client.force_authenticate(user=self.super_admin)
-        response = self.client.patch(f"/api/operations/{kromka.id}/", {"is_active": False}, format="json")
-
-        self.assertEqual(response.status_code, 200, response.data)
-        order.refresh_from_db()
-        self.assertEqual(order.current_stage, arra, "order wasn't parked on the deactivated stage")
-
-    def test_new_stage_is_included_in_new_orders_route_but_not_existing_ones(self):
-        # A new order created after the stage exists must route through it;
-        # an order whose part route was already built before the stage
-        # existed must be left untouched.
-        existing_order = Order.objects.create(product_name="Pre-existing order")
-        existing_detail = OrderDetail.objects.create(
-            order=existing_order, name="Eski detal", quantity=1, length_mm=500, width_mm=500,
-        )
-        create_part_for_order_detail(existing_detail)
-        existing_codes_before = set(
-            existing_detail.part.routes.values_list("operation__code", flat=True)
-        )
-
-        self.client.force_authenticate(user=self.super_admin)
-        create_response = self.client.post(
-            "/api/operations/",
-            {"name": "Yangi bosqich", "order_index": 4, "is_active": True},
-            format="json",
-        )
-        self.assertEqual(create_response.status_code, 201, create_response.data)
-        new_code = create_response.data["code"]
-
-        new_order = Order.objects.create(product_name="Post-stage order")
-        new_detail = OrderDetail.objects.create(
-            order=new_order, name="Yangi detal", quantity=1, length_mm=500, width_mm=500,
-        )
-        create_part_for_order_detail(new_detail)
-
-        new_codes = set(new_detail.part.routes.values_list("operation__code", flat=True))
-        self.assertIn(new_code, new_codes, "new active stage must appear in a new order's route")
-
-        existing_detail.part.refresh_from_db()
-        existing_codes_after = set(
-            existing_detail.part.routes.values_list("operation__code", flat=True)
-        )
-        self.assertEqual(
-            existing_codes_before, existing_codes_after,
-            "an already-routed part must not be retroactively changed by a later stage",
-        )
-
-    def test_inactive_stage_is_excluded_from_new_orders_route(self):
-        self.client.force_authenticate(user=self.super_admin)
-        create_response = self.client.post(
-            "/api/operations/",
-            {"name": "Nofaol boshlanadi", "order_index": 5, "is_active": False},
-            format="json",
-        )
-        self.assertEqual(create_response.status_code, 201, create_response.data)
-        inactive_code = create_response.data["code"]
-
-        order = Order.objects.create(product_name="Order with inactive stage")
-        detail = OrderDetail.objects.create(
-            order=order, name="Detal", quantity=1, length_mm=500, width_mm=500,
-        )
-        create_part_for_order_detail(detail)
-
-        codes = set(detail.part.routes.values_list("operation__code", flat=True))
-        self.assertNotIn(inactive_code, codes)
-
-    def test_new_active_stage_appears_in_terminal_operations_list(self):
-        self.client.force_authenticate(user=self.super_admin)
-        create_response = self.client.post(
-            "/api/operations/",
-            {"name": "Terminal uchun bosqich", "order_index": 6, "is_active": True},
-            format="json",
-        )
-        self.assertEqual(create_response.status_code, 201, create_response.data)
-
-        self.client.force_authenticate(user=None)
-        response = self.client.get("/api/terminal/operations")
-
-        self.assertEqual(response.status_code, 200, response.data)
-        codes = [row["code"] for row in response.data]
-        self.assertIn(create_response.data["code"], codes)
-
-    def test_duplicate_order_index_is_rejected_on_create(self):
-        Operation.objects.create(
-            code="TAKEN_SLOT", name="Band tartib", measure_unit="piece", order_index=15,
-        )
-        self.client.force_authenticate(user=self.super_admin)
-
+    def test_create_is_not_allowed(self):
         response = self.client.post(
-            "/api/operations/",
-            {"name": "Yangi band bosqich", "order_index": 15, "is_active": True},
+            "/api/operations/", {"name": "Yangi bosqich", "order_index": 20}, format="json",
+        )
+        self.assertEqual(response.status_code, 405, response.data)
+
+    def test_update_is_not_allowed(self):
+        operation = Operation.objects.get(code="ARRA")
+
+        response = self.client.patch(
+            f"/api/operations/{operation.id}/", {"name": "Boshqa nom"}, format="json",
+        )
+
+        self.assertEqual(response.status_code, 405, response.data)
+        operation.refresh_from_db()
+        self.assertEqual(operation.name, "Arra")
+
+    def test_full_update_is_not_allowed(self):
+        operation = Operation.objects.get(code="ARRA")
+
+        response = self.client.put(
+            f"/api/operations/{operation.id}/",
+            {"name": "Boshqa nom", "code": "ARRA", "measure_unit": "meter", "order_index": 1, "is_active": True},
             format="json",
         )
 
-        self.assertEqual(response.status_code, 400, response.data)
-        self.assertIn("order_index", response.data)
+        self.assertEqual(response.status_code, 405, response.data)
 
-    def test_duplicate_order_index_is_rejected_on_update(self):
-        Operation.objects.create(
-            code="SLOT_A", name="Bosqich A", measure_unit="piece", order_index=16,
-        )
-        stage_b = Operation.objects.create(
-            code="SLOT_B", name="Bosqich B", measure_unit="piece", order_index=17,
-        )
-        self.client.force_authenticate(user=self.super_admin)
+    def test_delete_is_not_allowed(self):
+        operation = Operation.objects.get(code="ARRA")
 
-        conflicting = self.client.patch(
-            f"/api/operations/{stage_b.id}/", {"order_index": 16}, format="json",
-        )
-        self.assertEqual(conflicting.status_code, 400, conflicting.data)
+        response = self.client.delete(f"/api/operations/{operation.id}/")
 
-        unchanged = self.client.patch(
-            f"/api/operations/{stage_b.id}/", {"order_index": 17}, format="json",
-        )
-        self.assertEqual(unchanged.status_code, 200, unchanged.data)
-
-    def test_new_stage_appears_in_production_report_after_use(self):
-        self.client.force_authenticate(user=self.super_admin)
-        create_response = self.client.post(
-            "/api/operations/",
-            {"name": "Hisobot bosqichi", "order_index": 7, "is_active": True},
-            format="json",
-        )
-        self.assertEqual(create_response.status_code, 201, create_response.data)
-        stage_code = create_response.data["code"]
-
-        order = Order.objects.create(product_name="Report order")
-        part = Part.objects.create(order=order, code="REPORT-PART", name="Detal")
-        PartRoute.objects.create(
-            part=part, operation_id=create_response.data["id"], sequence_index=1,
-            status=PartRoute.Status.IN_PROGRESS,
-        )
-
-        response = self.client.get("/api/reports/production")
-
-        self.assertEqual(response.status_code, 200, response.data)
-        row = next(r for r in response.data if r["code"] == stage_code)
-        self.assertEqual(row["total"], 1)
-        self.assertEqual(row["in_progress"], 1)
-        self.assertEqual(row["completed"], 0)
+        self.assertEqual(response.status_code, 405, response.data)
+        self.assertTrue(Operation.objects.filter(pk=operation.pk).exists())

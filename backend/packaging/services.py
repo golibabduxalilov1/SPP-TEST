@@ -6,7 +6,7 @@ from orders.production_workflow import ProductionWorkflowError, complete_current
 
 from .models import Package, PackageItem
 
-OMBOR_CODE = "OMBOR"
+QADOQLASH_CODE = "QADOQLASH"
 
 
 def packaging_scan(package: Package, qr_token: str, employee):
@@ -20,7 +20,7 @@ def packaging_scan(package: Package, qr_token: str, employee):
     if PackageItem.objects.filter(package=package, part=part).exists():
         return {"status": "error", "error_code": "duplicate", "message": "Bu detal qadoqlashda avval skanerlangan"}
 
-    route_step = part.routes.filter(operation__code=OMBOR_CODE).first()
+    route_step = part.routes.filter(operation__code=QADOQLASH_CODE).first()
     if route_step:
         unfinished_previous = part.routes.filter(
             sequence_index__lt=route_step.sequence_index
@@ -59,7 +59,7 @@ def packaging_scan(package: Package, qr_token: str, employee):
 
 
 def required_parts_qs(order):
-    return Part.objects.filter(order=order, routes__operation__code=OMBOR_CODE).distinct()
+    return Part.objects.filter(order=order, routes__operation__code=QADOQLASH_CODE).distinct()
 
 
 def missing_parts_count(package: Package):
@@ -69,14 +69,15 @@ def missing_parts_count(package: Package):
 
 
 def sync_order_into_warehouse(order, employee=None):
-    """Make sure the order has exactly one `warehouse` Package once its OMBOR
-    stage finishes, whichever path finished it (QR scan, "Bosqichni
-    yakunlash", or any other caller of `complete_current_stage`).
+    """Make sure the order has exactly one `warehouse` Package once its
+    QADOQLASH stage (the last of the 13 standard stages) finishes, whichever
+    path finished it (QR scan, "Bosqichni yakunlash", or any other caller of
+    `complete_current_stage`).
 
     The whole-order "finish the stage" fast path never runs the packaging
     terminal flow, so it never creates a Package on its own — without this,
-    an order can sail through OMBOR on the production board and simply never
-    appear on the Tayyor ombor screen, which is the bug this closes.
+    an order can sail through QADOQLASH on the production board and simply
+    never appear on the Tayyor ombor screen, which is the bug this closes.
     """
     package = (
         Package.objects.select_for_update()

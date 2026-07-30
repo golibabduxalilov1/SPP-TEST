@@ -76,9 +76,9 @@ class OrderApiTests(APITestCase):
         )
 
     def test_workflow_skips_stages_none_of_the_orders_parts_route_through(self):
-        # "faqat_kesish" only routes through ARRA, OMBOR — the board must
-        # skip straight past KROMKA/PRISADKA instead of getting stuck
-        # "in progress" on one of them.
+        # "faqat_kesish" only routes through ARRA, QADOQLASH — the board must
+        # skip straight past the other standard stages instead of getting
+        # stuck "in progress" on one of them.
         order = Order.objects.create(product_name="Route-aware test", created_by=self.user)
         part = Part.objects.create(order=order, code="RT-1", name="Panel", quantity=1)
         assign_route(part, "faqat_kesish")
@@ -91,10 +91,10 @@ class OrderApiTests(APITestCase):
 
         self.assertEqual(response.status_code, 200, response.data)
         order.refresh_from_db()
-        self.assertEqual(order.current_stage.code, "OMBOR")
+        self.assertEqual(order.current_stage.code, "QADOQLASH")
 
     def test_completing_last_stage_marks_order_warehouse_and_keeps_history(self):
-        # The last active stage is OMBOR (Tayyor ombor), so finishing it must
+        # The last standard stage is QADOQLASH, so finishing it must
         # land the order in `warehouse` — with a Package to match — not
         # silently `completed` with nothing to show on the Tayyor ombor page.
         from packaging.models import Package
@@ -347,7 +347,6 @@ class PartApiTests(APITestCase):
         self.client.force_authenticate(user=self.user)
         Operation.objects.update_or_create(code="ARRA", defaults={"name": "Arra", "measure_unit": "m2", "order_index": 1})
         Operation.objects.update_or_create(code="QADOQLASH", defaults={"name": "Qadoqlash", "measure_unit": "package", "order_index": 2})
-        Operation.objects.update_or_create(code="OMBOR", defaults={"name": "Ombor", "measure_unit": "package", "order_index": 3})
         self.order = Order.objects.create(order_no="T-001", product_name="Test", created_by=self.user)
 
     def test_manual_part_create_assigns_route(self):

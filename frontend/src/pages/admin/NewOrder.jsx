@@ -9,7 +9,7 @@ import { Field, Input, Select, Textarea, Label } from "../../components/ui/Input
 import EditableDetailsTable from "../../components/admin/EditableDetailsTable";
 import { formatUzPhone, normalizeUzPhone, isValidUzPhone } from "../../lib/phone";
 
-const PRIORITY_LABELS = { low: "Past", normal: "Oddiy", high: "Yuqori", urgent: "Shoshilinch" };
+const PRIORITY_LABELS = { normal: "Oddiy", high: "Yuqori", urgent: "Shoshilinch" };
 
 let tempDetailIdCounter = 0;
 function nextTempDetailId() {

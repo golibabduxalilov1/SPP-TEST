@@ -18,7 +18,7 @@ class PackagingScanAdvancesBoardStageTests(APITestCase):
         Operation.objects.all().delete()
         self.stage1 = Operation.objects.create(code="ARRA", name="Arra", measure_unit="m2", order_index=1, is_active=True)
         self.stage2 = Operation.objects.create(
-            code="OMBOR", name="Tayyor ombor", measure_unit="package", order_index=2, is_active=True,
+            code="QADOQLASH", name="Qadoqlash", measure_unit="package", order_index=2, is_active=True,
         )
         self.employee = User.objects.create_user(
             username="qadoqchi-scan", phone="+998901113601", password="secret-pass", role=Role.OPERATOR,
@@ -40,7 +40,7 @@ class PackagingScanAdvancesBoardStageTests(APITestCase):
     def test_packaging_scan_of_last_part_completes_the_order(self):
         part = self._make_part("T-300-1")
         approve_order(self.order.id)
-        complete_current_stage(self.order.id)  # moves the board past stage1, onto stage2 (OMBOR/packaging)
+        complete_current_stage(self.order.id)  # moves the board past stage1, onto stage2 (QADOQLASH/packaging)
         self.order.refresh_from_db()
         self.assertEqual(self.order.current_stage, self.stage2)
 
@@ -74,20 +74,20 @@ class PackagingScanAdvancesBoardStageTests(APITestCase):
         self.assertEqual(self.order.current_stage, self.stage2, "should still wait on part_b")
 
 
-class OmborStageWarehouseSyncTests(APITestCase):
-    """Finishing the OMBOR board stage must make the order show up on the
-    Tayyor ombor screen — a Package is the only thing that screen reads from,
-    but the whole-order "Bosqichni yakunlash" fast path (and any QR scan that
-    triggers it) never runs the packaging terminal flow that normally
-    creates one."""
+class QadoqlashStageWarehouseSyncTests(APITestCase):
+    """Finishing the QADOQLASH board stage — the last of the 13 standard
+    stages — must make the order show up on the Tayyor ombor screen — a
+    Package is the only thing that screen reads from, but the whole-order
+    "Bosqichni yakunlash" fast path (and any QR scan that triggers it) never
+    runs the packaging terminal flow that normally creates one."""
 
     def setUp(self):
         Operation.objects.all().delete()
-        self.qadoqlash = Operation.objects.create(
-            code="QADOQLASH", name="Qadoqlash", measure_unit="package", order_index=1, is_active=True,
+        self.arra = Operation.objects.create(
+            code="ARRA", name="Arra", measure_unit="meter", order_index=1, is_active=True,
         )
-        self.ombor = Operation.objects.create(
-            code="OMBOR", name="Tayyor ombor", measure_unit="package", order_index=2, is_active=True,
+        self.qadoqlash = Operation.objects.create(
+            code="QADOQLASH", name="Qadoqlash", measure_unit="package", order_index=2, is_active=True,
         )
         self.employee = User.objects.create_user(
             username="omborchi-sync", phone="+998901113701", password="secret-pass", role=Role.WAREHOUSE,
@@ -98,23 +98,23 @@ class OmborStageWarehouseSyncTests(APITestCase):
     def _make_part(self, code):
         part = Part.objects.create(order=self.order, code=code, name="Panel", quantity=1)
         PartRoute.objects.create(
-            part=part, operation=self.qadoqlash, sequence_index=1,
+            part=part, operation=self.arra, sequence_index=1,
             status=PartRoute.Status.COMPLETED, completed_at=timezone.now(),
         )
-        PartRoute.objects.create(part=part, operation=self.ombor, sequence_index=2, status=PartRoute.Status.PENDING)
-        part.current_operation = self.ombor
+        PartRoute.objects.create(part=part, operation=self.qadoqlash, sequence_index=2, status=PartRoute.Status.PENDING)
+        part.current_operation = self.qadoqlash
         part.save(update_fields=["current_operation"])
         return part
 
-    def _advance_to_ombor(self):
+    def _advance_to_qadoqlash(self):
         approve_order(self.order.id)
-        complete_current_stage(self.order.id, completed_by=self.employee)  # finishes QADOQLASH, lands on OMBOR
+        complete_current_stage(self.order.id, completed_by=self.employee)  # finishes ARRA, lands on QADOQLASH
         self.order.refresh_from_db()
-        self.assertEqual(self.order.current_stage, self.ombor)
+        self.assertEqual(self.order.current_stage, self.qadoqlash)
 
-    def test_ombor_completion_creates_package_when_missing(self):
+    def test_qadoqlash_completion_creates_package_when_missing(self):
         self._make_part("T-400-1")
-        self._advance_to_ombor()
+        self._advance_to_qadoqlash()
 
         complete_current_stage(self.order.id, completed_by=self.employee)
 
@@ -122,7 +122,7 @@ class OmborStageWarehouseSyncTests(APITestCase):
 
     def test_created_package_status_is_warehouse(self):
         self._make_part("T-400-1")
-        self._advance_to_ombor()
+        self._advance_to_qadoqlash()
 
         complete_current_stage(self.order.id, completed_by=self.employee)
 
@@ -131,7 +131,7 @@ class OmborStageWarehouseSyncTests(APITestCase):
 
     def test_order_status_is_warehouse(self):
         self._make_part("T-400-1")
-        self._advance_to_ombor()
+        self._advance_to_qadoqlash()
 
         complete_current_stage(self.order.id, completed_by=self.employee)
 
@@ -140,7 +140,7 @@ class OmborStageWarehouseSyncTests(APITestCase):
 
     def test_warehouse_packages_endpoint_returns_synced_package(self):
         self._make_part("T-400-1")
-        self._advance_to_ombor()
+        self._advance_to_qadoqlash()
         complete_current_stage(self.order.id, completed_by=self.employee)
 
         response = self.client.get("/api/warehouse/packages")
@@ -151,7 +151,7 @@ class OmborStageWarehouseSyncTests(APITestCase):
 
     def test_existing_package_reused_instead_of_creating_new_one(self):
         self._make_part("T-400-1")
-        self._advance_to_ombor()
+        self._advance_to_qadoqlash()
         existing = Package.objects.create(order=self.order, created_by=self.employee, status=Package.Status.COMPLETED)
 
         complete_current_stage(self.order.id, completed_by=self.employee)
@@ -160,9 +160,9 @@ class OmborStageWarehouseSyncTests(APITestCase):
         existing.refresh_from_db()
         self.assertEqual(existing.status, Package.Status.WAREHOUSE)
 
-    def test_repeating_ombor_completion_does_not_duplicate_package(self):
+    def test_repeating_qadoqlash_completion_does_not_duplicate_package(self):
         self._make_part("T-400-1")
-        self._advance_to_ombor()
+        self._advance_to_qadoqlash()
         complete_current_stage(self.order.id, completed_by=self.employee)
 
         # The board can no longer "complete" a stage that no longer exists on
@@ -183,7 +183,7 @@ class OmborStageWarehouseSyncTests(APITestCase):
 
     def test_existing_package_items_are_preserved(self):
         part = self._make_part("T-400-1")
-        self._advance_to_ombor()
+        self._advance_to_qadoqlash()
         existing = Package.objects.create(order=self.order, created_by=self.employee, status=Package.Status.COMPLETED)
         item = PackageItem.objects.create(package=existing, part=part, scanned_by=self.employee)
 
@@ -196,17 +196,17 @@ class OmborStageWarehouseSyncTests(APITestCase):
         self._make_part("T-400-1")
         approve_order(self.order.id)
         self.order.refresh_from_db()
-        self.assertEqual(self.order.current_stage, self.qadoqlash)
+        self.assertEqual(self.order.current_stage, self.arra)
 
-        complete_current_stage(self.order.id, completed_by=self.employee)  # finishes QADOQLASH, not OMBOR
+        complete_current_stage(self.order.id, completed_by=self.employee)  # finishes ARRA, not QADOQLASH
 
         self.assertFalse(Package.objects.filter(order=self.order).exists())
         self.order.refresh_from_db()
         self.assertNotEqual(self.order.status, Order.Status.WAREHOUSE)
 
 
-class WarehouseDeliveryAfterOmborSyncTests(APITestCase):
-    """Once a package auto-created by the OMBOR sync reaches the warehouse,
+class WarehouseDeliveryAfterQadoqlashSyncTests(APITestCase):
+    """Once a package auto-created by the QADOQLASH sync reaches the warehouse,
     the existing "Mijozga topshirish" flow must still close the order out
     exactly as it does for manually-packaged orders."""
 

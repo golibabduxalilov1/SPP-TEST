@@ -35,6 +35,6 @@ export const STATUS_LABELS = {
   not_connected: "Ulanmagan",
 };
 
-export const PRIORITY_LABELS = { low: "Past", normal: "Oddiy", high: "Yuqori", urgent: "Shoshilinch" };
+export const PRIORITY_LABELS = { normal: "Oddiy", high: "Yuqori", urgent: "Shoshilinch" };
 
 export const CONNECTIVITY_LABELS = { online: "Tarmoqda", offline: "Tarmoqsiz" };

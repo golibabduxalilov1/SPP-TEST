@@ -6,7 +6,7 @@ import { Field, Input, Select, Textarea } from "../ui/Input";
 import Modal from "../ui/Modal";
 import { formatUzPhone, normalizeUzPhone, isValidUzPhone } from "../../lib/phone";
 
-const PRIORITY_LABELS = { low: "Past", normal: "Oddiy", high: "Yuqori", urgent: "Shoshilinch" };
+const PRIORITY_LABELS = { normal: "Oddiy", high: "Yuqori", urgent: "Shoshilinch" };
 
 export default function EditOrderModal({ open, order, onClose, onSaved }) {
   const [form, setForm] = useState(null);

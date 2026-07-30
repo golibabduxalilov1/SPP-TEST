@@ -12,7 +12,7 @@ import { getSavedStageId, saveStageId } from "../../lib/device";
 const KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "", "0", "back"];
 
 function targetRoute(stage) {
-  return stage?.code === "QADOQLASH" ? "packaging" : stage?.code === "OMBOR" ? "warehouse" : "scan";
+  return stage?.code === "QADOQLASH" ? "packaging" : "scan";
 }
 
 export default function TerminalLogin() {

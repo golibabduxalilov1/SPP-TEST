@@ -1,6 +1,6 @@
 import clsx from "clsx";
 
-export function Table({ children, className, containerClassName, label = "Ma'lumotlar jadvali" }) {
+export function Table({ children, className, containerClassName, style, label = "Ma'lumotlar jadvali" }) {
   return (
     <div
       role="region"
@@ -11,7 +11,7 @@ export function Table({ children, className, containerClassName, label = "Ma'lum
         containerClassName
       )}
     >
-      <table className={clsx("w-full min-w-[640px] table-auto border-collapse text-sm", className)}>{children}</table>
+      <table style={style} className={clsx("w-full min-w-[640px] table-auto border-collapse text-sm", className)}>{children}</table>
     </div>
   );
 }

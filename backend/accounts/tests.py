@@ -888,3 +888,141 @@ class MultiStageMachineAssignmentTests(APITestCase):
             {m["id"] for m in by_code["MULTI-KROMKA"]["machines"]},
             {self.kromka_machine_1.id, self.kromka_machine_2.id},
         )
+
+
+class EmployeeBadgeTokenTests(APITestCase):
+    """Per-employee QR badge token: auto-generated once at creation, unique,
+    immutable through the API, and gated by the employee's active status at
+    scan time rather than being baked into the token itself."""
+
+    def setUp(self):
+        self.admin = User.objects.create_user(
+            username="badge-admin", phone="+998901113201", password="secret-pass", role=Role.SUPER_ADMIN,
+        )
+        self.client.force_authenticate(user=self.admin)
+
+    def _create_employee(self, phone, username="badge-op", pin_code="4411"):
+        response = self.client.post(
+            "/api/employees/",
+            {
+                "username": username, "phone": phone, "role": Role.WAREHOUSE, "uses_terminal": True,
+                "pin_code": pin_code,
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+        return response.data
+
+    def test_badge_token_is_auto_generated_on_create(self):
+        data = self._create_employee("+998901113202")
+        self.assertTrue(data["badge_token"])
+        employee = User.objects.get(id=data["id"])
+        self.assertTrue(employee.badge_token)
+
+    def test_badge_tokens_are_unique_per_employee(self):
+        first = self._create_employee("+998901113203", username="badge-op-a", pin_code="1201")
+        second = self._create_employee("+998901113204", username="badge-op-b", pin_code="1202")
+        self.assertNotEqual(first["badge_token"], second["badge_token"])
+
+    def test_badge_token_is_unchanged_by_editing_employee(self):
+        data = self._create_employee("+998901113205")
+        original_token = data["badge_token"]
+
+        update = self.client.patch(f"/api/employees/{data['id']}/", {"first_name": "Yangi"}, format="json")
+        self.assertEqual(update.status_code, 200, update.data)
+        self.assertEqual(update.data["badge_token"], original_token)
+
+        employee = User.objects.get(id=data["id"])
+        self.assertEqual(employee.badge_token, original_token)
+
+    def test_badge_token_is_not_regenerated_by_repeated_saves(self):
+        data = self._create_employee("+998901113206")
+        original_token = data["badge_token"]
+        employee = User.objects.get(id=data["id"])
+        for _ in range(3):
+            employee.save()
+        employee.refresh_from_db()
+        self.assertEqual(employee.badge_token, original_token)
+
+    def test_client_cannot_set_or_overwrite_badge_token_via_api(self):
+        response = self.client.post(
+            "/api/employees/",
+            {
+                "username": "badge-hijack", "phone": "+998901113207", "role": Role.WAREHOUSE,
+                "uses_terminal": True, "pin_code": "7712", "badge_token": "attacker-supplied-token",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertNotEqual(response.data["badge_token"], "attacker-supplied-token")
+
+        update = self.client.patch(
+            f"/api/employees/{response.data['id']}/", {"badge_token": "still-attacker-supplied"}, format="json",
+        )
+        self.assertEqual(update.status_code, 200, update.data)
+        self.assertNotEqual(update.data["badge_token"], "still-attacker-supplied")
+        employee = User.objects.get(id=response.data["id"])
+        self.assertNotEqual(employee.badge_token, "still-attacker-supplied")
+
+    def test_active_employee_badge_token_logs_in(self):
+        data = self._create_employee("+998901113208")
+        response = self.client.post(
+            "/api/auth/terminal-login",
+            {"badge_token": data["badge_token"], "device_id": "term-1"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data["employee"]["phone"], "+998901113208")
+
+    def test_inactive_employee_badge_token_is_rejected_with_specific_message(self):
+        data = self._create_employee("+998901113209")
+        employee = User.objects.get(id=data["id"])
+        employee.is_active_employee = False
+        employee.save()
+
+        response = self.client.post(
+            "/api/auth/terminal-login",
+            {"badge_token": data["badge_token"], "device_id": "term-1"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 401, response.data)
+        self.assertEqual(response.data["detail"], "Bu xodim nofaol. QR koddan foydalanish mumkin emas.")
+
+    def test_reactivated_employee_badge_token_works_again_without_new_token(self):
+        data = self._create_employee("+998901113210")
+        original_token = data["badge_token"]
+        employee = User.objects.get(id=data["id"])
+        employee.is_active_employee = False
+        employee.save()
+        employee.is_active_employee = True
+        employee.save()
+        employee.refresh_from_db()
+        self.assertEqual(employee.badge_token, original_token)
+
+        response = self.client.post(
+            "/api/auth/terminal-login",
+            {"badge_token": original_token, "device_id": "term-1"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+
+    def test_unknown_badge_token_is_rejected(self):
+        response = self.client.post(
+            "/api/auth/terminal-login",
+            {"badge_token": "this-token-does-not-exist", "device_id": "term-1"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 401, response.data)
+        self.assertEqual(response.data["detail"], "PIN yoki badge noto'g'ri")
+
+    def test_deleted_employee_badge_token_is_rejected(self):
+        data = self._create_employee("+998901113211")
+        User.objects.get(id=data["id"]).delete()
+
+        response = self.client.post(
+            "/api/auth/terminal-login",
+            {"badge_token": data["badge_token"], "device_id": "term-1"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 401, response.data)
+        self.assertEqual(response.data["detail"], "PIN yoki badge noto'g'ri")

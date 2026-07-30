@@ -12,7 +12,7 @@ SPECIAL_STATUS_LABELS = {
     "approved": "Tasdiqlangan",
     "cancelled": "Bekor qilingan",
 }
-PRIORITY_LABELS = {"low": "Past", "normal": "Oddiy", "high": "Yuqori", "urgent": "Shoshilinch"}
+PRIORITY_LABELS = {"normal": "Oddiy", "high": "Yuqori", "urgent": "Shoshilinch"}
 
 HEADERS = ["Buyurtma", "Mijoz", "Telefon", "Mahsulot", "Muddat", "Prioritet", "Status", "Detallar", "Yaratilgan"]
 

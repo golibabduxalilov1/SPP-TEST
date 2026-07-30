@@ -78,7 +78,7 @@ def _package_count(order):
     """"Existing packages" for a package-measured stage (e.g. Tayyor ombor).
     A Package isn't tied to individual OrderDetails/Parts the way area/edge/
     quantity are, so this is order-level rather than a per-detail sum —
-    normally 0 until the order's OMBOR stage finishes and
+    normally 0 until the order's QADOQLASH stage finishes and
     packaging.services.sync_order_into_warehouse creates its Package, then 1.
     Reads `.packages.all()` (not `.count()`) so it can be answered from the
     `packages` prefetch in build_production_table instead of a query per row."""

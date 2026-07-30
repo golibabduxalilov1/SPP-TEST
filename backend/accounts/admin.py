@@ -21,7 +21,10 @@ class UserAdmin(BaseUserAdmin):
         # hashing step, so it must stay read-only to avoid a plaintext value
         # being saved here by mistake. PIN changes go through the API (React
         # admin panel), which hashes them via UserSerializer.
-        readonly = super().get_readonly_fields(request, obj) + ("pin_code_hash",)
+        # badge_token is editable=False on the model (generated once at creation,
+        # never reassigned) — it must be listed here or Django admin errors out
+        # trying to render it as a normal form field.
+        readonly = super().get_readonly_fields(request, obj) + ("pin_code_hash", "badge_token")
         # A Super Admin's role is a one-way promotion — the model already enforces this
         # in save(), but locking the field too keeps the admin form from suggesting it's editable.
         if obj is not None and obj.role == Role.SUPER_ADMIN:

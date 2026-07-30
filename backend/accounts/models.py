@@ -17,6 +17,12 @@ pin_code_validator = RegexValidator(
 )
 
 
+def generate_badge_token():
+    # UUID4 (122 bits of CSPRNG entropy) — unguessable and carries no
+    # personal data, unlike a sequential/derivable employee id.
+    return uuid.uuid4().hex
+
+
 class Role(models.TextChoices):
     SUPER_ADMIN = "super_admin", "Super Admin"
     ADMIN = "admin", "Admin"
@@ -96,7 +102,14 @@ class User(AbstractUser):
     pin_code_hash = models.CharField(
         max_length=128, blank=True, null=True, help_text="Terminal PIN kodining xavfsiz hashi",
     )
-    badge_token = models.CharField(max_length=64, blank=True, unique=False, help_text="QR badge token")
+    # Generated exactly once, at creation (see `default`) — never reassigned
+    # afterward by any code path. `editable=False` keeps it out of ModelForms
+    # and makes DRF's ModelSerializer auto-build it read_only, so it can't be
+    # set or changed through the employees API even if a caller tries to.
+    badge_token = models.CharField(
+        max_length=64, unique=True, default=generate_badge_token, editable=False,
+        help_text="QR badge token — xodimni terminalda/QR orqali aniqlash uchun noyob token",
+    )
     is_active_employee = models.BooleanField(default=True)
     employment_status = models.CharField(
         max_length=16, choices=EmploymentStatus.choices, default=EmploymentStatus.ACTIVE,

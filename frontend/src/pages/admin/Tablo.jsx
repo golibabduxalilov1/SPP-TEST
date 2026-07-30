@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import clsx from "clsx";
 import { Link } from "react-router-dom";
-import { CheckCircle2, Clock, Table2, Terminal } from "lucide-react";
+import { CheckCircle2, CircleAlert, Clock, Table2, Terminal, Zap } from "lucide-react";
 import toast from "react-hot-toast";
 import { adminApi } from "../../api/client";
 import { useAuthStore } from "../../store/authStore";
@@ -13,6 +13,37 @@ import SegmentedControl from "../../components/ui/SegmentedControl";
 import { format } from "date-fns";
 import { useTutorial } from "../../tutorial/TutorialContext";
 import { tabloSteps } from "../../tutorial/content/tablo";
+import { PRIORITY_LABELS } from "../../constants/labels";
+
+// Compact priority marker shown left of the product name. "normal" renders nothing.
+function PriorityMark({ priority }) {
+  if (priority === "urgent") {
+    return (
+      <Zap
+        size={13}
+        className="shrink-0 fill-status-red text-status-red"
+        aria-label={PRIORITY_LABELS.urgent}
+        title={PRIORITY_LABELS.urgent}
+      />
+    );
+  }
+  if (priority === "high") {
+    return (
+      <CircleAlert
+        size={13}
+        className="shrink-0 text-status-orange"
+        aria-label={PRIORITY_LABELS.high}
+        title={PRIORITY_LABELS.high}
+      />
+    );
+  }
+  return null;
+}
+
+// Fixed pixel widths for the sticky/frozen columns and each process column —
+// COL_LEFT offsets are derived from COL_W so sticky `left` values always match.
+const COL_W = { index: 48, product: 200, deadline: 120, op: 112 };
+const COL_LEFT = { product: COL_W.index, deadline: COL_W.index + COL_W.product };
 
 const MODES = [
   { key: "hajm", label: "Hajm" },
@@ -190,27 +221,58 @@ export default function Tablo() {
           {loading || !data ? (
             <PageLoader />
           ) : (
-            <Table className="min-w-225!" label="Ishlab chiqarish tablosi">
-                <thead className="sticky top-0 bg-(--surface-muted) text-xs tracking-wide text-(--ink-soft) uppercase">
+            <Table
+              className="table-fixed! border-collapse text-sm"
+              containerClassName="rounded-2xl"
+              style={{ width: COL_W.index + COL_W.product + COL_W.deadline + data.operations.length * COL_W.op }}
+              label="Ishlab chiqarish tablosi"
+            >
+                <colgroup>
+                  <col style={{ width: COL_W.index }} />
+                  <col style={{ width: COL_W.product }} />
+                  <col style={{ width: COL_W.deadline }} />
+                  {data.operations.map((op) => (
+                    <col key={op.code} style={{ width: COL_W.op }} />
+                  ))}
+                </colgroup>
+                <thead className="sticky top-0 z-20 bg-(--surface-muted) text-[11px] font-semibold tracking-wide text-(--ink-soft) uppercase">
                   <tr>
-                    <th className="sticky left-0 z-10 w-10 min-w-10 bg-(--surface-muted) px-3 py-3 text-left font-semibold">№</th>
-                    <th className="sticky left-10 z-10 min-w-55 bg-(--surface-muted) px-3 py-3 text-left font-semibold">Buyurtma</th>
-                    <th className="px-3 py-3 text-left font-semibold">Muddat</th>
+                    <th className="sticky left-0 z-30 border-r border-b border-(--border-subtle) bg-(--surface-muted) px-2 py-2 text-center align-middle">№</th>
+                    <th
+                      className="sticky z-30 border-r border-b border-(--border-subtle) bg-(--surface-muted) px-3 py-2 text-left align-middle"
+                      style={{ left: COL_LEFT.product }}
+                    >
+                      Mahsulot turi
+                    </th>
+                    <th
+                      className="sticky z-30 border-r border-b border-(--border) bg-(--surface-muted) px-2 py-2 text-center align-middle shadow-[2px_0_4px_-2px_rgba(0,0,0,0.08)]"
+                      style={{ left: COL_LEFT.deadline }}
+                    >
+                      Muddat
+                    </th>
                     {data.operations.map((op) => (
-                      <th key={op.code} className="min-w-32 px-3 py-3 text-center font-semibold">{op.name}</th>
+                      <th key={op.code} className="border-r border-b border-(--border-subtle) px-2 py-2 text-center align-middle last:border-r-0">
+                        <span className="line-clamp-2 leading-tight" title={op.name}>{op.name}</span>
+                      </th>
                     ))}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-(--border-subtle) bg-(--surface)">
+                <tbody className="bg-(--surface)">
                   <tr className="bg-(--accent-soft)">
-                    <td className="sticky left-0 z-10 w-10 min-w-10 bg-(--accent-soft)" />
-                    <td className="sticky left-10 z-10 min-w-55 bg-(--accent-soft) px-3 py-3 text-xs font-semibold tracking-wide text-(--accent-strong) uppercase">
+                    <td className="sticky left-0 z-10 border-r border-b border-(--border-subtle) bg-(--accent-soft) px-2 py-2" />
+                    <td
+                      className="sticky z-10 truncate border-r border-b border-(--border-subtle) bg-(--accent-soft) px-3 py-2 text-xs font-semibold tracking-wide text-(--accent-strong) uppercase"
+                      style={{ left: COL_LEFT.product }}
+                    >
                       Jami detallar
                     </td>
-                    <td />
+                    <td
+                      className="sticky z-10 border-r border-b border-(--border) bg-(--accent-soft) shadow-[2px_0_4px_-2px_rgba(0,0,0,0.08)]"
+                      style={{ left: COL_LEFT.deadline }}
+                    />
                     {data.operations.map((op) => (
-                      <td key={op.code} className="px-3 py-3 text-center">
-                        <p className="tabular text-base font-bold text-(--accent-strong)">
+                      <td key={op.code} className="border-r border-b border-(--border-subtle) px-2 py-2 text-center last:border-r-0">
+                        <p className="tabular text-sm font-bold text-(--accent-strong)">
                           {totals[op.code] === null ? "—" : totals[op.code]}
                         </p>
                         {totals[op.code] !== null && displayUnit(op, mode) && (
@@ -227,35 +289,47 @@ export default function Tablo() {
                     </tr>
                   )}
                   {data.rows.map((row) => (
-                    <tr key={row.order_id} className="transition-colors hover:bg-(--accent-soft)">
-                      <td className="sticky left-0 z-10 w-10 min-w-10 bg-(--surface) px-3 py-3">{row.index}</td>
-                      <td className="sticky left-10 z-10 min-w-55 bg-(--surface) px-3 py-3">
-                        <p className="font-semibold">#{row.order_no}</p>
-                        <p className="text-xs text-(--ink-faint)">{row.customer_name || row.product_name}</p>
+                    <tr key={row.order_id} className="group border-b border-(--border-subtle) transition-colors hover:bg-(--accent-soft)">
+                      <td className="sticky left-0 z-10 border-r border-b border-(--border-subtle) bg-(--surface) px-2 py-2 text-center text-xs text-(--ink-soft) group-hover:bg-(--accent-soft)">
+                        {row.index}
                       </td>
-                      <td className="px-3 py-3 text-xs">{row.deadline ? format(new Date(row.deadline), "dd.MM.yyyy") : "—"}</td>
+                      <td
+                        className="sticky z-10 border-r border-b border-(--border-subtle) bg-(--surface) px-3 py-2 group-hover:bg-(--accent-soft)"
+                        style={{ left: COL_LEFT.product }}
+                      >
+                        <p className="flex items-center gap-1 truncate text-sm font-semibold" title={row.product_name || "Mahsulot ko'rsatilmagan"}>
+                          <PriorityMark priority={row.priority} />
+                          <span className="truncate">{row.product_name || "Mahsulot ko'rsatilmagan"}</span>
+                        </p>
+                      </td>
+                      <td
+                        className="sticky z-10 truncate border-r border-b border-(--border) bg-(--surface) px-2 py-2 text-center text-xs text-(--ink-soft) shadow-[2px_0_4px_-2px_rgba(0,0,0,0.08)] group-hover:bg-(--accent-soft)"
+                        style={{ left: COL_LEFT.deadline }}
+                      >
+                        {row.deadline ? format(new Date(row.deadline), "dd.MM.yyyy") : "—"}
+                      </td>
                       {data.operations.map((op) => {
                         const cell = row.cells[op.code];
                         return (
-                          <td key={op.code} className="p-1.5 text-center">
+                          <td key={op.code} className="border-r border-b border-(--border-subtle) px-1.5 py-1.5 text-center align-middle last:border-r-0">
                             {cell.status === "completed" ? (
-                              <div className="flex min-h-12 flex-col items-center justify-center gap-0.5 rounded-lg bg-status-green px-2 py-1.5 text-white">
-                                <div className="flex items-center gap-1.5">
-                                  <CheckCircle2 size={15} />
-                                  <p className="tabular text-sm font-bold">{formatCell(cell, op, mode)}</p>
-                                </div>
-                                <p className="text-[10px] font-medium text-white/80">{STATUS_LABEL.completed}</p>
+                              <div className="flex min-h-11 flex-col items-center justify-center gap-0.5 border-l-2 border-status-green pl-1.5">
+                                <p className="tabular flex items-center gap-1 text-sm font-bold text-status-green">
+                                  <CheckCircle2 size={13} className="shrink-0" />
+                                  {formatCell(cell, op, mode)}
+                                </p>
+                                <p className="text-[10px] font-medium text-status-green/75">{STATUS_LABEL.completed}</p>
                               </div>
                             ) : cell.status === "not_required" || cell.status === "pending" ? (
-                              <div className="flex min-h-12 flex-col items-center justify-center rounded-lg bg-(--surface-muted) text-(--ink-faint)">
-                                <span>—</span>
+                              <div className="flex min-h-11 flex-col items-center justify-center text-(--ink-faint)">
+                                <span className="text-sm">—</span>
                                 {cell.status === "pending" && <span className="text-[10px] font-medium">{STATUS_LABEL.pending}</span>}
                               </div>
                             ) : (
                               <div
                                 className={clsx(
-                                  "flex min-h-12 flex-col items-center justify-center gap-0.5 rounded-lg px-2 py-1.5",
-                                  cell.status === "in_progress" ? "bg-status-yellow-bg" : "bg-status-red-bg"
+                                  "flex min-h-11 flex-col items-center justify-center gap-0.5 border-l-2 pl-1.5",
+                                  cell.status === "in_progress" ? "border-status-yellow" : "border-status-red"
                                 )}
                               >
                                 <p className={clsx("tabular text-sm font-bold", cell.status === "in_progress" ? "text-status-yellow" : "text-status-red")}>
@@ -269,9 +343,9 @@ export default function Tablo() {
                                     type="button"
                                     onClick={() => completeStage(row)}
                                     disabled={completingId === row.order_id}
-                                    className="focus-ring mt-1 min-h-7 rounded-md border border-status-yellow/25 bg-white/70 px-2 text-[10px] font-semibold text-status-yellow transition-colors hover:bg-white disabled:pointer-events-none disabled:opacity-50"
+                                    className="focus-ring mt-0.5 min-h-6.5 rounded border border-status-yellow/30 px-1.5 py-0.5 text-[10px] leading-tight font-semibold text-status-yellow transition-colors hover:bg-status-yellow-bg disabled:pointer-events-none disabled:opacity-50"
                                   >
-                                    {completingId === row.order_id ? "Yakunlanmoqda..." : "Bosqichni yakunlash"}
+                                    {completingId === row.order_id ? "Yakunlanmoqda..." : "Yakunlash"}
                                   </button>
                                 )}
                               </div>

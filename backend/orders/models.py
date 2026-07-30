@@ -39,7 +39,6 @@ class Order(models.Model):
         COMPLETED = "completed", "Bajarilgan"
 
     class Priority(models.TextChoices):
-        LOW = "low", "Past"
         NORMAL = "normal", "Oddiy"
         HIGH = "high", "Yuqori"
         URGENT = "urgent", "Shoshilinch"

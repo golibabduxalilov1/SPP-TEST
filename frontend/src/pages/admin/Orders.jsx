@@ -34,8 +34,8 @@ function parseStatusFilter(value) {
   return {};
 }
 
-const PRIORITY_LABELS = { low: "Past", normal: "Oddiy", high: "Yuqori", urgent: "Shoshilinch" };
-const PRIORITY_TONES = { low: "gray", normal: "blue", high: "orange", urgent: "red" };
+const PRIORITY_LABELS = { normal: "Oddiy", high: "Yuqori", urgent: "Shoshilinch" };
+const PRIORITY_TONES = { normal: "gray", high: "orange", urgent: "red" };
 
 export default function Orders() {
   const [orders, setOrders] = useState([]);
@@ -140,7 +140,7 @@ export default function Orders() {
             <Table>
               <Thead>
                 <tr>
-                  <Th>Buyurtma</Th>
+                  <Th>Mahsulot turi</Th>
                   <Th>Mijoz</Th>
                   <Th>Muddat</Th>
                   <Th>Prioritet</Th>
@@ -155,8 +155,12 @@ export default function Orders() {
                 {orders.map((o) => (
                   <Tr key={o.id}>
                     <Td>
-                      <p className="font-semibold">#{o.order_no}</p>
-                      <p className="text-xs text-(--ink-faint)">{o.product_name}</p>
+                      <p
+                        className="max-w-50 truncate font-semibold"
+                        title={o.product_type_name || o.product_name || "Mahsulot ko'rsatilmagan"}
+                      >
+                        {o.product_type_name || o.product_name || "Mahsulot ko'rsatilmagan"}
+                      </p>
                     </Td>
                     <Td>{o.customer_name || "—"}</Td>
                     <Td>{o.deadline ? format(new Date(o.deadline), "dd.MM.yyyy") : "—"}</Td>

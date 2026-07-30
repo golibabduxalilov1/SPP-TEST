@@ -3,7 +3,7 @@ import { NavLink, Outlet, useNavigate, useLocation } from "react-router-dom";
 import {
   LayoutDashboard, ClipboardList, Table2, Factory, Users, AlertTriangle,
   Warehouse, BarChart3, LogOut, Tags, Hexagon, Menu, X, BookOpen,
-  ChevronDown, Wrench, ListTree,
+  ChevronDown, Wrench,
 } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useAuthStore } from "../store/authStore";
@@ -25,7 +25,6 @@ const NAV = [
     icon: BookOpen,
     children: [
       { to: "/references", tab: "product-types", isDefaultTab: true, label: "Mahsulot turlari", icon: Tags, roles: ["super_admin", "admin"] },
-      { to: "/references", tab: "production-stages", label: "Ishlab chiqarish bosqichlari", icon: ListTree, roles: ["super_admin", "admin"] },
       { to: "/machines", tab: "tsexes", isDefaultTab: true, label: "Tsexlar", icon: Factory },
       { to: "/machines", tab: "machines", label: "Stanoklar", icon: Wrench },
     ],
