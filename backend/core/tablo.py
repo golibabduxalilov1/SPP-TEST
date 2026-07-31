@@ -74,39 +74,59 @@ def _detail_totals(order, operation=None):
     return _sum_contributions(items, part_contribution, operation)
 
 
-def _package_count(order):
-    """"Existing packages" for a package-measured stage (e.g. Tayyor ombor).
-    A Package isn't tied to individual OrderDetails/Parts the way area/edge/
-    quantity are, so this is order-level rather than a per-detail sum —
-    normally 0 until the order's QADOQLASH stage finishes and
-    packaging.services.sync_order_into_warehouse creates its Package, then 1.
-    Reads `.packages.all()` (not `.count()`) so it can be answered from the
-    `packages` prefetch in build_production_table instead of a query per row."""
-    return Decimal(len(order.packages.all()))
+# A Package isn't tied to individual OrderDetails/Parts the way area/edge/
+# quantity are — packaging.services.sync_order_into_warehouse creates
+# exactly one Package for the whole order once QADOQLASH finishes, so a
+# package-measured stage's "total" is always this one unit, not a per-detail
+# sum. Only a successful QR scan (via PartRoute/OrderStageProgress status,
+# never raw Package existence) can flip it from 0/1 to 1/0.
+PACKAGE_TOTAL = Decimal("1")
 
 
-def _stage_value(totals, operation, mode, status):
-    quantity, area, edge, package_count = totals
-    if mode == "foiz":
-        return 100 if status == "completed" else 0
-    if mode == "soni":
-        return quantity
-    # mode == "hajm": which figure represents this stage's output is decided
-    # purely by the stage's own measure_unit, never by its code or name, so
-    # a user-created stage behaves correctly with no code changes.
-    value = _stage_value_for_unit(
-        operation.measure_unit, quantity=quantity, area=area, edge=edge, package_count=package_count,
-    )
-    if operation.measure_unit in ("m2", "meter"):
+def _round_if_needed(value, measure_unit):
+    if measure_unit in ("m2", "meter"):
         return round(float(value), 2)
     return value
+
+
+def _measure(operation, quantity, area, edge):
+    return _stage_value_for_unit(
+        operation.measure_unit, quantity=quantity, area=area, edge=edge, package_count=PACKAGE_TOTAL,
+    )
+
+
+def _stage_progress(operation, mode, status, order_totals, remaining_totals):
+    """"Bajarilgan/Qolgan" (completed/remaining) figures for one cell, driven
+    purely by the stage's status: a not-yet-reached stage is 0/total, a
+    finished one is always total/0 (never regresses to the running total
+    even if per-route bookkeeping is coarser than per-detail, e.g. legacy
+    Parts or the order-level Package), and an in-progress stage shrinks
+    `remaining` as individual details/parts get scanned at it."""
+    quantity, area, edge = order_totals
+    unit = operation.measure_unit if mode == "hajm" else "piece"
+
+    total = quantity if mode == "soni" else _measure(operation, quantity, area, edge)
+
+    if status == "completed":
+        remaining = Decimal("0")
+    elif status == "pending":
+        remaining = total
+    else:  # in_progress
+        r_quantity, r_area, r_edge = remaining_totals
+        remaining = r_quantity if mode == "soni" else _measure(operation, r_quantity, r_area, r_edge)
+
+    completed = total - remaining
+    return {
+        "completed": _round_if_needed(completed, unit),
+        "remaining": _round_if_needed(remaining, unit),
+        "total": _round_if_needed(total, unit),
+    }
 
 
 def _cells(order, operations):
     progress_by_stage = {item.stage_id: item.status for item in order.stage_progress.all()}
     workflow_started = order.stage_status != Order.StageStatus.NOT_STARTED or bool(progress_by_stage)
     totals = _detail_totals(order)
-    package_count = _package_count(order)
     cells = {}
 
     has_parts = order.parts.exists()
@@ -130,16 +150,15 @@ def _cells(order, operations):
         else:
             status = "not_required"
 
-        if status == "in_progress":
-            # Shrink as individual details/parts get scanned at this stage,
-            # instead of showing the static whole-order total the whole time.
-            cell_totals = _detail_totals(order, operation)
-        else:
-            cell_totals = totals
+        # Only needed for the in-progress branch of _stage_progress — shrinks
+        # as individual details/parts get scanned at this stage, instead of
+        # showing the static whole-order total the whole time.
+        remaining_totals = _detail_totals(order, operation) if status == "in_progress" else None
 
         cells[operation.code] = {
             "status": status,
-            "value": None if status == "not_required" else (*cell_totals, package_count),
+            "_totals": totals,
+            "_remaining_totals": remaining_totals,
         }
     return cells
 
@@ -152,7 +171,7 @@ def build_production_table(mode="hajm"):
     orders = (
         Order.objects.filter(status__in=TABLO_STATUSES)
         .select_related("current_stage")
-        .prefetch_related("details__part__routes", "parts__routes", "stage_progress", "packages")
+        .prefetch_related("details__part__routes", "parts__routes", "stage_progress")
         .order_by("priority", "deadline", "id")
     )
 
@@ -161,8 +180,20 @@ def build_production_table(mode="hajm"):
         cells = _cells(order, operations)
         for operation in operations:
             cell = cells[operation.code]
-            if cell["value"] is not None:
-                cell["value"] = _stage_value(cell["value"], operation, mode, cell["status"])
+            totals = cell.pop("_totals")
+            remaining_totals = cell.pop("_remaining_totals")
+
+            if cell["status"] == "not_required":
+                if mode == "foiz":
+                    cell["value"] = None
+                else:
+                    cell["completed"] = cell["remaining"] = cell["total"] = None
+                continue
+
+            if mode == "foiz":
+                cell["value"] = 100 if cell["status"] == "completed" else 0
+            else:
+                cell.update(_stage_progress(operation, mode, cell["status"], totals, remaining_totals))
 
         rows.append({
             "index": index,

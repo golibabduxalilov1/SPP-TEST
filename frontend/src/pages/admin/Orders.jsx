@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Check, Download, ExternalLink, FileSpreadsheet, FileText, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { Check, Download, ExternalLink, FileSpreadsheet, FileText, Pencil, Plus, Search, Trash2, Upload } from "lucide-react";
 import toast from "react-hot-toast";
 import { adminApi } from "../../api/client";
 import { useAuthStore } from "../../store/authStore";
@@ -13,6 +13,7 @@ import { PageLoader } from "../../components/ui/Misc";
 import Badge from "../../components/ui/Badge";
 import Modal from "../../components/ui/Modal";
 import EditOrderModal from "../../components/admin/EditOrderModal";
+import GibLabImportModal from "../../components/admin/GibLabImportModal";
 import { format } from "date-fns";
 import { useTutorial } from "../../tutorial/TutorialContext";
 import { ordersSteps } from "../../tutorial/content/orders";
@@ -44,6 +45,7 @@ export default function Orders() {
   const [statusFilter, setStatusFilter] = useState("");
   const [operations, setOperations] = useState([]);
   const [exportOpen, setExportOpen] = useState(false);
+  const [giblabImportOpen, setGiblabImportOpen] = useState(false);
   const [deletingOrder, setDeletingOrder] = useState(null);
   const [editingOrder, setEditingOrder] = useState(null);
   const [approvingId, setApprovingId] = useState(null);
@@ -99,6 +101,11 @@ export default function Orders() {
             <Button data-tutorial="orders-import-button" variant="secondary" onClick={() => setExportOpen(true)}>
               <Download size={16} /> Yuklab olish
             </Button>
+            {hasRole("admin", "director", "manager") && (
+              <Button variant="secondary" onClick={() => setGiblabImportOpen(true)}>
+                <Upload size={16} /> GibLab import
+              </Button>
+            )}
             <Button data-tutorial="orders-new-button" onClick={() => navigate("/orders/new")}>
               <Plus size={16} /> Yangi buyurtma
             </Button>
@@ -240,6 +247,7 @@ export default function Orders() {
       </Card>
 
       <ExportModal open={exportOpen} onClose={() => setExportOpen(false)} search={search} statusFilter={statusFilter} />
+      <GibLabImportModal open={giblabImportOpen} onClose={() => setGiblabImportOpen(false)} onImported={load} />
       <DeleteOrderModal order={deletingOrder} onClose={() => setDeletingOrder(null)} onDeleted={load} />
       <EditOrderModal
         open={Boolean(editingOrder)}

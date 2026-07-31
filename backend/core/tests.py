@@ -86,7 +86,9 @@ class ProductionTableRemainingQuantityTests(TestCase):
         # tokcha edge = (1000+850)*2*1/1000 = 3.7, total 7.7m
         row = self._row_for(order.id)
         self.assertEqual(row["cells"]["ARRA"]["status"], "in_progress")
-        self.assertEqual(row["cells"]["ARRA"]["value"], 7.7)
+        self.assertEqual(row["cells"]["ARRA"]["completed"], 0.0)
+        self.assertEqual(row["cells"]["ARRA"]["remaining"], 7.7)
+        self.assertEqual(row["cells"]["ARRA"]["total"], 7.7)
 
         result = process_scan(
             client_scan_id="scan-fasad", qr_token=fasad.part.qr_token, operation_code="ARRA",
@@ -96,7 +98,9 @@ class ProductionTableRemainingQuantityTests(TestCase):
 
         row = self._row_for(order.id)
         self.assertEqual(row["cells"]["ARRA"]["status"], "in_progress", "order must not advance yet — tokcha unscanned")
-        self.assertEqual(row["cells"]["ARRA"]["value"], 3.7, "fasad's 4.0m share must be subtracted")
+        self.assertEqual(row["cells"]["ARRA"]["completed"], 4.0, "fasad's 4.0m share must count as completed")
+        self.assertEqual(row["cells"]["ARRA"]["remaining"], 3.7, "only tokcha's 3.7m share remains")
+        self.assertEqual(row["cells"]["ARRA"]["total"], 7.7)
 
         result = process_scan(
             client_scan_id="scan-tokcha", qr_token=tokcha.part.qr_token, operation_code="ARRA",
@@ -106,13 +110,17 @@ class ProductionTableRemainingQuantityTests(TestCase):
 
         row = self._row_for(order.id)
         self.assertEqual(row["cells"]["ARRA"]["status"], "completed", "last detail scanned — stage must auto-advance")
-        self.assertEqual(row["cells"]["ARRA"]["value"], 7.7, "completed cell must show the full original total")
+        self.assertEqual(row["cells"]["ARRA"]["completed"], 7.7, "completed cell must show the full original total")
+        self.assertEqual(row["cells"]["ARRA"]["remaining"], 0.0, "a finished stage must show total/0, never regress")
+        self.assertEqual(row["cells"]["ARRA"]["total"], 7.7)
         # The next standard stage after ARRA (order_index 1) is ARRA_AVTOMAT
         # (order_index 2), not KROMKA (order_index 3) — the board advances to
         # the immediate next active stage in the route, one at a time.
         self.assertEqual(row["cells"]["ARRA_AVTOMAT"]["status"], "in_progress")
         # ARRA_AVTOMAT is also meter-measured: (1000+1000)*2*1/1000 + (1000+850)*2*1/1000 = 4.0 + 3.7 = 7.7m
-        self.assertEqual(row["cells"]["ARRA_AVTOMAT"]["value"], 7.7, "meter-measured stage must show edge length, not area")
+        self.assertEqual(row["cells"]["ARRA_AVTOMAT"]["completed"], 0.0)
+        self.assertEqual(row["cells"]["ARRA_AVTOMAT"]["remaining"], 7.7, "meter-measured stage must show edge length, not area")
+        self.assertEqual(row["cells"]["ARRA_AVTOMAT"]["total"], 7.7)
 
 
 class ProductionTableModeTests(TestCase):
@@ -148,12 +156,13 @@ class ProductionTableModeTests(TestCase):
             self.assertIn(code, route_codes, f"this test needs {code} in the default route to be meaningful")
 
         row = self._row("hajm")
-        # ARRA is meter-measured (standard spec): edge = (1000+500)*2*4/1000 = 12.0m
-        self.assertEqual(row["cells"]["ARRA"]["value"], 12.0, "meter-measured stage must show edge length")
-        self.assertEqual(row["cells"]["KROMKA"]["value"], 12.0, "meter-measured stage must show edge length")
-        self.assertEqual(row["cells"]["PRISADKA"]["value"], 4, "piece-measured stage must show quantity")
-        # QADOQLASH (package-measured): order hasn't reached it yet, so 0 real packages exist.
-        self.assertEqual(row["cells"]["QADOQLASH"]["value"], 0, "package-measured stage must show existing package count, not area")
+        # ARRA is meter-measured (standard spec): edge = (1000+500)*2*4/1000 = 12.0m.
+        # Nothing scanned yet, so every stage is 0 completed / total remaining.
+        self.assertEqual((row["cells"]["ARRA"]["completed"], row["cells"]["ARRA"]["remaining"], row["cells"]["ARRA"]["total"]), (0.0, 12.0, 12.0), "meter-measured stage must show edge length")
+        self.assertEqual((row["cells"]["KROMKA"]["completed"], row["cells"]["KROMKA"]["remaining"], row["cells"]["KROMKA"]["total"]), (0.0, 12.0, 12.0), "meter-measured stage must show edge length")
+        self.assertEqual((row["cells"]["PRISADKA"]["completed"], row["cells"]["PRISADKA"]["remaining"], row["cells"]["PRISADKA"]["total"]), (0, 4, 4), "piece-measured stage must show quantity")
+        # QADOQLASH (package-measured): order hasn't reached it yet, so 0/1 package.
+        self.assertEqual((row["cells"]["QADOQLASH"]["completed"], row["cells"]["QADOQLASH"]["remaining"], row["cells"]["QADOQLASH"]["total"]), (0, 1, 1), "package-measured stage must show 0/1, not an area figure")
 
     def test_hajm_mode_piece_rule_is_measure_unit_driven(self):
         # Any user-created stage measured in "piece" gets the dona-instead-
@@ -169,27 +178,30 @@ class ProductionTableModeTests(TestCase):
             PartRoute.objects.create(part=self.detail.part, operation=stage, sequence_index=99, status=PartRoute.Status.PENDING)
 
         row = self._row("hajm")
-        self.assertEqual(row["cells"]["CUSTOM_PIECE"]["value"], 4, "piece-measured stage must show quantity, not area")
-        self.assertEqual(row["cells"]["CUSTOM_AREA"]["value"], 2.0, "m2-measured stage must show area")
+        self.assertEqual((row["cells"]["CUSTOM_PIECE"]["completed"], row["cells"]["CUSTOM_PIECE"]["remaining"], row["cells"]["CUSTOM_PIECE"]["total"]), (0, 4, 4), "piece-measured stage must show quantity, not area")
+        self.assertEqual((row["cells"]["CUSTOM_AREA"]["completed"], row["cells"]["CUSTOM_AREA"]["remaining"], row["cells"]["CUSTOM_AREA"]["total"]), (0.0, 2.0, 2.0), "m2-measured stage must show area")
 
-    def test_hajm_mode_package_shows_real_package_count_once_qadoqlash_completes(self):
+    def test_hajm_mode_package_shows_total_zero_once_qadoqlash_completes(self):
         # Completing every stage through QADOQLASH triggers
         # packaging.services.sync_order_into_warehouse, which creates exactly
-        # one Package for the order — that real count, not a hidden m2/piece
-        # figure, is what a package-measured stage must show.
+        # one Package for the order — a finished package-measured stage must
+        # show 1/0 (total/0), driven by the stage's own completed status.
         self.assertEqual(Package.objects.filter(order=self.order).count(), 0)
         for _ in range(len(ROUTE_TEMPLATES[DEFAULT_ROUTE_KEY])):
             complete_current_stage(self.order.id, completed_by=self.employee)
 
         self.assertEqual(Package.objects.filter(order=self.order).count(), 1)
         row = self._row("hajm")
-        self.assertEqual(row["cells"]["QADOQLASH"]["value"], 1, "package-measured stage must show the real package count")
+        cell = row["cells"]["QADOQLASH"]
+        self.assertEqual(cell["status"], "completed")
+        self.assertEqual((cell["completed"], cell["remaining"], cell["total"]), (1, 0, 1), "package-measured stage must show total/0 once finished")
 
     def test_soni_mode_shows_quantity_everywhere(self):
         route_codes = ROUTE_TEMPLATES[DEFAULT_ROUTE_KEY]
         row = self._row("soni")
         for code in route_codes:
-            self.assertEqual(row["cells"][code]["value"], 4, f"{code} must show quantity in Soni mode")
+            cell = row["cells"][code]
+            self.assertEqual((cell["completed"], cell["remaining"], cell["total"]), (0, 4, 4), f"{code} must show 0/4 quantity in Soni mode")
 
     def test_foiz_mode_status_logic_is_unchanged(self):
         row = self._row("foiz")
@@ -212,7 +224,7 @@ class ProductionTableModeTests(TestCase):
         # ARRA is meter-measured: fasad edge = (1000+500)*2*4/1000 = 12.0,
         # tokcha edge = (800+400)*2*2/1000 = 4.8, whole-order total = 16.8m
         row = self._row("hajm")
-        self.assertEqual(row["cells"]["ARRA"]["value"], 16.8)
+        self.assertEqual((row["cells"]["ARRA"]["completed"], row["cells"]["ARRA"]["remaining"], row["cells"]["ARRA"]["total"]), (0.0, 16.8, 16.8))
 
         process_scan(
             client_scan_id="scan-hajm-fasad", qr_token=self.detail.part.qr_token, operation_code="ARRA",
@@ -221,10 +233,12 @@ class ProductionTableModeTests(TestCase):
 
         row = self._row("hajm")
         self.assertEqual(row["cells"]["ARRA"]["status"], "in_progress")
+        self.assertEqual(row["cells"]["ARRA"]["completed"], 12.0, "fasad's 12.0m share already scanned at ARRA must count as completed")
         self.assertEqual(
-            row["cells"]["ARRA"]["value"], 4.8,
+            row["cells"]["ARRA"]["remaining"], 4.8,
             "fasad's 12.0m share already scanned at ARRA must drop out of the remaining total",
         )
+        self.assertEqual(row["cells"]["ARRA"]["total"], 16.8)
 
 
 class ProductionTableProductQuantityTests(TestCase):
@@ -247,11 +261,188 @@ class ProductionTableProductQuantityTests(TestCase):
     def test_soni_mode_multiplies_detail_quantity_by_product_quantity_once(self):
         row = self._row("soni")
         for code in ROUTE_TEMPLATES[DEFAULT_ROUTE_KEY]:
-            self.assertEqual(row["cells"][code]["value"], 12, f"{code} must show 4 x 3 = 12, not 4")
+            cell = row["cells"][code]
+            self.assertEqual((cell["completed"], cell["remaining"], cell["total"]), (0, 12, 12), f"{code} must show 0/12 (4 x 3), not 0/4")
 
     def test_part_quantity_already_matches_detail_times_product_quantity(self):
         self.detail.refresh_from_db()
         self.assertEqual(self.detail.part.quantity, 12)
+
+
+class ProductionTableCompletedRemainingFormatTests(TestCase):
+    """"Bajarilgan/Qolgan" (completed/remaining) cell format: 0/total before
+    any scan, a partial split once some — but not all — details are scanned,
+    and total/0 (never regressing to the running total) once the stage is
+    fully done. Covered across Hajm's per-unit figures (m2/meter/piece) and
+    Soni's always-dona figure, and verifying only a successful QR scan moves
+    the needle."""
+
+    def setUp(self):
+        _ensure_stage_operations_seeded()
+        self.employee = User.objects.create_user(
+            username="tablo-format-scanner", phone="+998901113603", password="secret-pass", role=Role.OPERATOR,
+        )
+        self.order = Order.objects.create(product_name="Tablo format test")
+        # 3 + 7 = 10 pieces total, split across two details so scanning just
+        # one of them lands on an exact 3/7 split.
+        self.small = OrderDetail.objects.create(order=self.order, name="Kichik", quantity=3, length_mm=1000, width_mm=500)
+        create_part_for_order_detail(self.small)
+        self.big = OrderDetail.objects.create(order=self.order, name="Katta", quantity=7, length_mm=1000, width_mm=500)
+        create_part_for_order_detail(self.big)
+        approve_order(self.order.id)
+
+    def _row(self, mode="hajm"):
+        result = build_production_table(mode=mode)
+        return next(item for item in result["rows"] if item["order_id"] == self.order.id)
+
+    def _advance_through(self, codes):
+        for code in codes:
+            row = self._row()
+            self.assertEqual(row["current_stage"], code, f"expected {code} to be the current stage")
+            complete_current_stage(self.order.id, completed_by=self.employee)
+
+    def test_soni_mode_0_of_10_before_any_scan(self):
+        cell = self._row("soni")["cells"]["ARRA"]
+        self.assertEqual(cell["status"], "in_progress")
+        self.assertEqual((cell["completed"], cell["remaining"], cell["total"]), (0, 10, 10))
+
+    def test_soni_mode_3_of_10_after_partial_scan(self):
+        process_scan(
+            client_scan_id="fmt-soni-small", qr_token=self.small.part.qr_token, operation_code="ARRA",
+            employee=self.employee, device_id="dev-1",
+        )
+        cell = self._row("soni")["cells"]["ARRA"]
+        self.assertEqual(cell["status"], "in_progress")
+        self.assertEqual((cell["completed"], cell["remaining"], cell["total"]), (3, 7, 10))
+
+    def test_soni_mode_10_of_10_once_stage_completed(self):
+        process_scan(
+            client_scan_id="fmt-soni-small-full", qr_token=self.small.part.qr_token, operation_code="ARRA",
+            employee=self.employee, device_id="dev-1",
+        )
+        process_scan(
+            client_scan_id="fmt-soni-big-full", qr_token=self.big.part.qr_token, operation_code="ARRA",
+            employee=self.employee, device_id="dev-1",
+        )
+        cell = self._row("soni")["cells"]["ARRA"]
+        self.assertEqual(cell["status"], "completed")
+        self.assertEqual((cell["completed"], cell["remaining"], cell["total"]), (10, 0, 10), "finished stage must show total/0, not regress")
+
+    def test_hajm_mode_meter_unit_0_3_10_split(self):
+        # ARRA is meter-measured: small edge = (1000+500)*2*3/1000 = 9.0,
+        # big edge = (1000+500)*2*7/1000 = 21.0, total 30.0m
+        cell = self._row("hajm")["cells"]["ARRA"]
+        self.assertEqual((cell["completed"], cell["remaining"], cell["total"]), (0.0, 30.0, 30.0))
+
+        process_scan(
+            client_scan_id="fmt-hajm-meter-small", qr_token=self.small.part.qr_token, operation_code="ARRA",
+            employee=self.employee, device_id="dev-1",
+        )
+        cell = self._row("hajm")["cells"]["ARRA"]
+        self.assertEqual(cell["status"], "in_progress")
+        self.assertEqual((cell["completed"], cell["remaining"], cell["total"]), (9.0, 21.0, 30.0))
+
+        process_scan(
+            client_scan_id="fmt-hajm-meter-big", qr_token=self.big.part.qr_token, operation_code="ARRA",
+            employee=self.employee, device_id="dev-1",
+        )
+        cell = self._row("hajm")["cells"]["ARRA"]
+        self.assertEqual(cell["status"], "completed")
+        self.assertEqual((cell["completed"], cell["remaining"], cell["total"]), (30.0, 0.0, 30.0))
+
+    def test_hajm_mode_m2_unit_0_split_and_completed_split(self):
+        self._advance_through(["ARRA", "ARRA_AVTOMAT", "KROMKA", "OVAL_KROMKA", "PRISADKA"])
+
+        row = self._row("hajm")
+        self.assertEqual(row["current_stage"], "NAQSH_ROVER")
+        # small area = 1000*500*3/1e6 = 1.5, big area = 1000*500*7/1e6 = 3.5, total 5.0m2
+        cell = row["cells"]["NAQSH_ROVER"]
+        self.assertEqual((cell["completed"], cell["remaining"], cell["total"]), (0.0, 5.0, 5.0))
+
+        process_scan(
+            client_scan_id="fmt-hajm-m2-small", qr_token=self.small.part.qr_token, operation_code="NAQSH_ROVER",
+            employee=self.employee, device_id="dev-1",
+        )
+        cell = self._row("hajm")["cells"]["NAQSH_ROVER"]
+        self.assertEqual(cell["status"], "in_progress")
+        self.assertEqual((cell["completed"], cell["remaining"], cell["total"]), (1.5, 3.5, 5.0))
+
+        process_scan(
+            client_scan_id="fmt-hajm-m2-big", qr_token=self.big.part.qr_token, operation_code="NAQSH_ROVER",
+            employee=self.employee, device_id="dev-1",
+        )
+        cell = self._row("hajm")["cells"]["NAQSH_ROVER"]
+        self.assertEqual(cell["status"], "completed")
+        self.assertEqual((cell["completed"], cell["remaining"], cell["total"]), (5.0, 0.0, 5.0))
+
+    def test_hajm_mode_piece_dona_unit_0_3_10_split(self):
+        self._advance_through(["ARRA", "ARRA_AVTOMAT", "KROMKA", "OVAL_KROMKA"])
+
+        row = self._row("hajm")
+        self.assertEqual(row["current_stage"], "PRISADKA")
+        cell = row["cells"]["PRISADKA"]
+        self.assertEqual((cell["completed"], cell["remaining"], cell["total"]), (0, 10, 10))
+
+        process_scan(
+            client_scan_id="fmt-hajm-piece-small", qr_token=self.small.part.qr_token, operation_code="PRISADKA",
+            employee=self.employee, device_id="dev-1",
+        )
+        cell = self._row("hajm")["cells"]["PRISADKA"]
+        self.assertEqual(cell["status"], "in_progress")
+        self.assertEqual((cell["completed"], cell["remaining"], cell["total"]), (3, 7, 10))
+
+    def test_pending_stage_shows_0_of_total_not_a_dash(self):
+        cell = self._row("hajm")["cells"]["QADOQLASH"]
+        self.assertEqual(cell["status"], "pending")
+        self.assertEqual((cell["completed"], cell["remaining"], cell["total"]), (0, 1, 1))
+
+    def test_not_required_stage_still_shows_a_dash(self):
+        custom_stage = Operation.objects.create(
+            code="FMT_NOT_REQUIRED", name="Yo'q bosqich", measure_unit="piece", order_index=100,
+        )
+        cell = self._row("hajm")["cells"]["FMT_NOT_REQUIRED"]
+        self.assertEqual(cell["status"], "not_required")
+        self.assertIsNone(cell["completed"])
+        self.assertIsNone(cell["remaining"])
+        self.assertIsNone(cell["total"])
+        self.assertEqual(custom_stage.measure_unit, "piece")
+
+    def test_only_a_successful_scan_moves_the_count_duplicate_scans_do_not(self):
+        process_scan(
+            client_scan_id="fmt-dup-first", qr_token=self.small.part.qr_token, operation_code="ARRA",
+            employee=self.employee, device_id="dev-1",
+        )
+        before = self._row("hajm")["cells"]["ARRA"]
+        self.assertEqual((before["completed"], before["remaining"], before["total"]), (9.0, 21.0, 30.0))
+
+        duplicate = process_scan(
+            client_scan_id="fmt-dup-second", qr_token=self.small.part.qr_token, operation_code="ARRA",
+            employee=self.employee, device_id="dev-1",
+        )
+        self.assertEqual(duplicate["status"], "conflict")
+        self.assertEqual(duplicate["error_code"], "duplicate_scan")
+
+        after = self._row("hajm")["cells"]["ARRA"]
+        self.assertEqual(
+            (after["completed"], after["remaining"], after["total"]), (9.0, 21.0, 30.0),
+            "a rejected duplicate scan must not change the count",
+        )
+
+    def test_invalid_scan_does_not_move_the_count(self):
+        before = self._row("hajm")["cells"]["ARRA"]
+        self.assertEqual((before["completed"], before["remaining"], before["total"]), (0.0, 30.0, 30.0))
+
+        invalid = process_scan(
+            client_scan_id="fmt-invalid", qr_token="not-a-real-qr-token", operation_code="ARRA",
+            employee=self.employee, device_id="dev-1",
+        )
+        self.assertEqual(invalid["status"], "conflict")
+
+        after = self._row("hajm")["cells"]["ARRA"]
+        self.assertEqual(
+            (after["completed"], after["remaining"], after["total"]), (0.0, 30.0, 30.0),
+            "a rejected/invalid scan must not change the count",
+        )
 
 
 class DashboardMetricsFromPartRouteTests(APITestCase):

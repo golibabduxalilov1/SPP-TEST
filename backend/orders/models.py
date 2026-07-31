@@ -209,6 +209,13 @@ class Part(models.Model):
     )
     drilling_count = models.PositiveIntegerField(default=0)
     qr_token = models.CharField(max_length=64, unique=True, default=generate_qr_token)
+    material_ref = models.ForeignKey(
+        "catalog.Material",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="parts",
+    )
     current_operation = models.ForeignKey(
         "manufacturing.Operation",
         on_delete=models.SET_NULL,
@@ -327,3 +334,112 @@ class Label(models.Model):
 
     class Meta:
         ordering = ["-printed_at"]
+
+
+class BOM(models.Model):
+    """Product specification/recipe — what makes up one unit of a Product.
+
+    Orthogonal to `OrderDetail`: GibLab-imported orders get Parts + a BOM
+    directly (no OrderDetail rows), keeping them on the legacy "Parts" board
+    path in core.tablo (see project plan for why mixing the two would
+    double-count quantity/area/edge).
+    """
+
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="boms")
+    version = models.PositiveIntegerField(default=1)
+    source_system = models.CharField(max_length=32, blank=True)
+    source_project_uuid = models.CharField(max_length=64, blank=True)
+    is_active = models.BooleanField(default=True)
+    metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["product", "version"]
+        unique_together = ["product", "version"]
+
+    def __str__(self):
+        return f"BOM {self.product.name} v{self.version}"
+
+
+class BOMItem(models.Model):
+    class ItemType(models.TextChoices):
+        PART = "part", "Detal"
+        MATERIAL = "material", "Material"
+        EDGE_BAND = "edge_band", "Kromka"
+
+    class EdgeSide(models.TextChoices):
+        TOP = "top", "Yuqori"
+        BOTTOM = "bottom", "Past"
+        LEFT = "left", "Chap"
+        RIGHT = "right", "O'ng"
+
+    bom = models.ForeignKey(BOM, on_delete=models.CASCADE, related_name="items")
+    item_type = models.CharField(max_length=16, choices=ItemType.choices)
+    part = models.ForeignKey(
+        Part, on_delete=models.CASCADE, related_name="bom_items", null=True, blank=True
+    )
+    material = models.ForeignKey(
+        "catalog.Material", on_delete=models.PROTECT, related_name="bom_items", null=True, blank=True
+    )
+    target_part = models.ForeignKey(
+        Part, on_delete=models.CASCADE, related_name="bom_edge_items", null=True, blank=True,
+        help_text="For EDGE_BAND rows: which part this edge belongs to.",
+    )
+    quantity = models.DecimalField(max_digits=12, decimal_places=3, default=0)
+    unit = models.CharField(max_length=16, blank=True)
+    edge_side = models.CharField(max_length=16, choices=EdgeSide.choices, null=True, blank=True)
+    source_external_id = models.CharField(max_length=64, blank=True)
+    sequence_index = models.PositiveIntegerField(default=0)
+    metadata = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        ordering = ["bom", "sequence_index", "id"]
+        indexes = [models.Index(fields=["bom", "item_type"])]
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    models.Q(item_type="edge_band", edge_side__isnull=False)
+                    | (~models.Q(item_type="edge_band") & models.Q(edge_side__isnull=True))
+                ),
+                name="bomitem_edge_side_iff_edge_band",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.bom} #{self.sequence_index} ({self.item_type})"
+
+
+class GibLabImportBatch(models.Model):
+    """Import history/idempotency record for GibLab `.project` file imports."""
+
+    class Status(models.TextChoices):
+        UPLOADED = "uploaded", "Yuklandi"
+        VALIDATED = "validated", "Tekshirildi"
+        IMPORTING = "importing", "Import qilinmoqda"
+        COMPLETED = "completed", "Yakunlandi"
+        FAILED = "failed", "Xatolik"
+
+    source_system = models.CharField(max_length=32, default="giblab")
+    original_filename = models.CharField(max_length=255, blank=True)
+    file_checksum = models.CharField(max_length=64, unique=True)
+    project_uuid = models.CharField(max_length=64, blank=True)
+    file_version = models.CharField(max_length=32, blank=True)
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.UPLOADED)
+    order = models.ForeignKey(
+        Order, on_delete=models.SET_NULL, null=True, blank=True, related_name="giblab_import_batches"
+    )
+    statistics = models.JSONField(default=dict, blank=True)
+    errors = models.JSONField(default=list, blank=True)
+    warnings = models.JSONField(default=list, blank=True)
+    imported_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"GibLabImportBatch #{self.pk} ({self.status})"

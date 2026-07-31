@@ -1,7 +1,7 @@
 from django.http import FileResponse
 from django.db import transaction
 from django.db.models import OuterRef, Q, Subquery
-from rest_framework import status, viewsets
+from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
 from rest_framework.parsers import MultiPartParser
@@ -12,15 +12,29 @@ from rest_framework.views import APIView
 from accounts.permissions import IsManagementRole, IsSuperAdmin
 from core.audit import log_action, push_live_log
 from .export import render_orders_excel, render_orders_pdf
+from .giblab import service as giblab_service
+from .giblab.exceptions import GibLabImportError, GibLabValidationFailed
 from .labels import render_labels_pdf
-from .models import Label, Order, OrderDetail, OrderStageProgress, Part
+from .models import GibLabImportBatch, Label, Order, OrderDetail, OrderStageProgress, Part
 from .production_workflow import (
     ProductionWorkflowError, approve_order, complete_current_stage, start_production_workflow,
 )
 from .serializers import (
-    LabelSerializer, OrderDetailItemSerializer, OrderDetailSerializer, OrderListSerializer, PartSerializer,
+    GibLabImportBatchSerializer, LabelSerializer, OrderDetailItemSerializer, OrderDetailSerializer,
+    OrderListSerializer, PartSerializer,
 )
 from .services import import_parts_from_file
+
+
+_CONFLICT_ERROR_CODES = {"DUPLICATE_IMPORT", "IMPORT_CONFLICT"}
+
+
+def _status_for_giblab_error(code):
+    if code in _CONFLICT_ERROR_CODES:
+        return status.HTTP_409_CONFLICT
+    if code == "FILE_TOO_LARGE":
+        return status.HTTP_413_REQUEST_ENTITY_TOO_LARGE
+    return status.HTTP_400_BAD_REQUEST
 
 
 _latest_completed_stage = OrderStageProgress.objects.filter(
@@ -192,6 +206,45 @@ class OrderDetailItemViewSet(viewsets.ModelViewSet):
         instance.delete()
         if part:
             part.delete()
+
+
+class GibLabImportViewSet(mixins.RetrieveModelMixin, viewsets.GenericViewSet):
+    """GibLab `.project` importer -- a separate pipeline from the existing
+    CSV/XLSX `OrderViewSet.import_file` action, per spec (that endpoint is
+    untouched)."""
+
+    queryset = GibLabImportBatch.objects.select_related("order").all()
+    serializer_class = GibLabImportBatchSerializer
+    permission_classes = [IsAuthenticated, IsManagementRole]
+
+    @action(detail=False, methods=["post"], parser_classes=[MultiPartParser])
+    def validate(self, request):
+        uploaded = request.FILES.get("file")
+        if not uploaded:
+            return Response({"detail": "Fayl topilmadi"}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            result = giblab_service.validate_project_file(uploaded, request.user)
+        except GibLabImportError as exc:
+            log_action(request.user, "giblab.validate", details={"error": exc.to_dict()})
+            return Response(exc.to_dict(), status=_status_for_giblab_error(exc.code))
+        log_action(
+            request.user, "giblab.validate",
+            details={"is_valid": result["is_valid"], "statistics": result["statistics"]},
+        )
+        return Response(result)
+
+    @action(detail=False, methods=["post"], url_path="import", parser_classes=[MultiPartParser])
+    def import_project(self, request):
+        uploaded = request.FILES.get("file")
+        if not uploaded:
+            return Response({"detail": "Fayl topilmadi"}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            result = giblab_service.import_project_file(uploaded, request.user)
+        except GibLabValidationFailed as exc:
+            return Response({"success": False, "errors": exc.errors, "warnings": exc.warnings}, status=status.HTTP_400_BAD_REQUEST)
+        except GibLabImportError as exc:
+            return Response(exc.to_dict(), status=_status_for_giblab_error(exc.code))
+        return Response(result)
 
 
 class LabelPreviewView(APIView):

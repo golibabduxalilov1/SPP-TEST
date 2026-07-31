@@ -120,7 +120,8 @@ class OrderApiTests(APITestCase):
         table_response = self.client.get("/api/production/table", {"mode": "soni"})
         row = next(item for item in table_response.data["rows"] if item["order_id"] == order.id)
         self.assertTrue(all(cell["status"] == "completed" for cell in row["cells"].values()))
-        self.assertTrue(all(cell["value"] == 4 for cell in row["cells"].values()))
+        self.assertTrue(all(cell["completed"] == 4 for cell in row["cells"].values()))
+        self.assertTrue(all(cell["remaining"] == 0 for cell in row["cells"].values()))
 
     def test_only_approved_workflow_orders_are_shown_and_totals_use_order_details(self):
         order = Order.objects.create(product_name="Board quantity test", created_by=self.user)
@@ -136,7 +137,8 @@ class OrderApiTests(APITestCase):
         statuses = [row["cells"][operation["code"]]["status"] for operation in active_table["operations"]]
         self.assertEqual(statuses[0], "in_progress")
         self.assertTrue(all(status == "pending" for status in statuses[1:]))
-        self.assertTrue(all(cell["value"] == 7 for cell in row["cells"].values()))
+        self.assertTrue(all(cell["completed"] == 0 for cell in row["cells"].values()))
+        self.assertTrue(all(cell["remaining"] == 7 for cell in row["cells"].values()))
 
     def test_status_patch_to_approved_also_starts_workflow(self):
         order = Order.objects.create(product_name="Patched approval", created_by=self.user)

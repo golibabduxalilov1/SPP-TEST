@@ -42,7 +42,7 @@ function PriorityMark({ priority }) {
 
 // Fixed pixel widths for the sticky/frozen columns and each process column —
 // COL_LEFT offsets are derived from COL_W so sticky `left` values always match.
-const COL_W = { index: 48, product: 200, deadline: 120, op: 112 };
+const COL_W = { index: 48, product: 200, deadline: 120, op: 140 };
 const COL_LEFT = { product: COL_W.index, deadline: COL_W.index + COL_W.product };
 
 const MODES = [
@@ -69,11 +69,14 @@ function displayUnit(op, mode) {
   return op.unit_label;
 }
 
+// Every non-Foiz cell is shown as "Bajarilgan/Qolgan" (completed/remaining),
+// e.g. "3/7 dona" or "4.5/8.5 m²" — mirrors backend/core/tablo.py::_stage_progress.
 function formatCell(cell, op, mode) {
-  if (cell.status === "not_required" || cell.value === null) return "—";
+  if (cell.status === "not_required") return "—";
   if (mode === "foiz") return `${cell.value}%`;
   const unit = displayUnit(op, mode);
-  return unit ? `${cell.value} ${unit}` : `${cell.value}`;
+  const fraction = `${cell.completed}/${cell.remaining}`;
+  return unit ? `${fraction} ${unit}` : fraction;
 }
 
 // Client-side aggregation over the already-fetched table — no extra backend call.
@@ -81,16 +84,22 @@ function computeTotals(data, mode) {
   if (!data) return {};
   const totals = {};
   for (const op of data.operations) {
-    const values = data.rows
-      .map((r) => r.cells[op.code])
-      .filter((c) => c && c.status !== "not_required" && c.value !== null)
-      .map((c) => c.value);
-    if (values.length === 0) {
+    const cells = data.rows.map((r) => r.cells[op.code]).filter((c) => c && c.status !== "not_required");
+    if (cells.length === 0) {
       totals[op.code] = null;
       continue;
     }
-    const sum = values.reduce((a, b) => a + b, 0);
-    totals[op.code] = mode === "foiz" ? Math.round(sum / values.length) : Math.round(sum * 100) / 100;
+    if (mode === "foiz") {
+      const sum = cells.reduce((acc, c) => acc + c.value, 0);
+      totals[op.code] = { value: Math.round(sum / cells.length) };
+    } else {
+      const completed = cells.reduce((acc, c) => acc + c.completed, 0);
+      const remaining = cells.reduce((acc, c) => acc + c.remaining, 0);
+      totals[op.code] = {
+        completed: Math.round(completed * 100) / 100,
+        remaining: Math.round(remaining * 100) / 100,
+      };
+    }
   }
   return totals;
 }
@@ -272,8 +281,12 @@ export default function Tablo() {
                     />
                     {data.operations.map((op) => (
                       <td key={op.code} className="border-r border-b border-(--border-subtle) px-2 py-2 text-center last:border-r-0">
-                        <p className="tabular text-sm font-bold text-(--accent-strong)">
-                          {totals[op.code] === null ? "—" : totals[op.code]}
+                        <p className="tabular text-sm font-bold whitespace-nowrap text-(--accent-strong)">
+                          {totals[op.code] === null
+                            ? "—"
+                            : mode === "foiz"
+                            ? `${totals[op.code].value}%`
+                            : `${totals[op.code].completed}/${totals[op.code].remaining}`}
                         </p>
                         {totals[op.code] !== null && displayUnit(op, mode) && (
                           <p className="text-[10px] font-medium text-(--ink-faint)">{displayUnit(op, mode)}</p>
@@ -314,16 +327,21 @@ export default function Tablo() {
                           <td key={op.code} className="border-r border-b border-(--border-subtle) px-1.5 py-1.5 text-center align-middle last:border-r-0">
                             {cell.status === "completed" ? (
                               <div className="flex min-h-11 flex-col items-center justify-center gap-0.5 border-l-2 border-status-green pl-1.5">
-                                <p className="tabular flex items-center gap-1 text-sm font-bold text-status-green">
+                                <p className="tabular flex items-center gap-1 text-sm font-bold whitespace-nowrap text-status-green">
                                   <CheckCircle2 size={13} className="shrink-0" />
                                   {formatCell(cell, op, mode)}
                                 </p>
                                 <p className="text-[10px] font-medium text-status-green/75">{STATUS_LABEL.completed}</p>
                               </div>
-                            ) : cell.status === "not_required" || cell.status === "pending" ? (
+                            ) : cell.status === "not_required" ? (
                               <div className="flex min-h-11 flex-col items-center justify-center text-(--ink-faint)">
                                 <span className="text-sm">—</span>
-                                {cell.status === "pending" && <span className="text-[10px] font-medium">{STATUS_LABEL.pending}</span>}
+                              </div>
+                            ) : cell.status === "pending" ? (
+                              <div className="flex min-h-11 flex-col items-center justify-center gap-0.5 text-(--ink-faint)">
+                                {/* Foiz keeps its original dash-only pending display; only Hajm/Soni show 0/total. */}
+                                <p className="tabular text-sm font-semibold whitespace-nowrap">{mode === "foiz" ? "—" : formatCell(cell, op, mode)}</p>
+                                <span className="text-[10px] font-medium">{STATUS_LABEL.pending}</span>
                               </div>
                             ) : (
                               <div
@@ -332,7 +350,7 @@ export default function Tablo() {
                                   cell.status === "in_progress" ? "border-status-yellow" : "border-status-red"
                                 )}
                               >
-                                <p className={clsx("tabular text-sm font-bold", cell.status === "in_progress" ? "text-status-yellow" : "text-status-red")}>
+                                <p className={clsx("tabular text-sm font-bold whitespace-nowrap", cell.status === "in_progress" ? "text-status-yellow" : "text-status-red")}>
                                   {formatCell(cell, op, mode)}
                                 </p>
                                 <p className={clsx("text-[10px] font-medium opacity-70", cell.status === "in_progress" ? "text-status-yellow" : "text-status-red")}>

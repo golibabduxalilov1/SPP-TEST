@@ -3,7 +3,7 @@ from rest_framework import serializers
 from customers.models import Customer
 
 from .constants import DEFAULT_ROUTE_KEY, ROUTE_TEMPLATES
-from .models import Label, Order, OrderDetail, OrderStageProgress, Part, PartRoute, Product
+from .models import GibLabImportBatch, Label, Order, OrderDetail, OrderStageProgress, Part, PartRoute, Product
 from .services import (
     assign_route, create_part_for_order_detail, sync_part_from_order_detail, sync_parts_quantity_for_order,
 )
@@ -224,3 +224,15 @@ class LabelSerializer(serializers.ModelSerializer):
     class Meta:
         model = Label
         fields = "__all__"
+
+
+class GibLabImportBatchSerializer(serializers.ModelSerializer):
+    order_no = serializers.CharField(source="order.order_no", read_only=True)
+
+    class Meta:
+        model = GibLabImportBatch
+        fields = [
+            "id", "original_filename", "file_checksum", "project_uuid", "file_version", "status",
+            "order", "order_no", "statistics", "errors", "warnings", "created_at", "completed_at",
+        ]
+        read_only_fields = fields
