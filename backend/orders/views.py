@@ -46,7 +46,9 @@ _latest_completed_stage = OrderStageProgress.objects.filter(
 class OrderViewSet(viewsets.ModelViewSet):
     queryset = (
         Order.objects.select_related("current_stage")
-        .prefetch_related("parts", "stage_progress__stage", "stage_progress__completed_by")
+        .prefetch_related(
+            "parts__order_detail", "details", "stage_progress__stage", "stage_progress__completed_by"
+        )
         .annotate(
             last_completed_stage_id=Subquery(_latest_completed_stage.values("stage_id")[:1]),
             last_completed_stage_name=Subquery(_latest_completed_stage.values("stage__name")[:1]),

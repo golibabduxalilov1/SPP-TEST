@@ -3,7 +3,7 @@ from rest_framework import serializers
 from customers.models import Customer
 
 from .constants import DEFAULT_ROUTE_KEY, ROUTE_TEMPLATES
-from .models import GibLabImportBatch, Label, Order, OrderDetail, OrderStageProgress, Part, PartRoute, Product
+from .models import BOMItem, GibLabImportBatch, Label, Order, OrderDetail, OrderStageProgress, Part, PartRoute, Product
 from .services import (
     assign_route, create_part_for_order_detail, sync_part_from_order_detail, sync_parts_quantity_for_order,
 )
@@ -96,6 +96,8 @@ class ProductSerializer(serializers.ModelSerializer):
 class OrderDetailItemSerializer(serializers.ModelSerializer):
     qr_token = serializers.SerializerMethodField()
     part_code = serializers.SerializerMethodField()
+    source = serializers.SerializerMethodField()
+    editable = serializers.SerializerMethodField()
 
     def get_qr_token(self, obj):
         return obj.part.qr_token if obj.part_id else None
@@ -103,11 +105,17 @@ class OrderDetailItemSerializer(serializers.ModelSerializer):
     def get_part_code(self, obj):
         return obj.part.code if obj.part_id else None
 
+    def get_source(self, obj):
+        return "manual"
+
+    def get_editable(self, obj):
+        return True
+
     class Meta:
         model = OrderDetail
         fields = [
             "id", "order", "name", "length_mm", "width_mm", "thickness_mm", "quantity", "material_type",
-            "part", "part_code", "qr_token",
+            "part", "part_code", "qr_token", "source", "editable",
         ]
         read_only_fields = ["part"]
 
@@ -128,6 +136,42 @@ class OrderDetailItemCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = OrderDetail
         fields = ["name", "length_mm", "width_mm", "thickness_mm", "quantity", "material_type"]
+
+
+class GibLabPartDetailSerializer(serializers.Serializer):
+    """Read-only 'Mahsulot detallari' row synthesized from a GibLab-imported
+    Part (no OrderDetail exists for these — see OrderDetail model docstring).
+    Field shape mirrors OrderDetailItemSerializer so the frontend table can
+    render both kinds of rows uniformly."""
+
+    id = serializers.SerializerMethodField()
+    name = serializers.CharField()
+    length_mm = serializers.DecimalField(max_digits=10, decimal_places=1, allow_null=True)
+    width_mm = serializers.DecimalField(max_digits=10, decimal_places=1, allow_null=True)
+    thickness_mm = serializers.DecimalField(max_digits=10, decimal_places=1, allow_null=True)
+    quantity = serializers.SerializerMethodField()
+    material_type = serializers.CharField(source="material")
+    part = serializers.IntegerField(source="id")
+    part_code = serializers.CharField(source="code")
+    qr_token = serializers.CharField()
+    source = serializers.SerializerMethodField()
+    editable = serializers.SerializerMethodField()
+
+    def get_id(self, obj):
+        return f"part-{obj.id}"
+
+    def get_quantity(self, obj):
+        # Part.quantity is already the whole-order total (GibLab usedCount);
+        # the "per single product" number the table expects lives on the
+        # part's BOMItem row instead.
+        per_product = self.context.get("bom_quantity_by_part", {}).get(obj.id)
+        return per_product if per_product is not None else obj.quantity
+
+    def get_source(self, obj):
+        return "giblab"
+
+    def get_editable(self, obj):
+        return False
 
 
 class OrderStageProgressSerializer(serializers.ModelSerializer):
@@ -151,7 +195,6 @@ class OrderStageProgressSerializer(serializers.ModelSerializer):
 class OrderListSerializer(serializers.ModelSerializer):
     parts_total = serializers.SerializerMethodField()
     parts_completed = serializers.SerializerMethodField()
-    product_type_name = serializers.CharField(source="product_type.name", read_only=True)
     current_stage_name = serializers.CharField(source="current_stage.name", read_only=True)
     details = OrderDetailItemCreateSerializer(many=True, write_only=True, required=False)
     display_status = serializers.SerializerMethodField()
@@ -159,8 +202,8 @@ class OrderListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Order
         fields = [
-            "id", "order_no", "customer_name", "customer_phone", "product_name", "product_type",
-            "product_type_name", "product_quantity", "deadline", "priority", "status", "created_at",
+            "id", "order_no", "customer_name", "customer_phone", "product_name",
+            "product_quantity", "deadline", "priority", "status", "created_at",
             "parts_total", "parts_completed", "details", "current_stage", "current_stage_name", "stage_status",
             "display_status",
         ]
@@ -190,8 +233,7 @@ class OrderListSerializer(serializers.ModelSerializer):
 class OrderDetailSerializer(serializers.ModelSerializer):
     products = ProductSerializer(many=True, read_only=True)
     parts = PartSerializer(many=True, read_only=True)
-    details = OrderDetailItemSerializer(many=True, read_only=True)
-    product_type_name = serializers.CharField(source="product_type.name", read_only=True)
+    details = serializers.SerializerMethodField()
     current_stage_name = serializers.CharField(source="current_stage.name", read_only=True)
     stage_progress = OrderStageProgressSerializer(many=True, read_only=True)
     display_status = serializers.SerializerMethodField()
@@ -200,7 +242,7 @@ class OrderDetailSerializer(serializers.ModelSerializer):
         model = Order
         fields = [
             "id", "order_no", "customer_name", "customer_phone", "product_name", "notes",
-            "product_type", "product_type_name", "product_quantity", "deadline", "priority", "status", "qr_token",
+            "product_quantity", "deadline", "priority", "status", "qr_token",
             "created_at", "updated_at", "products", "parts", "details",
             "current_stage", "current_stage_name", "stage_status", "stage_progress",
             "display_status",
@@ -211,6 +253,26 @@ class OrderDetailSerializer(serializers.ModelSerializer):
 
     def get_display_status(self, obj):
         return order_display_status(obj)
+
+    def get_details(self, obj):
+        """Manually-entered OrderDetail rows plus, for GibLab-imported orders,
+        one synthesized row per Part that has no OrderDetail — avoids ever
+        duplicating a Part into an OrderDetail row in the database."""
+        manual_data = list(OrderDetailItemSerializer(obj.details.all(), many=True).data)
+
+        giblab_parts = [part for part in obj.parts.all() if getattr(part, "order_detail", None) is None]
+        if not giblab_parts:
+            return manual_data
+
+        bom_quantity_by_part = dict(
+            BOMItem.objects.filter(
+                item_type=BOMItem.ItemType.PART, part_id__in=[part.id for part in giblab_parts]
+            ).values_list("part_id", "quantity")
+        )
+        giblab_data = GibLabPartDetailSerializer(
+            giblab_parts, many=True, context={"bom_quantity_by_part": bom_quantity_by_part}
+        ).data
+        return manual_data + list(giblab_data)
 
     def update(self, instance, validated_data):
         previous_quantity = instance.product_quantity

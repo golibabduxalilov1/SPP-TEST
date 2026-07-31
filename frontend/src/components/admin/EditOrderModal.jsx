@@ -10,7 +10,6 @@ const PRIORITY_LABELS = { normal: "Oddiy", high: "Yuqori", urgent: "Shoshilinch"
 
 export default function EditOrderModal({ open, order, onClose, onSaved }) {
   const [form, setForm] = useState(null);
-  const [productTypes, setProductTypes] = useState([]);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -19,13 +18,11 @@ export default function EditOrderModal({ open, order, onClose, onSaved }) {
       customer_name: order.customer_name || "",
       customer_phone: order.customer_phone ? formatUzPhone(order.customer_phone) : "+998 ",
       product_name: order.product_name || "",
-      product_type: order.product_type ?? "",
       product_quantity: String(order.product_quantity ?? 1),
       deadline: order.deadline || "",
       priority: order.priority,
       notes: order.notes || "",
     });
-    adminApi.get("/product-types/").then(({ data }) => setProductTypes(data.results || data)).catch(() => {});
   }, [open, order]);
 
   async function submit(e) {
@@ -44,7 +41,6 @@ export default function EditOrderModal({ open, order, onClose, onSaved }) {
       await adminApi.patch(`/orders/${order.id}/`, {
         ...form,
         customer_phone: isValidUzPhone(form.customer_phone) ? normalizeUzPhone(form.customer_phone) : "",
-        product_type: form.product_type || null,
         product_quantity: productQuantity,
         deadline: form.deadline || null,
       });
@@ -75,14 +71,6 @@ export default function EditOrderModal({ open, order, onClose, onSaved }) {
         </Field>
         <Field label="Mahsulot nomi" required>
           <Input required value={form.product_name} onChange={(e) => setForm({ ...form, product_name: e.target.value })} />
-        </Field>
-        <Field label="Mahsulot turi">
-          <Select value={form.product_type} onChange={(e) => setForm({ ...form, product_type: e.target.value })}>
-            <option value="">Tanlanmagan</option>
-            {productTypes.map((pt) => (
-              <option key={pt.id} value={pt.id}>{pt.name}</option>
-            ))}
-          </Select>
         </Field>
         <Field label="Mahsulot soni" required hint="O'zgartirilsa, detallar soni qayta hisoblanadi">
           <Input

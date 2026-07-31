@@ -47,13 +47,6 @@ class Order(models.Model):
     customer_name = models.CharField(max_length=200, blank=True)
     customer_phone = models.CharField(max_length=32, blank=True)
     product_name = models.CharField(max_length=200, blank=True)
-    product_type = models.ForeignKey(
-        "catalog.ProductType",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="orders",
-    )
     product_quantity = models.PositiveIntegerField(
         default=1, validators=[MinValueValidator(1)]
     )
@@ -281,9 +274,8 @@ class PartRoute(models.Model):
 class OrderDetail(models.Model):
     """Buyurtma detali — a concrete detail row belonging to one Order.
 
-    Populated as an independent copy from the chosen ProductType's
-    ProductTypeDetail rows at order-creation time (not FK-linked), so later
-    edits to the standard template or to this row never affect the other.
+    Entered manually (or produced as an Order snapshot from a GibLab import)
+    and edited independently thereafter.
     """
 
     order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name="details")

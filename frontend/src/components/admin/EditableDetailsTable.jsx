@@ -33,10 +33,10 @@ function getErrorMessage(error) {
 }
 
 /**
- * Editable detail-rows table (nomi, o'lcham, miqdor, material) shared by:
- * ProductType "Standart detallar", the New Order form's auto-filled list,
- * and the Order detail page's "Detallar" section. `onCreate/onUpdate/onDelete`
- * may hit a real endpoint or just mutate local state — the table doesn't care.
+ * Editable detail-rows table (nomi, o'lcham, miqdor, material) shared by the
+ * New Order form's manual details list and the Order detail page's
+ * "Detallar" section. `onCreate/onUpdate/onDelete` may hit a real endpoint
+ * or just mutate local state — the table doesn't care.
  */
 export default function EditableDetailsTable({ rows, onCreate, onUpdate, onDelete, onShowQr, productQuantity = 1, emptyMessage = "Detallar yo'q" }) {
   const showTotalColumn = productQuantity > 1;
@@ -117,7 +117,14 @@ export default function EditableDetailsTable({ rows, onCreate, onUpdate, onDelet
               <EditRow key={row.id} draft={draft} setDraft={setDraft} busy={busy} onSave={save} onCancel={cancel} showTotalColumn={showTotalColumn} />
             ) : (
               <Tr key={row.id}>
-                <Td className="font-medium">{row.name}</Td>
+                <Td className="font-medium">
+                  {row.name}
+                  {row.editable === false && (
+                    <span className="ml-2 rounded-full bg-(--accent-soft) px-2 py-0.5 text-[10px] font-semibold tracking-wide text-(--accent-strong) uppercase">
+                      GibLab
+                    </span>
+                  )}
+                </Td>
                 <Td>{row.length_mm ?? "—"}</Td>
                 <Td>{row.width_mm ?? "—"}</Td>
                 <Td>{row.thickness_mm ?? "—"}</Td>
@@ -136,22 +143,26 @@ export default function EditableDetailsTable({ rows, onCreate, onUpdate, onDelet
                         <QrCode size={14} strokeWidth={2.2} />
                       </Button>
                     )}
-                    <Button
-                      type="button" variant="ghost" size="sm" magnetic={false}
-                      disabled={busy || editingId !== null} onClick={() => startEdit(row)}
-                      aria-label={`${row.name} tahrirlash`} title="Tahrirlash"
-                      className="min-h-9! min-w-9! rounded-lg! border-(--border-strong)! px-0! text-(--accent-strong)! hover:bg-(--accent-soft)!"
-                    >
-                      <Pencil size={14} strokeWidth={2.2} />
-                    </Button>
-                    <Button
-                      type="button" variant="ghost" size="sm" magnetic={false}
-                      disabled={busy || editingId !== null} onClick={() => remove(row)}
-                      aria-label={`${row.name} o'chirish`} title="O'chirish"
-                      className="min-h-9! min-w-9! rounded-lg! border-(--border-strong)! px-0! text-status-red! hover:bg-(--color-status-red-bg)!"
-                    >
-                      <Trash2 size={14} strokeWidth={2.2} />
-                    </Button>
+                    {row.editable !== false && (
+                      <>
+                        <Button
+                          type="button" variant="ghost" size="sm" magnetic={false}
+                          disabled={busy || editingId !== null} onClick={() => startEdit(row)}
+                          aria-label={`${row.name} tahrirlash`} title="Tahrirlash"
+                          className="min-h-9! min-w-9! rounded-lg! border-(--border-strong)! px-0! text-(--accent-strong)! hover:bg-(--accent-soft)!"
+                        >
+                          <Pencil size={14} strokeWidth={2.2} />
+                        </Button>
+                        <Button
+                          type="button" variant="ghost" size="sm" magnetic={false}
+                          disabled={busy || editingId !== null} onClick={() => remove(row)}
+                          aria-label={`${row.name} o'chirish`} title="O'chirish"
+                          className="min-h-9! min-w-9! rounded-lg! border-(--border-strong)! px-0! text-status-red! hover:bg-(--color-status-red-bg)!"
+                        >
+                          <Trash2 size={14} strokeWidth={2.2} />
+                        </Button>
+                      </>
+                    )}
                   </div>
                 </Td>
               </Tr>

@@ -147,7 +147,7 @@ export default function Orders() {
             <Table>
               <Thead>
                 <tr>
-                  <Th>Mahsulot turi</Th>
+                  <Th>Mahsulot</Th>
                   <Th>Mijoz</Th>
                   <Th>Muddat</Th>
                   <Th>Prioritet</Th>
@@ -164,9 +164,9 @@ export default function Orders() {
                     <Td>
                       <p
                         className="max-w-50 truncate font-semibold"
-                        title={o.product_type_name || o.product_name || "Mahsulot ko'rsatilmagan"}
+                        title={o.product_name || "Mahsulot ko'rsatilmagan"}
                       >
-                        {o.product_type_name || o.product_name || "Mahsulot ko'rsatilmagan"}
+                        {o.product_name || "Mahsulot ko'rsatilmagan"}
                       </p>
                     </Td>
                     <Td>{o.customer_name || "—"}</Td>

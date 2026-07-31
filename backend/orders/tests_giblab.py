@@ -24,7 +24,7 @@ from manufacturing.models import Operation
 
 from .giblab import file_reader, mapper, parser, validator
 from .giblab.exceptions import GibLabImportError
-from .models import BOM, BOMItem, GibLabImportBatch, Order, Part, PartRoute, Product
+from .models import BOM, BOMItem, GibLabImportBatch, Order, OrderDetail, Part, PartRoute, Product
 
 FIXTURE_PATH = os.path.join(os.path.dirname(__file__), "giblab", "testdata", "sample_project.xml")
 
@@ -343,3 +343,87 @@ class GibLabImportIntegrationTests(APITestCase):
         self.assertEqual(Part.objects.count(), before_parts)
         batch = GibLabImportBatch.objects.latest("created_at")
         self.assertEqual(batch.status, GibLabImportBatch.Status.FAILED)
+
+
+class GibLabOrderDetailsApiTests(APITestCase):
+    """`GET /api/orders/{id}/` must surface GibLab-imported Parts in the same
+    `details` list the "Mahsulot detallari" table renders, without ever
+    writing OrderDetail rows for them (see OrderDetailSerializer.get_details)."""
+
+    def setUp(self):
+        _seed_operations()
+        self.manager = User.objects.create_user(
+            username="giblab-details-manager", phone="+998901114403", password="secret-pass", role=Role.MANAGER,
+        )
+        self.client.force_authenticate(user=self.manager)
+        response = self.client.post(
+            "/api/giblab-imports/import/",
+            {"file": _uploaded(MINIMAL_PRODUCT_XML.encode("utf-8"), name="minimal.project")},
+            format="multipart",
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.order_id = response.data["order_id"]
+
+    def test_order_details_endpoint_includes_giblab_part(self):
+        response = self.client.get(f"/api/orders/{self.order_id}/")
+        self.assertEqual(response.status_code, 200, response.data)
+        details = response.data["details"]
+        self.assertEqual(len(details), 1)
+        row = details[0]
+        self.assertEqual(row["name"], "Part1")
+        self.assertEqual(Decimal(row["length_mm"]), Decimal("500.0"))
+        self.assertEqual(Decimal(row["width_mm"]), Decimal("300.0"))
+        self.assertEqual(row["source"], "giblab")
+        self.assertFalse(row["editable"])
+        self.assertTrue(row["qr_token"])
+        self.assertEqual(row["part_code"], "C1")
+
+    def test_giblab_quantity_is_per_product_not_double_multiplied(self):
+        """MINIMAL_PRODUCT_XML: count="1" (per product), usedCount="2" (order
+        total, product count=2). The table's `quantity` column must be the
+        per-product number (1), matching OrderDetail semantics — the
+        frontend multiplies by product_quantity itself for the "Jami" total."""
+        order = Order.objects.get(pk=self.order_id)
+        part = order.parts.get()
+        self.assertEqual(order.product_quantity, 2)
+        self.assertEqual(part.quantity, 2)  # already the whole-order total
+
+        response = self.client.get(f"/api/orders/{self.order_id}/")
+        row = response.data["details"][0]
+        self.assertEqual(Decimal(row["quantity"]), Decimal("1"))
+        self.assertEqual(Decimal(row["quantity"]) * order.product_quantity, part.quantity)
+
+    def test_giblab_parts_are_not_duplicated_into_orderdetail_rows(self):
+        self.assertEqual(OrderDetail.objects.filter(order_id=self.order_id).count(), 0)
+        response = self.client.get(f"/api/orders/{self.order_id}/")
+        self.assertEqual(len(response.data["details"]), 1)
+
+    def test_manual_orderdetail_flow_unaffected(self):
+        """Adding a manual detail row alongside a GibLab-imported order
+        exercises both code paths together — the pre-existing OrderDetail
+        create flow must still work exactly as before."""
+        response = self.client.post(
+            "/api/order-details/",
+            {"order": self.order_id, "name": "Qo'shimcha panel", "quantity": 3},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+
+        detail_response = self.client.get(f"/api/orders/{self.order_id}/")
+        details = detail_response.data["details"]
+        self.assertEqual(len(details), 2)
+        manual_row = next(d for d in details if d["source"] == "manual")
+        giblab_row = next(d for d in details if d["source"] == "giblab")
+        self.assertTrue(manual_row["editable"])
+        self.assertEqual(manual_row["name"], "Qo'shimcha panel")
+        self.assertFalse(giblab_row["editable"])
+
+    def test_editing_giblab_detail_row_via_order_details_api_is_rejected(self):
+        """A GibLab row has no OrderDetail id — its synthesized id (`part-N`)
+        must not resolve against the OrderDetail endpoint, so it cannot be
+        edited/deleted through the manual-details API."""
+        giblab_part_id = f"part-{Part.objects.get(order_id=self.order_id).id}"
+        response = self.client.patch(
+            f"/api/order-details/{giblab_part_id}/", {"name": "hacked"}, format="json",
+        )
+        self.assertEqual(response.status_code, 404)

@@ -14,7 +14,6 @@ import OrderDetail from "./pages/admin/OrderDetail";
 import Customers from "./pages/admin/Customers";
 import Tablo from "./pages/admin/Tablo";
 import Machines from "./pages/admin/Machines";
-import References from "./pages/admin/References";
 import Employees from "./pages/admin/Employees";
 import Conflicts from "./pages/admin/Conflicts";
 import WarehousePage from "./pages/admin/Warehouse";
@@ -75,7 +74,6 @@ export default function App() {
           <Route path="tablo" element={<Tablo />} />
           <Route path="labels" element={<Labels />} />
           <Route path="machines" element={<Machines />} />
-          <Route path="references" element={<References />} />
           <Route path="employees" element={<Employees />} />
           <Route path="conflicts" element={<Conflicts />} />
           <Route path="warehouse" element={<WarehousePage />} />

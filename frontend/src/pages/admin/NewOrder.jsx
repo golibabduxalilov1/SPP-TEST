@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Save, Search, Truck, User, PackageSearch, X } from "lucide-react";
 import clsx from "clsx";
@@ -38,31 +38,12 @@ export default function NewOrder() {
   const navigate = useNavigate();
   const emptyForm = {
     customer_name: "", customer_phone: "+998 ", delivery_address: "",
-    product_name: "", product_type: "", product_quantity: "1", deadline: "", priority: "normal", notes: "",
+    product_name: "", product_quantity: "1", deadline: "", priority: "normal", notes: "",
   };
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
   const [lookingUp, setLookingUp] = useState(false);
-  const [productTypes, setProductTypes] = useState([]);
   const [details, setDetails] = useState([]);
-
-  useEffect(() => {
-    adminApi.get("/product-types/").then(({ data }) => setProductTypes(data.results || data)).catch(() => {});
-  }, []);
-
-  async function handleProductTypeChange(value) {
-    setForm((f) => ({ ...f, product_type: value }));
-    if (!value) {
-      setDetails([]);
-      return;
-    }
-    try {
-      const { data } = await adminApi.get(`/product-types/${value}/details/`);
-      setDetails(data.map((d) => ({ ...d, id: nextTempDetailId() })));
-    } catch {
-      toast.error("Standart detallarni yuklashda xatolik");
-    }
-  }
 
   async function addLocalDetail(payload) {
     setDetails((d) => [...d, { ...payload, id: nextTempDetailId() }]);
@@ -113,10 +94,6 @@ export default function NewOrder() {
       toast.error("Mijoz ismini kiriting");
       return;
     }
-    if (!form.product_type) {
-      toast.error("Mahsulot turini tanlang");
-      return;
-    }
     const productQuantity = Number(form.product_quantity);
     if (!Number.isInteger(productQuantity) || productQuantity < 1) {
       toast.error("Mahsulot sonini to'g'ri kiriting (kamida 1)");
@@ -127,7 +104,6 @@ export default function NewOrder() {
       await adminApi.post("/orders/", {
         ...form,
         customer_phone: isValidUzPhone(form.customer_phone) ? normalizeUzPhone(form.customer_phone) : "",
-        product_type: form.product_type || null,
         product_quantity: productQuantity,
         deadline: form.deadline || null,
         details: details.map(({ id, ...rest }) => rest),
@@ -205,17 +181,9 @@ export default function NewOrder() {
             </Field>
           </SectionCard>
 
-          <SectionCard className="lg:col-span-2" icon={PackageSearch} tone="bg-(--accent-soft) text-(--accent-strong)" title="Mebel parametrlari" subtitle="Mahsulot turi va detallar ma'lumotlari">
+          <SectionCard className="lg:col-span-2" icon={PackageSearch} tone="bg-(--accent-soft) text-(--accent-strong)" title="Mebel parametrlari" subtitle="Mahsulot va detallar ma'lumotlari">
             <Field label="Mahsulot nomi" required>
               <Input required value={form.product_name} onChange={(e) => setForm({ ...form, product_name: e.target.value })} />
-            </Field>
-            <Field label="Mahsulot turi" required hint="Tanlansa, standart detallar avtomatik to'ldiriladi">
-              <Select required value={form.product_type} onChange={(e) => handleProductTypeChange(e.target.value)}>
-                <option value="">Tanlanmagan</option>
-                {productTypes.map((pt) => (
-                  <option key={pt.id} value={pt.id}>{pt.name}</option>
-                ))}
-              </Select>
             </Field>
             <Field label="Mahsulot soni" required hint="Nechta bir xil shkaf buyurtma qilinmoqda">
               <Input
@@ -235,7 +203,7 @@ export default function NewOrder() {
                 onUpdate={updateLocalDetail}
                 onDelete={removeLocalDetail}
                 productQuantity={Number(form.product_quantity) || 1}
-                emptyMessage="Detallar yo'q — mahsulot turini tanlang yoki qo'lda qo'shing"
+                emptyMessage="Detallar yo'q — qo'lda qo'shing"
               />
             </div>
           </SectionCard>

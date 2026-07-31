@@ -24,7 +24,6 @@ const NAV = [
     label: "Ma'lumotnomalar",
     icon: BookOpen,
     children: [
-      { to: "/references", tab: "product-types", isDefaultTab: true, label: "Mahsulot turlari", icon: Tags, roles: ["super_admin", "admin"] },
       { to: "/machines", tab: "tsexes", isDefaultTab: true, label: "Tsexlar", icon: Factory },
       { to: "/machines", tab: "machines", label: "Stanoklar", icon: Wrench },
     ],

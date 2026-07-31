@@ -170,13 +170,13 @@ def worker_completed_orders(worker_id, date_from=None, date_to=None):
     )
     if date_from and date_to:
         qs = qs.filter(last_completed_at__date__gte=date_from, last_completed_at__date__lte=date_to)
-    qs = qs.select_related("product_type").order_by("-last_completed_at")
+    qs = qs.order_by("-last_completed_at")
     return [
         {
             "id": order.id,
             "order_no": order.order_no,
             "customer_name": order.customer_name or "-",
-            "work_type": order.product_type.name if order.product_type_id else (order.product_name or "-"),
+            "work_type": order.product_name or "-",
             "created_at": order.created_at.isoformat(),
             "completed_at": order.last_completed_at.isoformat() if order.last_completed_at else None,
             "status": order.status,
