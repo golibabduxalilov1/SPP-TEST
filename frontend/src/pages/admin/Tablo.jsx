@@ -41,7 +41,7 @@ function PriorityMark({ priority }) {
 
 // Generous pixel widths for the sticky/frozen "№" column and each other
 // column — wide enough that cell contents never wrap awkwardly or feel cramped.
-const COL_W = { index: 64, product: 288, deadline: 148, op: 168 };
+const COL_W = { index: 64, product: 190, deadline: 148, op: 168 };
 
 const MODES = [
   { key: "hajm", label: "Hajm" },
@@ -295,10 +295,10 @@ export default function Tablo() {
                 <thead className="sticky top-0 z-20 bg-(--surface-muted) text-xs font-bold tracking-[0.08em] text-(--ink-soft) uppercase">
                   <tr>
                     <th className="sticky left-0 z-30 border-r border-b border-(--border-strong) bg-(--surface-muted) px-3 py-4 text-center align-middle">№</th>
-                    <th className="border-r border-b border-(--border-strong) bg-(--surface-muted) px-4 py-4 text-left align-middle">
+                    <th className="border-r border-b border-(--border-strong) bg-(--surface-muted) py-4 pl-3 pr-1 text-left align-middle">
                       Mahsulot turi
                     </th>
-                    <th className="border-r border-b border-(--border-strong) bg-(--surface-muted) px-3 py-4 text-center align-middle whitespace-nowrap">
+                    <th className="border-r border-b border-(--border-strong) bg-(--surface-muted) py-4 pl-1 pr-3 text-center align-middle whitespace-nowrap">
                       Muddat
                     </th>
                     {data.operations.map((op) => (
@@ -311,7 +311,7 @@ export default function Tablo() {
                 <tbody className="bg-(--surface)">
                   <tr className="bg-(--accent-soft)">
                     <td className="sticky left-0 z-10 border-r border-b border-(--border-strong) bg-(--accent-soft) px-3 py-3.5" />
-                    <td className="truncate border-r border-b border-(--border-strong) bg-(--accent-soft) px-4 py-3.5 text-xs font-bold tracking-[0.08em] text-(--accent-strong) uppercase">
+                    <td className="truncate border-r border-b border-(--border-strong) bg-(--accent-soft) py-3.5 pl-3 pr-1 text-xs font-bold tracking-[0.08em] text-(--accent-strong) uppercase">
                       Jami detallar
                     </td>
                     <td className="border-r border-b border-(--border-strong) bg-(--accent-soft)" />
@@ -342,13 +342,13 @@ export default function Tablo() {
                       <td className="sticky left-0 z-10 border-r border-b border-(--border-strong) bg-(--surface) px-3 py-4 text-center align-middle text-sm text-(--ink-soft)">
                         {row.index}
                       </td>
-                      <td className="border-r border-b border-(--border-strong) bg-(--surface) px-4 py-4 align-middle">
+                      <td className="border-r border-b border-(--border-strong) bg-(--surface) py-4 pl-3 pr-1 align-middle">
                         <p className="flex items-center gap-1.5 text-sm leading-snug font-semibold text-wrap" title={row.product_name || "Mahsulot ko'rsatilmagan"}>
                           <PriorityMark priority={row.priority} />
                           <span>{row.product_name || "Mahsulot ko'rsatilmagan"}</span>
                         </p>
                       </td>
-                      <td className="border-r border-b border-(--border-strong) bg-(--surface) px-3 py-4 text-center align-middle text-sm whitespace-nowrap text-(--ink-soft)">
+                      <td className="border-r border-b border-(--border-strong) bg-(--surface) py-4 pl-1 pr-3 text-center align-middle text-sm whitespace-nowrap text-(--ink-soft)">
                         {row.deadline ? format(new Date(row.deadline), "dd.MM.yyyy") : "—"}
                       </td>
                       {data.operations.map((op) => {
