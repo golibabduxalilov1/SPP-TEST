@@ -6,6 +6,7 @@ import toast from "react-hot-toast";
 import { adminApi } from "../../api/client";
 import { Card, CardBody } from "../../components/ui/Card";
 import { Table } from "../../components/ui/Table";
+import ProgressBar, { computeProgressPercent } from "../../components/ui/ProgressBar";
 import Button from "../../components/ui/Button";
 import { PageLoader, EmptyState } from "../../components/ui/Misc";
 import SegmentedControl from "../../components/ui/SegmentedControl";
@@ -39,9 +40,10 @@ function PriorityMark({ priority }) {
   return null;
 }
 
-// Generous pixel widths for the sticky/frozen "№" column and each other
-// column — wide enough that cell contents never wrap awkwardly or feel cramped.
-const COL_W = { index: 64, product: 190, deadline: 96, op: 168 };
+// Pixel widths for the sticky/frozen "№", product and deadline columns.
+// Operation ("jarayon") columns are intentionally left unsized so table-auto
+// shrinks them to their content (name/value) instead of a generous fixed width.
+const COL_W = { index: 64, product: 190, deadline: 96 };
 
 const MODES = [
   { key: "hajm", label: "Hajm" },
@@ -84,6 +86,14 @@ function formatCell(cell, op, mode) {
   const unit = displayUnit(op, mode);
   const fraction = `${cell.completed}/${cell.remaining}`;
   return unit ? `${fraction} ${unit}` : fraction;
+}
+
+// Foiz mode already carries the percent directly (cell.value); Hajm/Soni
+// derive it from completed/total, which safely resolves to 0% when the
+// stage has no plan yet (see computeProgressPercent).
+function stageProgressPercent(cell, mode) {
+  if (mode === "foiz") return Math.min(100, Math.max(0, cell.value ?? 0));
+  return computeProgressPercent(cell.completed, cell.total);
 }
 
 // Client-side aggregation over the already-fetched table — no extra backend call.
@@ -279,9 +289,8 @@ export default function Tablo() {
             <PageLoader />
           ) : (
             <Table
-              className="table-fixed! border-collapse text-sm"
+              className="w-auto! border-collapse text-sm"
               containerClassName={clsx("rounded-2xl", isFullscreen && "min-h-0 flex-1 overflow-y-auto")}
-              style={{ width: COL_W.index + COL_W.product + COL_W.deadline + data.operations.length * COL_W.op }}
               label="Ishlab chiqarish tablosi"
             >
                 <colgroup>
@@ -289,7 +298,7 @@ export default function Tablo() {
                   <col style={{ width: COL_W.product }} />
                   <col style={{ width: COL_W.deadline }} />
                   {data.operations.map((op) => (
-                    <col key={op.code} style={{ width: COL_W.op }} />
+                    <col key={op.code} />
                   ))}
                 </colgroup>
                 <thead className="sticky top-0 z-20 bg-(--surface-muted) text-xs font-bold tracking-[0.08em] text-(--ink-soft) uppercase">
@@ -302,8 +311,8 @@ export default function Tablo() {
                       Muddat
                     </th>
                     {data.operations.map((op) => (
-                      <th key={op.code} className="border-r border-b border-(--border-strong) px-3 py-4 text-center align-middle last:border-r-0">
-                        <span className="line-clamp-2 leading-snug" title={op.name}>{op.name}</span>
+                      <th key={op.code} className="border-r border-b border-(--border-strong) px-1.5 py-4 text-center align-middle last:border-r-0">
+                        <span className="leading-snug whitespace-nowrap" title={op.name}>{op.name}</span>
                       </th>
                     ))}
                   </tr>
@@ -316,7 +325,7 @@ export default function Tablo() {
                     </td>
                     <td className="border-r border-b border-(--border-strong) bg-(--accent-soft)" />
                     {data.operations.map((op) => (
-                      <td key={op.code} className="border-r border-b border-(--border-strong) px-3 py-3.5 text-center align-middle last:border-r-0">
+                      <td key={op.code} className="border-r border-b border-(--border-strong) px-1.5 py-3.5 text-center align-middle last:border-r-0">
                         <p className="tabular text-base font-extrabold whitespace-nowrap text-(--accent-strong)">
                           {totals[op.code] === null
                             ? "—"
@@ -343,9 +352,9 @@ export default function Tablo() {
                         {row.index}
                       </td>
                       <td className="border-r border-b border-(--border-strong) bg-(--surface) py-4 pl-3 pr-1 align-middle">
-                        <p className="flex items-center gap-1.5 text-sm leading-snug font-semibold text-wrap" title={row.product_name || "Mahsulot ko'rsatilmagan"}>
+                        <p className="flex items-center gap-1.5 overflow-hidden text-sm leading-snug font-semibold whitespace-nowrap" title={row.product_name || "Mahsulot ko'rsatilmagan"}>
                           <PriorityMark priority={row.priority} />
-                          <span>{row.product_name || "Mahsulot ko'rsatilmagan"}</span>
+                          <span className="min-w-0 flex-1 truncate">{row.product_name || "Mahsulot ko'rsatilmagan"}</span>
                         </p>
                       </td>
                       <td className="border-r border-b border-(--border-strong) bg-(--surface) px-2 py-4 text-center align-middle text-sm whitespace-nowrap text-(--ink-soft)">
@@ -357,7 +366,7 @@ export default function Tablo() {
                           <td
                             key={op.code}
                             className={clsx(
-                              "border-r border-b border-(--border-strong) p-2 text-center align-middle last:border-r-0",
+                              "border-r border-b border-(--border-strong) px-1.5 py-2 text-center align-middle last:border-r-0",
                               cell.status === "completed" && "bg-status-green",
                               cell.status === "in_progress" && "bg-status-yellow-bg",
                               cell.status === "pending" && "bg-status-yellow-bg",
@@ -374,6 +383,11 @@ export default function Tablo() {
                                 title={`${formatCell(cell, op, mode)} — ${STATUS_LABEL.completed}`}
                               >
                                 <CheckCircle2 size={20} className="shrink-0 text-white" strokeWidth={2.25} />
+                                <ProgressBar
+                                  percent={stageProgressPercent(cell, mode)}
+                                  amountLabel={formatCell(cell, op, mode)}
+                                  className="px-1 text-white"
+                                />
                               </div>
                             ) : cell.status === "not_required" ? (
                               <div className="flex min-h-16 flex-col items-center justify-center text-(--ink-faint)">
@@ -386,6 +400,7 @@ export default function Tablo() {
                                   {mode === "foiz" ? "—" : formatCell(cell, op, mode)}
                                 </p>
                                 <span className="text-[11px] leading-tight font-semibold text-status-yellow/85">{STATUS_LABEL.pending}</span>
+                                <ProgressBar percent={stageProgressPercent(cell, mode)} className="px-1 text-status-yellow" />
                               </div>
                             ) : (
                               <div className="flex min-h-16 flex-col items-center justify-center gap-1">
@@ -405,6 +420,10 @@ export default function Tablo() {
                                 >
                                   {STATUS_LABEL[cell.status]}
                                 </p>
+                                <ProgressBar
+                                  percent={stageProgressPercent(cell, mode)}
+                                  className={clsx("px-1", cell.status === "in_progress" ? "text-status-yellow" : "text-white")}
+                                />
                               </div>
                             )}
                           </td>
