@@ -21,9 +21,6 @@ export const TUTORIAL_PAGES = {
 };
 
 export function pageKeyForPath(pathname) {
-  if (pathname === "/") return "dashboard";
-  const key = Object.keys(TUTORIAL_PAGES).find(
-    (k) => k !== "dashboard" && pathname.startsWith(TUTORIAL_PAGES[k].path)
-  );
+  const key = Object.keys(TUTORIAL_PAGES).find((k) => TUTORIAL_PAGES[k].path === pathname);
   return key || null;
 }

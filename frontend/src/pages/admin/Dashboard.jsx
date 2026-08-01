@@ -11,8 +11,6 @@ import { PageLoader, EmptyState } from "../../components/ui/Misc";
 import DashboardFilters from "../../components/dashboard/DashboardFilters";
 import MachineCard from "../../components/dashboard/MachineCard";
 import TopPerformers from "../../components/dashboard/TopPerformers";
-import { useTutorial } from "../../tutorial/TutorialContext";
-import { dashboardSteps } from "../../tutorial/content/dashboard";
 import { MEASURE_UNIT_OPTIONS } from "../../lib/units";
 
 // Jami ishlab chiqarish stat-card — one figure per unit, never summed
@@ -78,9 +76,6 @@ export default function Dashboard() {
   const [machines, setMachines] = useState([]);
   const [leaders, setLeaders] = useState([]);
   const [loading, setLoading] = useState(true);
-  const { registerAndAutoStart } = useTutorial();
-
-  useEffect(() => registerAndAutoStart("dashboard", dashboardSteps), [registerAndAutoStart]);
 
   async function load(f) {
     // f.from/f.to are naive <input type="datetime-local"> values (the

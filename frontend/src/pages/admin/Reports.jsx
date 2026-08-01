@@ -6,8 +6,6 @@ import PageHeader from "../../components/ui/PageHeader";
 import { PageLoader } from "../../components/ui/Misc";
 import SegmentedControl from "../../components/ui/SegmentedControl";
 import OrdersReportPanel from "../../components/reports/OrdersReportPanel";
-import { useTutorial } from "../../tutorial/TutorialContext";
-import { reportsSteps } from "../../tutorial/content/reports";
 
 const TABS = [
   { key: "orders", label: "Buyurtmalar" },
@@ -52,9 +50,6 @@ export default function Reports() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const active = TABS.find((t) => t.key === tab);
-  const { registerAndAutoStart } = useTutorial();
-
-  useEffect(() => registerAndAutoStart("reports", reportsSteps), [registerAndAutoStart]);
 
   async function load() {
     if (!active.url) return;

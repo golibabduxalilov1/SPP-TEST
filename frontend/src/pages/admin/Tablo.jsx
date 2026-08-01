@@ -12,12 +12,10 @@ import Button from "../../components/ui/Button";
 import { PageLoader, EmptyState } from "../../components/ui/Misc";
 import SegmentedControl from "../../components/ui/SegmentedControl";
 import { format } from "date-fns";
-import { useTutorial } from "../../tutorial/TutorialContext";
-import { tabloSteps } from "../../tutorial/content/tablo";
 
 // Icon + label for each priority. "normal" renders nothing.
 const PRIORITY_ICONS = {
-  high: { Icon: Zap, label: "Tezkor", className: "fill-status-orange text-status-orange" },
+  high: { Icon: Zap, label: "Yuqori", className: "fill-status-orange text-status-orange" },
   urgent: { Icon: CircleAlert, label: "Shoshilinch", className: "text-status-red" },
 };
 
@@ -236,10 +234,7 @@ export default function Tablo() {
   const [lastUpdated, setLastUpdated] = useState(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const containerRef = useRef(null);
-  const { registerAndAutoStart } = useTutorial();
   const now = useLiveClock();
-
-  useEffect(() => registerAndAutoStart("tablo", tabloSteps), [registerAndAutoStart]);
 
   // Syncs state on Esc, on browser-chrome exits, and after our own toggle —
   // covers every way fullscreen can end, not just the button.
@@ -387,139 +382,139 @@ export default function Tablo() {
               containerClassName={clsx("rounded-2xl", isFullscreen && "min-h-0 flex-1 overflow-y-auto")}
               label="Ishlab chiqarish tablosi"
             >
-                <colgroup>
-                  <col style={{ width: COL_W.index }} />
-                  <col style={{ width: COL_W.product }} />
-                  <col style={{ width: COL_W.deadline }} />
+              <colgroup>
+                <col style={{ width: COL_W.index }} />
+                <col style={{ width: COL_W.product }} />
+                <col style={{ width: COL_W.deadline }} />
+                {data.operations.map((op) => (
+                  <col key={op.code} />
+                ))}
+              </colgroup>
+              <thead className="sticky top-0 z-20 bg-(--surface-muted) text-xs font-bold tracking-[0.08em] text-(--ink-soft) uppercase">
+                <tr>
+                  <th className="sticky left-0 z-30 border-r border-b border-(--border-strong) bg-(--surface-muted) px-3 py-4 text-center align-middle">№</th>
+                  <th className="border-r border-b border-(--border-strong) bg-(--surface-muted) py-4 pl-3 pr-1 text-left align-middle">
+                    Mahsulot turi
+                  </th>
+                  <th className="border-r border-b border-(--border-strong) bg-(--surface-muted) px-2 py-4 text-center align-middle whitespace-nowrap">
+                    Muddat
+                  </th>
                   {data.operations.map((op) => (
-                    <col key={op.code} />
+                    <th key={op.code} className="border-r border-b border-(--border-strong) px-1.5 py-4 text-center align-middle last:border-r-0">
+                      <span className="leading-snug whitespace-nowrap" title={op.name}>{op.name}</span>
+                    </th>
                   ))}
-                </colgroup>
-                <thead className="sticky top-0 z-20 bg-(--surface-muted) text-xs font-bold tracking-[0.08em] text-(--ink-soft) uppercase">
-                  <tr>
-                    <th className="sticky left-0 z-30 border-r border-b border-(--border-strong) bg-(--surface-muted) px-3 py-4 text-center align-middle">№</th>
-                    <th className="border-r border-b border-(--border-strong) bg-(--surface-muted) py-4 pl-3 pr-1 text-left align-middle">
-                      Mahsulot turi
-                    </th>
-                    <th className="border-r border-b border-(--border-strong) bg-(--surface-muted) px-2 py-4 text-center align-middle whitespace-nowrap">
-                      Muddat
-                    </th>
-                    {data.operations.map((op) => (
-                      <th key={op.code} className="border-r border-b border-(--border-strong) px-1.5 py-4 text-center align-middle last:border-r-0">
-                        <span className="leading-snug whitespace-nowrap" title={op.name}>{op.name}</span>
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="bg-(--surface)">
-                  <tr className="bg-(--accent-soft)">
-                    <td className="sticky left-0 z-10 border-r border-b border-(--border-strong) bg-(--accent-soft) px-3 py-3.5" />
-                    <td className="truncate border-r border-b border-(--border-strong) bg-(--accent-soft) py-3.5 pl-3 pr-1 text-xs font-bold tracking-[0.08em] text-(--accent-strong) uppercase">
-                      Jami detallar
-                    </td>
-                    <td className="border-r border-b border-(--border-strong) bg-(--accent-soft)" />
-                    {data.operations.map((op) => (
-                      <td key={op.code} className="border-r border-b border-(--border-strong) px-1.5 py-3.5 text-center align-middle last:border-r-0">
-                        <p className="tabular text-base font-extrabold whitespace-nowrap text-(--accent-strong)">
-                          {totals[op.code] === null
-                            ? "—"
-                            : mode === "foiz"
+                </tr>
+              </thead>
+              <tbody className="bg-(--surface)">
+                <tr className="bg-(--accent-soft)">
+                  <td className="sticky left-0 z-10 border-r border-b border-(--border-strong) bg-(--accent-soft) px-3 py-3.5" />
+                  <td className="truncate border-r border-b border-(--border-strong) bg-(--accent-soft) py-3.5 pl-3 pr-1 text-xs font-bold tracking-[0.08em] text-(--accent-strong) uppercase">
+                    Jami detallar
+                  </td>
+                  <td className="border-r border-b border-(--border-strong) bg-(--accent-soft)" />
+                  {data.operations.map((op) => (
+                    <td key={op.code} className="border-r border-b border-(--border-strong) px-1.5 py-3.5 text-center align-middle last:border-r-0">
+                      <p className="tabular text-base font-extrabold whitespace-nowrap text-(--accent-strong)">
+                        {totals[op.code] === null
+                          ? "—"
+                          : mode === "foiz"
                             ? `${totals[op.code].value}%`
                             : `${totals[op.code].completed}/${totals[op.code].remaining}`}
-                        </p>
-                        {totals[op.code] !== null && displayUnit(op, mode) && (
-                          <p className="mt-0.5 text-[10px] font-semibold tracking-wide text-(--ink-faint) uppercase">{displayUnit(op, mode)}</p>
-                        )}
-                      </td>
-                    ))}
-                  </tr>
-                  {data.rows.length === 0 && (
-                    <tr>
-                      <td colSpan={3 + data.operations.length} className="px-3 py-10">
-                        <EmptyState title="Hozircha faol buyurtmalar yo'q" />
-                      </td>
-                    </tr>
-                  )}
-                  {data.rows.map((row) => (
-                    <tr key={row.order_id} className="border-b border-(--border-strong)">
-                      <td className="sticky left-0 z-10 border-r border-b border-(--border-strong) bg-(--surface) px-3 py-4 text-center align-middle text-sm text-(--ink-soft)">
-                        {row.index}
-                      </td>
-                      <td className="border-r border-b border-(--border-strong) bg-(--surface) py-4 pl-3 pr-1 align-middle">
-                        <p className="flex items-center gap-1.5 overflow-hidden text-sm leading-snug font-semibold whitespace-nowrap" title={row.product_name || "Mahsulot ko'rsatilmagan"}>
-                          <PriorityMark priority={row.priority} portalTarget={containerRef.current} />
-                          <span className="min-w-0 flex-1 truncate">{row.product_name || "Mahsulot ko'rsatilmagan"}</span>
-                        </p>
-                      </td>
-                      <td className="border-r border-b border-(--border-strong) bg-(--surface) px-2 py-4 text-center align-middle text-sm whitespace-nowrap text-(--ink-soft)">
-                        {row.deadline ? format(new Date(row.deadline), "dd.MM.yyyy") : "—"}
-                      </td>
-                      {data.operations.map((op) => {
-                        const cell = row.cells[op.code];
-                        return (
-                          <td
-                            key={op.code}
-                            className={clsx(
-                              "border-r border-b border-(--border-strong) px-1.5 py-2 text-center align-middle last:border-r-0",
-                              cell.status === "completed" && "bg-status-green",
-                              cell.status === "in_progress" && "bg-status-yellow-bg",
-                              cell.status === "pending" && "bg-status-yellow-bg",
-                              cell.status !== "completed" &&
-                                cell.status !== "in_progress" &&
-                                cell.status !== "pending" &&
-                                cell.status !== "not_required" &&
-                                "bg-status-red"
-                            )}
-                          >
-                            {cell.status === "completed" ? (
-                              <div
-                                className="flex min-h-16 flex-col items-center justify-center gap-1"
-                                title={`${formatCell(cell, op, mode)} — ${STATUS_LABEL.completed}`}
-                              >
-                                <CheckCircle2 size={20} className="shrink-0 text-white" strokeWidth={2.25} />
-                                <ProgressBar
-                                  percent={stageProgressPercent(cell, mode)}
-                                  amountLabel={formatCell(cell, op, mode)}
-                                  className="px-1 text-white"
-                                />
-                              </div>
-                            ) : cell.status === "not_required" ? (
-                              <div className="flex min-h-16 flex-col items-center justify-center text-(--ink-faint)">
-                                <span className="text-base">—</span>
-                              </div>
-                            ) : cell.status === "pending" ? (
-                              <div className="flex min-h-16 flex-col items-center justify-center gap-1">
-                                {/* Foiz keeps its original dash-only pending display; only Hajm/Soni show 0/total. */}
-                                <p className="tabular text-base leading-tight font-bold whitespace-nowrap text-status-yellow">
-                                  {mode === "foiz" ? "—" : formatCell(cell, op, mode)}
-                                </p>
-                                <ProgressBar percent={stageProgressPercent(cell, mode)} className="px-1 text-status-yellow" />
-                              </div>
-                            ) : (
-                              <div className="flex min-h-16 flex-col items-center justify-center gap-1">
-                                <p
-                                  className={clsx(
-                                    "tabular text-base leading-tight font-bold whitespace-nowrap",
-                                    cell.status === "in_progress" ? "text-status-yellow" : "text-white"
-                                  )}
-                                >
-                                  {formatCell(cell, op, mode)}
-                                </p>
-                                {cell.status !== "in_progress" && (
-                                  <p className="text-[11px] leading-tight font-semibold text-white/85">{STATUS_LABEL[cell.status]}</p>
-                                )}
-                                <ProgressBar
-                                  percent={stageProgressPercent(cell, mode)}
-                                  className={clsx("px-1", cell.status === "in_progress" ? "text-status-yellow" : "text-white")}
-                                />
-                              </div>
-                            )}
-                          </td>
-                        );
-                      })}
-                    </tr>
+                      </p>
+                      {totals[op.code] !== null && displayUnit(op, mode) && (
+                        <p className="mt-0.5 text-[10px] font-semibold tracking-wide text-(--ink-faint) uppercase">{displayUnit(op, mode)}</p>
+                      )}
+                    </td>
                   ))}
-                </tbody>
+                </tr>
+                {data.rows.length === 0 && (
+                  <tr>
+                    <td colSpan={3 + data.operations.length} className="px-3 py-10">
+                      <EmptyState title="Hozircha faol buyurtmalar yo'q" />
+                    </td>
+                  </tr>
+                )}
+                {data.rows.map((row) => (
+                  <tr key={row.order_id} className="border-b border-(--border-strong)">
+                    <td className="sticky left-0 z-10 border-r border-b border-(--border-strong) bg-(--surface) px-3 py-4 text-center align-middle text-sm text-(--ink-soft)">
+                      {row.index}
+                    </td>
+                    <td className="border-r border-b border-(--border-strong) bg-(--surface) py-4 pl-3 pr-1 align-middle">
+                      <p className="flex items-center gap-1.5 overflow-hidden text-sm leading-snug font-semibold whitespace-nowrap" title={row.product_name || "Mahsulot ko'rsatilmagan"}>
+                        <PriorityMark priority={row.priority} portalTarget={containerRef.current} />
+                        <span className="min-w-0 flex-1 truncate">{row.product_name || "Mahsulot ko'rsatilmagan"}</span>
+                      </p>
+                    </td>
+                    <td className="border-r border-b border-(--border-strong) bg-(--surface) px-2 py-4 text-center align-middle text-sm whitespace-nowrap text-(--ink-soft)">
+                      {row.deadline ? format(new Date(row.deadline), "dd.MM.yyyy") : "—"}
+                    </td>
+                    {data.operations.map((op) => {
+                      const cell = row.cells[op.code];
+                      return (
+                        <td
+                          key={op.code}
+                          className={clsx(
+                            "border-r border-b border-(--border-strong) px-1.5 py-2 text-center align-middle last:border-r-0",
+                            cell.status === "completed" && "bg-status-green",
+                            cell.status === "in_progress" && "bg-status-yellow-bg",
+                            cell.status === "pending" && "bg-status-yellow-bg",
+                            cell.status !== "completed" &&
+                            cell.status !== "in_progress" &&
+                            cell.status !== "pending" &&
+                            cell.status !== "not_required" &&
+                            "bg-status-red"
+                          )}
+                        >
+                          {cell.status === "completed" ? (
+                            <div
+                              className="flex min-h-16 flex-col items-center justify-center gap-1"
+                              title={`${formatCell(cell, op, mode)} — ${STATUS_LABEL.completed}`}
+                            >
+                              <CheckCircle2 size={20} className="shrink-0 text-white" strokeWidth={2.25} />
+                              <ProgressBar
+                                percent={stageProgressPercent(cell, mode)}
+                                amountLabel={formatCell(cell, op, mode)}
+                                className="px-1 text-white"
+                              />
+                            </div>
+                          ) : cell.status === "not_required" ? (
+                            <div className="flex min-h-16 flex-col items-center justify-center text-(--ink-faint)">
+                              <span className="text-base">—</span>
+                            </div>
+                          ) : cell.status === "pending" ? (
+                            <div className="flex min-h-16 flex-col items-center justify-center gap-1">
+                              {/* Foiz keeps its original dash-only pending display; only Hajm/Soni show 0/total. */}
+                              <p className="tabular text-base leading-tight font-bold whitespace-nowrap text-status-yellow">
+                                {mode === "foiz" ? "—" : formatCell(cell, op, mode)}
+                              </p>
+                              <ProgressBar percent={stageProgressPercent(cell, mode)} className="px-1 text-status-yellow" />
+                            </div>
+                          ) : (
+                            <div className="flex min-h-16 flex-col items-center justify-center gap-1">
+                              <p
+                                className={clsx(
+                                  "tabular text-base leading-tight font-bold whitespace-nowrap",
+                                  cell.status === "in_progress" ? "text-status-yellow" : "text-white"
+                                )}
+                              >
+                                {formatCell(cell, op, mode)}
+                              </p>
+                              {cell.status !== "in_progress" && (
+                                <p className="text-[11px] leading-tight font-semibold text-white/85">{STATUS_LABEL[cell.status]}</p>
+                              )}
+                              <ProgressBar
+                                percent={stageProgressPercent(cell, mode)}
+                                className={clsx("px-1", cell.status === "in_progress" ? "text-status-yellow" : "text-white")}
+                              />
+                            </div>
+                          )}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
             </Table>
           )}
         </CardBody>

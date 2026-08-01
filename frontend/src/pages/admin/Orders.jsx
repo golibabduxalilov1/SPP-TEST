@@ -14,8 +14,6 @@ import Badge from "../../components/ui/Badge";
 import Modal from "../../components/ui/Modal";
 import EditOrderModal from "../../components/admin/EditOrderModal";
 import { format } from "date-fns";
-import { useTutorial } from "../../tutorial/TutorialContext";
-import { ordersSteps } from "../../tutorial/content/orders";
 
 const LIFECYCLE_STATUS_TONES = { draft: "blue", approved: "blue", delivered: "green", cancelled: "red" };
 const STAGE_STATUS_TONE = "yellow";
@@ -48,10 +46,7 @@ export default function Orders() {
   const [editingOrder, setEditingOrder] = useState(null);
   const [approvingId, setApprovingId] = useState(null);
   const navigate = useNavigate();
-  const { registerAndAutoStart } = useTutorial();
   const hasRole = useAuthStore((s) => s.hasRole);
-
-  useEffect(() => registerAndAutoStart("orders", ordersSteps), [registerAndAutoStart]);
 
   useEffect(() => {
     adminApi.get("/operations/", { params: { is_active: true } }).then(({ data }) => {

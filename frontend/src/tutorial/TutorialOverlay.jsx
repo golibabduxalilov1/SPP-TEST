@@ -56,7 +56,12 @@ export default function TutorialOverlay() {
       if (!el) {
         attempts += 1;
         if (attempts > MAX_LOOKUP_ATTEMPTS) {
-          if (!cancelled) next();
+          if (!cancelled) {
+            // Last step's target never showed up — nothing left to advance
+            // to, so close cleanly instead of leaving a dangling next().
+            if (stepIndex >= steps.length - 1) finish();
+            else next();
+          }
           return;
         }
         requestAnimationFrame(measure);
@@ -95,6 +100,12 @@ export default function TutorialOverlay() {
     setPlacement({ ...computePlacement(rect, { width: ttRect.width, height: ttRect.height }), ready: true });
   }, [rect]);
 
+  // Every time a step's tooltip becomes visible, hand it keyboard focus so
+  // Escape/Arrow/Enter and Tab work immediately without a manual click.
+  useEffect(() => {
+    if (placement.ready) tooltipRef.current?.focus({ preventScroll: true });
+  }, [placement.ready, stepIndex]);
+
   useEffect(() => {
     if (!isActive) return undefined;
     function onKey(e) {
@@ -103,7 +114,8 @@ export default function TutorialOverlay() {
         skip();
       } else if (e.key === "ArrowRight" || e.key === "Enter") {
         e.preventDefault();
-        next();
+        if (stepIndex >= steps.length - 1) finish();
+        else next();
       } else if (e.key === "ArrowLeft") {
         e.preventDefault();
         prev();
@@ -111,7 +123,7 @@ export default function TutorialOverlay() {
     }
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [isActive, next, prev, skip]);
+  }, [isActive, next, prev, skip, finish, stepIndex, steps.length]);
 
   if (!isActive || !step || !rect) return null;
 
@@ -142,7 +154,8 @@ export default function TutorialOverlay() {
         role="dialog"
         aria-modal="true"
         aria-label={step.title}
-        className="tutorial-tooltip surface-panel fixed w-[92vw] max-w-[340px] rounded-2xl p-5"
+        tabIndex={-1}
+        className="tutorial-tooltip surface-panel fixed w-[92vw] max-w-85 rounded-2xl p-5 outline-none"
         style={tooltipStyle}
       >
         <div className="mb-3 flex items-center justify-between gap-3">

@@ -14,8 +14,6 @@ import Badge from "../../components/ui/Badge";
 import Modal from "../../components/ui/Modal";
 import Toggle from "../../components/ui/Toggle";
 import { Checkbox } from "../../components/ui/Checkbox";
-import { useTutorial } from "../../tutorial/TutorialContext";
-import { employeesSteps } from "../../tutorial/content/employees";
 import { formatUzPhone, normalizeUzPhone } from "../../lib/phone";
 
 const ROLE_OPTIONS = [
@@ -74,9 +72,6 @@ export default function Employees() {
   const [togglingId, setTogglingId] = useState(null);
   const [qrEmployee, setQrEmployee] = useState(null);
   const currentUser = useAuthStore((state) => state.user);
-  const { registerAndAutoStart } = useTutorial();
-
-  useEffect(() => registerAndAutoStart("employees", employeesSteps), [registerAndAutoStart]);
 
   async function load() {
     setLoading(true);

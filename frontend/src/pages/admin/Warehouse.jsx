@@ -8,17 +8,12 @@ import PageHeader from "../../components/ui/PageHeader";
 import { PageLoader } from "../../components/ui/Misc";
 import { StatusBadge } from "../../components/ui/Badge";
 import { format } from "date-fns";
-import { useTutorial } from "../../tutorial/TutorialContext";
-import { warehouseSteps } from "../../tutorial/content/warehouse";
 
 const STATUS_LABELS = { open: "Ochiq", completed: "Yakunlangan", warehouse: "Omborda", delivered: "Topshirildi" };
 
 export default function WarehousePage() {
   const [packages, setPackages] = useState([]);
   const [loading, setLoading] = useState(true);
-  const { registerAndAutoStart } = useTutorial();
-
-  useEffect(() => registerAndAutoStart("warehouse", warehouseSteps), [registerAndAutoStart]);
 
   async function load() {
     setLoading(true);

@@ -1,49 +1,46 @@
-import { createContext, useCallback, useContext, useRef, useState } from "react";
-import { useAuthStore } from "../store/authStore";
-import { isTutorialSeen, markTutorialSeen } from "./storage";
-
-const AUTO_START_DELAY = 400;
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import { useLocation } from "react-router-dom";
 
 const TutorialCtx = createContext(null);
 
 export function TutorialProvider({ children }) {
   const [state, setState] = useState({ pageKey: null, steps: [], stepIndex: 0 });
-  const stateRef = useRef(state);
-  stateRef.current = state;
-  const userId = useAuthStore((s) => s.user?.id ?? "anon");
+  const triggerRef = useRef(null);
+  const location = useLocation();
+  const pathRef = useRef(location.pathname);
 
-  const close = useCallback(() => {
+  const reset = useCallback(() => {
     setState({ pageKey: null, steps: [], stepIndex: 0 });
   }, []);
 
+  // Closing must hand focus back to whatever triggered the tutorial (the
+  // Tutorial tile button) — never leaves focus stranded on a removed element.
+  const close = useCallback(() => {
+    reset();
+    const trigger = triggerRef.current;
+    requestAnimationFrame(() => {
+      if (trigger && document.contains(trigger)) trigger.focus();
+    });
+  }, [reset]);
+
   const start = useCallback((pageKey, steps) => {
     if (!steps?.length) return;
+    triggerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     setState({ pageKey, steps, stepIndex: 0 });
   }, []);
 
-  const registerAndAutoStart = useCallback(
-    (pageKey, steps) => {
-      if (!steps?.length) return undefined;
-      // A previous page's tutorial (never explicitly closed, e.g. navigated away via the nav
-      // menu instead of Skip/Finish) must not linger once a different page has mounted.
-      if (stateRef.current.pageKey && stateRef.current.pageKey !== pageKey) {
-        close();
-      }
-      const id = setTimeout(() => {
-        if (stateRef.current.pageKey === pageKey) return;
-        if (isTutorialSeen(userId, pageKey)) return;
-        markTutorialSeen(userId, pageKey);
-        start(pageKey, steps);
-      }, AUTO_START_DELAY);
-      return () => clearTimeout(id);
-    },
-    [userId, start, close]
-  );
+  // A route change must never leave a previous page's tutorial lingering on
+  // the new page — this is a silent reset, not a user-triggered close, so it
+  // skips the focus-restore side effect.
+  useEffect(() => {
+    if (pathRef.current === location.pathname) return;
+    pathRef.current = location.pathname;
+    reset();
+  }, [location.pathname, reset]);
 
   const next = useCallback(() => {
     setState((s) => {
-      if (!s.pageKey) return s;
-      if (s.stepIndex >= s.steps.length - 1) return { pageKey: null, steps: [], stepIndex: 0 };
+      if (!s.pageKey || s.stepIndex >= s.steps.length - 1) return s;
       return { ...s, stepIndex: s.stepIndex + 1 };
     });
   }, []);
@@ -58,9 +55,9 @@ export function TutorialProvider({ children }) {
     steps: state.steps,
     stepIndex: state.stepIndex,
     start,
-    registerAndAutoStart,
     next,
     prev,
+    close,
     skip: close,
     finish: close,
   };

@@ -9,8 +9,6 @@ import { EmptyState, PageLoader } from "../../components/ui/Misc";
 import Badge, { StatusBadge } from "../../components/ui/Badge";
 import SegmentedControl from "../../components/ui/SegmentedControl";
 import { format } from "date-fns";
-import { useTutorial } from "../../tutorial/TutorialContext";
-import { conflictsSteps } from "../../tutorial/content/conflicts";
 
 const FILTER_OPTIONS = [
   { value: "pending", label: "Kutilmoqda" },
@@ -29,9 +27,6 @@ export default function Conflicts() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [filter, setFilter] = useState("pending");
-  const { registerAndAutoStart } = useTutorial();
-
-  useEffect(() => registerAndAutoStart("conflicts", conflictsSteps), [registerAndAutoStart]);
 
   async function load() {
     setLoading(true);

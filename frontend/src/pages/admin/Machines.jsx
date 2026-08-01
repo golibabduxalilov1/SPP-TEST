@@ -12,7 +12,6 @@ import { PageLoader } from "../../components/ui/Misc";
 import Badge, { StatusBadge } from "../../components/ui/Badge";
 import Modal from "../../components/ui/Modal";
 import { useTutorial } from "../../tutorial/TutorialContext";
-import { machinesSteps } from "../../tutorial/content/machines";
 import { measureUnitLabel } from "../../lib/units";
 
 const MACHINE_STATUS_LABELS = { active: "Faol", inactive: "Nofaol", maintenance: "Ta'mirda", broken: "Buzilgan" };
@@ -71,10 +70,11 @@ export default function Machines() {
   const [machineModalOpen, setMachineModalOpen] = useState(false);
   const [editingMachine, setEditingMachine] = useState(null);
   const [deletingMachine, setDeletingMachine] = useState(null);
-  const { registerAndAutoStart, isActive, pageKey, steps, stepIndex } = useTutorial();
+  const { isActive, pageKey, steps, stepIndex } = useTutorial();
 
-  useEffect(() => registerAndAutoStart("machines", machinesSteps), [registerAndAutoStart]);
-
+  // Tutorial can request a specific tab (e.g. "Dastgohlar") via each step's
+  // `tab` field — this keeps that in sync while the tutorial is running on
+  // this page. It only reacts to a tutorial already started via the button.
   useEffect(() => {
     if (!isActive || pageKey !== "machines") return;
     const step = steps[stepIndex];

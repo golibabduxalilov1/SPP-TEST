@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Printer, Search } from "lucide-react";
 import toast from "react-hot-toast";
 import { adminApi } from "../../api/client";
@@ -9,8 +9,6 @@ import PageHeader from "../../components/ui/PageHeader";
 import { Input, Select, Field } from "../../components/ui/Input";
 import { Checkbox } from "../../components/ui/Checkbox";
 import { EmptyState } from "../../components/ui/Misc";
-import { useTutorial } from "../../tutorial/TutorialContext";
-import { labelsSteps } from "../../tutorial/content/labels";
 
 export default function Labels() {
   const [search, setSearch] = useState("");
@@ -19,9 +17,6 @@ export default function Labels() {
   const [width, setWidth] = useState(70);
   const [height, setHeight] = useState(50);
   const [loading, setLoading] = useState(false);
-  const { registerAndAutoStart } = useTutorial();
-
-  useEffect(() => registerAndAutoStart("labels", labelsSteps), [registerAndAutoStart]);
 
   async function find() {
     if (!search) return;
