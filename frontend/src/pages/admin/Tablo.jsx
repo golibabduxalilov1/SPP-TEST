@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import clsx from "clsx";
 import { Link } from "react-router-dom";
 import { CheckCircle2, CircleAlert, Clock, Maximize2, Minimize2, Table2, Terminal, Zap } from "lucide-react";
@@ -13,31 +14,125 @@ import SegmentedControl from "../../components/ui/SegmentedControl";
 import { format } from "date-fns";
 import { useTutorial } from "../../tutorial/TutorialContext";
 import { tabloSteps } from "../../tutorial/content/tablo";
-import { PRIORITY_LABELS } from "../../constants/labels";
 
-// Compact priority marker shown left of the product name. "normal" renders nothing.
-function PriorityMark({ priority }) {
-  if (priority === "urgent") {
-    return (
-      <Zap
-        size={13}
-        className="shrink-0 fill-status-red text-status-red"
-        aria-label={PRIORITY_LABELS.urgent}
-        title={PRIORITY_LABELS.urgent}
-      />
-    );
-  }
-  if (priority === "high") {
-    return (
-      <CircleAlert
-        size={13}
-        className="shrink-0 text-status-orange"
-        aria-label={PRIORITY_LABELS.high}
-        title={PRIORITY_LABELS.high}
-      />
-    );
-  }
-  return null;
+// Icon + label for each priority. "normal" renders nothing.
+const PRIORITY_ICONS = {
+  high: { Icon: Zap, label: "Tezkor", className: "fill-status-orange text-status-orange" },
+  urgent: { Icon: CircleAlert, label: "Shoshilinch", className: "text-status-red" },
+};
+
+// Compact priority marker shown left of the product name. Click/tap toggles a
+// tooltip (desktop also gets hover/focus); portals into `portalTarget` and
+// positions itself via getBoundingClientRect so it escapes the row's
+// overflow-hidden/truncate ancestors and the table's horizontal scroll clip.
+function PriorityMark({ priority, portalTarget }) {
+  const meta = PRIORITY_ICONS[priority];
+  const [open, setOpen] = useState(false);
+  const [coords, setCoords] = useState(null);
+  const pinnedRef = useRef(false);
+  const buttonRef = useRef(null);
+  const tooltipRef = useRef(null);
+  const tooltipId = useId();
+
+  const close = () => {
+    pinnedRef.current = false;
+    setOpen(false);
+  };
+
+  useLayoutEffect(() => {
+    if (!open || !buttonRef.current) return;
+    const place = () => {
+      const rect = buttonRef.current.getBoundingClientRect();
+      const tipHeight = tooltipRef.current?.offsetHeight ?? 28;
+      const gap = 6;
+      const above = rect.top - tipHeight - gap >= 0;
+      setCoords({
+        left: rect.left + rect.width / 2,
+        top: above ? rect.top - gap : rect.bottom + gap,
+        placement: above ? "above" : "below",
+      });
+    };
+    place();
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("resize", close);
+    return () => {
+      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("resize", close);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onOutside = (event) => {
+      if (buttonRef.current && !buttonRef.current.contains(event.target)) close();
+    };
+    document.addEventListener("mousedown", onOutside);
+    document.addEventListener("touchstart", onOutside);
+    return () => {
+      document.removeEventListener("mousedown", onOutside);
+      document.removeEventListener("touchstart", onOutside);
+    };
+  }, [open]);
+
+  if (!meta) return null;
+  const { Icon, label, className } = meta;
+
+  return (
+    <>
+      <button
+        type="button"
+        ref={buttonRef}
+        aria-label={label}
+        aria-describedby={open ? tooltipId : undefined}
+        className="inline-flex shrink-0 cursor-pointer items-center justify-center rounded-sm leading-none outline-none focus-visible:ring-2 focus-visible:ring-(--accent)"
+        onClick={(event) => {
+          event.stopPropagation();
+          if (pinnedRef.current) {
+            close();
+          } else {
+            pinnedRef.current = true;
+            setOpen(true);
+          }
+        }}
+        onMouseEnter={() => setOpen(true)}
+        onMouseLeave={() => {
+          if (!pinnedRef.current) setOpen(false);
+        }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => {
+          if (!pinnedRef.current) setOpen(false);
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Escape" && open) {
+            event.stopPropagation();
+            close();
+          }
+        }}
+      >
+        <Icon size={13} className={className} aria-hidden="true" />
+      </button>
+      {open &&
+        coords &&
+        createPortal(
+          <span
+            ref={tooltipRef}
+            id={tooltipId}
+            role="tooltip"
+            className="tooltip-fade-in pointer-events-none fixed rounded-md bg-(--ink) px-2 py-1 text-xs font-medium whitespace-nowrap text-white shadow-lg"
+            style={{
+              left: coords.left,
+              top: coords.top,
+              zIndex: 9999,
+              transform: `translate(-50%, ${coords.placement === "above" ? "-100%" : "0"})`,
+            }}
+          >
+            {label}
+          </span>,
+          portalTarget || document.body
+        )}
+    </>
+  );
 }
 
 // Pixel widths for the sticky/frozen "№", product and deadline columns.
@@ -48,7 +143,6 @@ const COL_W = { index: 64, product: 190, deadline: 96 };
 const MODES = [
   { key: "hajm", label: "Hajm" },
   { key: "soni", label: "Soni" },
-  { key: "foiz", label: "Foiz" },
 ];
 
 const STATUS_LABEL = {
@@ -353,7 +447,7 @@ export default function Tablo() {
                       </td>
                       <td className="border-r border-b border-(--border-strong) bg-(--surface) py-4 pl-3 pr-1 align-middle">
                         <p className="flex items-center gap-1.5 overflow-hidden text-sm leading-snug font-semibold whitespace-nowrap" title={row.product_name || "Mahsulot ko'rsatilmagan"}>
-                          <PriorityMark priority={row.priority} />
+                          <PriorityMark priority={row.priority} portalTarget={containerRef.current} />
                           <span className="min-w-0 flex-1 truncate">{row.product_name || "Mahsulot ko'rsatilmagan"}</span>
                         </p>
                       </td>
@@ -399,7 +493,6 @@ export default function Tablo() {
                                 <p className="tabular text-base leading-tight font-bold whitespace-nowrap text-status-yellow">
                                   {mode === "foiz" ? "—" : formatCell(cell, op, mode)}
                                 </p>
-                                <span className="text-[11px] leading-tight font-semibold text-status-yellow/85">{STATUS_LABEL.pending}</span>
                                 <ProgressBar percent={stageProgressPercent(cell, mode)} className="px-1 text-status-yellow" />
                               </div>
                             ) : (
@@ -412,14 +505,9 @@ export default function Tablo() {
                                 >
                                   {formatCell(cell, op, mode)}
                                 </p>
-                                <p
-                                  className={clsx(
-                                    "text-[11px] leading-tight font-semibold",
-                                    cell.status === "in_progress" ? "text-status-yellow/85" : "text-white/85"
-                                  )}
-                                >
-                                  {STATUS_LABEL[cell.status]}
-                                </p>
+                                {cell.status !== "in_progress" && (
+                                  <p className="text-[11px] leading-tight font-semibold text-white/85">{STATUS_LABEL[cell.status]}</p>
+                                )}
                                 <ProgressBar
                                   percent={stageProgressPercent(cell, mode)}
                                   className={clsx("px-1", cell.status === "in_progress" ? "text-status-yellow" : "text-white")}

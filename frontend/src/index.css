@@ -251,6 +251,12 @@ h1, h2, h3 {
     100% { transform: scale(1); opacity: 1; }
   }
 
+  .tooltip-fade-in { animation: tooltip-fade-in 100ms ease-out; }
+  @keyframes tooltip-fade-in {
+    0% { opacity: 0; }
+    100% { opacity: 1; }
+  }
+
   .scrollbar-thin::-webkit-scrollbar { width: 8px; height: 8px; }
   .scrollbar-thin::-webkit-scrollbar-thumb {
     background-color: rgb(107 68 35 / 0.35);
