@@ -41,7 +41,7 @@ function PriorityMark({ priority }) {
 
 // Generous pixel widths for the sticky/frozen "№" column and each other
 // column — wide enough that cell contents never wrap awkwardly or feel cramped.
-const COL_W = { index: 64, product: 190, deadline: 148, op: 168 };
+const COL_W = { index: 64, product: 190, deadline: 96, op: 168 };
 
 const MODES = [
   { key: "hajm", label: "Hajm" },
@@ -298,7 +298,7 @@ export default function Tablo() {
                     <th className="border-r border-b border-(--border-strong) bg-(--surface-muted) py-4 pl-3 pr-1 text-left align-middle">
                       Mahsulot turi
                     </th>
-                    <th className="border-r border-b border-(--border-strong) bg-(--surface-muted) py-4 pl-1 pr-3 text-center align-middle whitespace-nowrap">
+                    <th className="border-r border-b border-(--border-strong) bg-(--surface-muted) px-2 py-4 text-center align-middle whitespace-nowrap">
                       Muddat
                     </th>
                     {data.operations.map((op) => (
@@ -348,7 +348,7 @@ export default function Tablo() {
                           <span>{row.product_name || "Mahsulot ko'rsatilmagan"}</span>
                         </p>
                       </td>
-                      <td className="border-r border-b border-(--border-strong) bg-(--surface) py-4 pl-1 pr-3 text-center align-middle text-sm whitespace-nowrap text-(--ink-soft)">
+                      <td className="border-r border-b border-(--border-strong) bg-(--surface) px-2 py-4 text-center align-middle text-sm whitespace-nowrap text-(--ink-soft)">
                         {row.deadline ? format(new Date(row.deadline), "dd.MM.yyyy") : "—"}
                       </td>
                       {data.operations.map((op) => {
