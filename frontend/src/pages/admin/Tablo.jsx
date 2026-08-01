@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import clsx from "clsx";
 import { Link } from "react-router-dom";
-import { CheckCircle2, CircleAlert, Clock, Table2, Terminal, Zap } from "lucide-react";
+import { CheckCircle2, CircleAlert, Clock, Maximize2, Minimize2, Table2, Terminal, Zap } from "lucide-react";
 import toast from "react-hot-toast";
 import { adminApi } from "../../api/client";
 import { Card, CardBody } from "../../components/ui/Card";
@@ -120,15 +120,53 @@ function useLiveClock() {
   return now;
 }
 
+// Fullscreen isn't available in every browser (notably iOS Safari) — checked
+// once at module load so the button can hide itself instead of dead-clicking.
+const FULLSCREEN_SUPPORTED =
+  typeof document !== "undefined" && Boolean(document.fullscreenEnabled || document.webkitFullscreenEnabled);
+
 export default function Tablo() {
   const [mode, setMode] = useState("hajm");
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const containerRef = useRef(null);
   const { registerAndAutoStart } = useTutorial();
   const now = useLiveClock();
 
   useEffect(() => registerAndAutoStart("tablo", tabloSteps), [registerAndAutoStart]);
+
+  // Syncs state on Esc, on browser-chrome exits, and after our own toggle —
+  // covers every way fullscreen can end, not just the button.
+  useEffect(() => {
+    function syncFullscreen() {
+      const fsEl = document.fullscreenElement || document.webkitFullscreenElement;
+      setIsFullscreen(Boolean(fsEl) && fsEl === containerRef.current);
+    }
+    document.addEventListener("fullscreenchange", syncFullscreen);
+    document.addEventListener("webkitfullscreenchange", syncFullscreen);
+    return () => {
+      document.removeEventListener("fullscreenchange", syncFullscreen);
+      document.removeEventListener("webkitfullscreenchange", syncFullscreen);
+    };
+  }, []);
+
+  async function toggleFullscreen() {
+    const el = containerRef.current;
+    if (!el) return;
+    try {
+      if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+        const request = el.requestFullscreen || el.webkitRequestFullscreen;
+        await request?.call(el);
+      } else {
+        const exit = document.exitFullscreen || document.webkitExitFullscreen;
+        await exit?.call(document);
+      }
+    } catch {
+      toast.error("To'liq ekran rejimiga o'tishda xatolik yuz berdi");
+    }
+  }
 
   async function load(m, showLoader = true) {
     if (showLoader) setLoading(true);
@@ -154,9 +192,15 @@ export default function Tablo() {
   const activeOrders = data?.rows?.filter((row) => row.stage_status === "in_progress").length ?? 0;
 
   return (
-    <div className="space-y-6">
+    <div
+      ref={containerRef}
+      className={clsx(
+        "space-y-6",
+        isFullscreen && "flex h-dvh! w-dvw! flex-col overflow-hidden bg-(--canvas) p-4 sm:p-6"
+      )}
+    >
       {/* Kiosk-style header panel — dark walnut shell, mirrors TerminalLayout's header idiom */}
-      <div className="brand-shell relative isolate overflow-hidden rounded-2xl border border-white/8 px-4 py-4 elevation-lg sm:px-6">
+      <div className="brand-shell relative isolate shrink-0 overflow-hidden rounded-2xl border border-white/8 px-4 py-4 elevation-lg sm:px-6">
         <div className="relative z-1 grid grid-cols-1 items-center gap-4 sm:grid-cols-[minmax(0,1fr)_auto] xl:grid-cols-[minmax(13rem,1fr)_auto_auto]">
           <div className="flex min-w-0 items-center gap-3">
             <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[linear-gradient(135deg,var(--accent-2-bright),var(--accent-2))] text-[#2A1D14] shadow-(--shadow-accent)">
@@ -202,6 +246,26 @@ export default function Tablo() {
             >
               <Terminal size={14} /> Terminal
             </Button>
+            {FULLSCREEN_SUPPORTED && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                magnetic={false}
+                onClick={toggleFullscreen}
+                aria-pressed={isFullscreen}
+                aria-label={isFullscreen ? "To'liq ekrandan chiqish" : "To'liq ekran rejimiga o'tish"}
+                className={clsx(
+                  "min-h-11! rounded-lg! text-sm! font-medium!",
+                  isFullscreen
+                    ? "border-transparent! bg-[linear-gradient(135deg,var(--accent-2-bright),var(--accent-2))]! text-[#2A1D14]! hover:brightness-105!"
+                    : "border-white/15! bg-white/10! text-white/80! hover:bg-white/15! hover:text-white!"
+                )}
+              >
+                {isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+                {isFullscreen ? "Chiqish" : "To'liq ekran"}
+              </Button>
+            )}
             <span className="tabular flex min-h-11 items-center rounded-lg border border-white/12 bg-white/8 px-3 text-sm font-semibold text-white/85">
               {format(now, "HH:mm:ss")}
             </span>
@@ -209,14 +273,14 @@ export default function Tablo() {
         </div>
       </div>
 
-      <Card data-tutorial="tablo-legend">
-        <CardBody data-tutorial="tablo-table" className="p-0">
+      <Card data-tutorial="tablo-legend" className={clsx(isFullscreen && "flex min-h-0 flex-1 flex-col overflow-hidden")}>
+        <CardBody data-tutorial="tablo-table" className={clsx("p-0", isFullscreen && "flex min-h-0 flex-1 flex-col")}>
           {loading || !data ? (
             <PageLoader />
           ) : (
             <Table
               className="table-fixed! border-collapse text-sm"
-              containerClassName="rounded-2xl"
+              containerClassName={clsx("rounded-2xl", isFullscreen && "min-h-0 flex-1 overflow-y-auto")}
               style={{ width: COL_W.index + COL_W.product + COL_W.deadline + data.operations.length * COL_W.op }}
               label="Ishlab chiqarish tablosi"
             >
