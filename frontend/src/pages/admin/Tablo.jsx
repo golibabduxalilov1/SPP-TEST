@@ -378,7 +378,7 @@ export default function Tablo() {
             <PageLoader />
           ) : (
             <Table
-              className="w-auto! border-collapse text-sm"
+              className={clsx("border-collapse text-sm", isFullscreen ? "w-full!" : "w-auto!")}
               containerClassName={clsx("rounded-2xl", isFullscreen && "min-h-0 flex-1 overflow-y-auto")}
               label="Ishlab chiqarish tablosi"
             >
