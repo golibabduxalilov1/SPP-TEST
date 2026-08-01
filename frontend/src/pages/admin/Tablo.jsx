@@ -4,7 +4,6 @@ import { Link } from "react-router-dom";
 import { CheckCircle2, CircleAlert, Clock, Table2, Terminal, Zap } from "lucide-react";
 import toast from "react-hot-toast";
 import { adminApi } from "../../api/client";
-import { useAuthStore } from "../../store/authStore";
 import { Card, CardBody } from "../../components/ui/Card";
 import { Table } from "../../components/ui/Table";
 import Button from "../../components/ui/Button";
@@ -40,10 +39,9 @@ function PriorityMark({ priority }) {
   return null;
 }
 
-// Fixed pixel widths for the sticky/frozen columns and each process column —
-// COL_LEFT offsets are derived from COL_W so sticky `left` values always match.
-const COL_W = { index: 48, product: 200, deadline: 120, op: 140 };
-const COL_LEFT = { product: COL_W.index, deadline: COL_W.index + COL_W.product };
+// Generous pixel widths for the sticky/frozen "№" column and each other
+// column — wide enough that cell contents never wrap awkwardly or feel cramped.
+const COL_W = { index: 64, product: 288, deadline: 148, op: 168 };
 
 const MODES = [
   { key: "hajm", label: "Hajm" },
@@ -58,7 +56,16 @@ const STATUS_LABEL = {
   blocked: "Bloklangan",
 };
 
-const COMPLETE_STAGE_ROLES = ["super_admin", "admin", "director", "manager", "master", "technologist"];
+// Tablo-only display shortening — full unit words take too much room in a
+// dense cell. Keyed by measure_unit (see backend/manufacturing/units.py
+// MEASURE_UNIT_CHOICES); anything not listed here falls back to unit_label
+// as-is so a newly added unit still renders instead of disappearing.
+const UNIT_ABBR = {
+  meter: "m", // chiziqli metr
+  m2: "m²", // yuza (kvadrat metr) — already short, kept for clarity
+  package: "qad.", // qadoq
+  piece: "dona", // no shorter standard form without losing clarity
+};
 
 // Mirrors backend/core/tablo.py::_stage_value — Hajm shows each stage's own
 // unit (from its measure_unit, via the API's unit_label), Soni is always
@@ -66,7 +73,7 @@ const COMPLETE_STAGE_ROLES = ["super_admin", "admin", "director", "manager", "ma
 function displayUnit(op, mode) {
   if (mode === "foiz") return null;
   if (mode === "soni") return "dona";
-  return op.unit_label;
+  return UNIT_ABBR[op.measure_unit] || op.unit_label;
 }
 
 // Every non-Foiz cell is shown as "Bajarilgan/Qolgan" (completed/remaining),
@@ -118,16 +125,10 @@ export default function Tablo() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState(null);
-  const [completingId, setCompletingId] = useState(null);
-  const user = useAuthStore((state) => state.user);
   const { registerAndAutoStart } = useTutorial();
   const now = useLiveClock();
 
   useEffect(() => registerAndAutoStart("tablo", tabloSteps), [registerAndAutoStart]);
-
-  const canCompleteStage = Boolean(
-    user?.is_superuser || user?.role === "super_admin" || COMPLETE_STAGE_ROLES.includes(user?.role)
-  );
 
   async function load(m, showLoader = true) {
     if (showLoader) setLoading(true);
@@ -139,23 +140,6 @@ export default function Tablo() {
       if (showLoader) toast.error(error.response?.data?.detail || "Tabloni yuklashda xatolik yuz berdi");
     } finally {
       if (showLoader) setLoading(false);
-    }
-  }
-
-  async function completeStage(row) {
-    setCompletingId(row.order_id);
-    try {
-      const { data: order } = await adminApi.post(`/orders/${row.order_id}/complete-current-stage/`);
-      toast.success(
-        order.current_stage_name
-          ? `Keyingi bosqich: ${order.current_stage_name}`
-          : `#${row.order_no} ishlab chiqarishi tugallandi`
-      );
-      await load(mode, false);
-    } catch (error) {
-      toast.error(error.response?.data?.detail || "Bosqichni yakunlashda xatolik yuz berdi");
-    } finally {
-      setCompletingId(null);
     }
   }
 
@@ -244,44 +228,32 @@ export default function Tablo() {
                     <col key={op.code} style={{ width: COL_W.op }} />
                   ))}
                 </colgroup>
-                <thead className="sticky top-0 z-20 bg-(--surface-muted) text-[11px] font-semibold tracking-wide text-(--ink-soft) uppercase">
+                <thead className="sticky top-0 z-20 bg-(--surface-muted) text-xs font-bold tracking-[0.08em] text-(--ink-soft) uppercase">
                   <tr>
-                    <th className="sticky left-0 z-30 border-r border-b border-(--border-subtle) bg-(--surface-muted) px-2 py-2 text-center align-middle">№</th>
-                    <th
-                      className="sticky z-30 border-r border-b border-(--border-subtle) bg-(--surface-muted) px-3 py-2 text-left align-middle"
-                      style={{ left: COL_LEFT.product }}
-                    >
+                    <th className="sticky left-0 z-30 border-r border-b border-(--border-strong) bg-(--surface-muted) px-3 py-4 text-center align-middle">№</th>
+                    <th className="border-r border-b border-(--border-strong) bg-(--surface-muted) px-4 py-4 text-left align-middle">
                       Mahsulot turi
                     </th>
-                    <th
-                      className="sticky z-30 border-r border-b border-(--border) bg-(--surface-muted) px-2 py-2 text-center align-middle shadow-[2px_0_4px_-2px_rgba(0,0,0,0.08)]"
-                      style={{ left: COL_LEFT.deadline }}
-                    >
+                    <th className="border-r border-b border-(--border-strong) bg-(--surface-muted) px-3 py-4 text-center align-middle whitespace-nowrap">
                       Muddat
                     </th>
                     {data.operations.map((op) => (
-                      <th key={op.code} className="border-r border-b border-(--border-subtle) px-2 py-2 text-center align-middle last:border-r-0">
-                        <span className="line-clamp-2 leading-tight" title={op.name}>{op.name}</span>
+                      <th key={op.code} className="border-r border-b border-(--border-strong) px-3 py-4 text-center align-middle last:border-r-0">
+                        <span className="line-clamp-2 leading-snug" title={op.name}>{op.name}</span>
                       </th>
                     ))}
                   </tr>
                 </thead>
                 <tbody className="bg-(--surface)">
                   <tr className="bg-(--accent-soft)">
-                    <td className="sticky left-0 z-10 border-r border-b border-(--border-subtle) bg-(--accent-soft) px-2 py-2" />
-                    <td
-                      className="sticky z-10 truncate border-r border-b border-(--border-subtle) bg-(--accent-soft) px-3 py-2 text-xs font-semibold tracking-wide text-(--accent-strong) uppercase"
-                      style={{ left: COL_LEFT.product }}
-                    >
+                    <td className="sticky left-0 z-10 border-r border-b border-(--border-strong) bg-(--accent-soft) px-3 py-3.5" />
+                    <td className="truncate border-r border-b border-(--border-strong) bg-(--accent-soft) px-4 py-3.5 text-xs font-bold tracking-[0.08em] text-(--accent-strong) uppercase">
                       Jami detallar
                     </td>
-                    <td
-                      className="sticky z-10 border-r border-b border-(--border) bg-(--accent-soft) shadow-[2px_0_4px_-2px_rgba(0,0,0,0.08)]"
-                      style={{ left: COL_LEFT.deadline }}
-                    />
+                    <td className="border-r border-b border-(--border-strong) bg-(--accent-soft)" />
                     {data.operations.map((op) => (
-                      <td key={op.code} className="border-r border-b border-(--border-subtle) px-2 py-2 text-center last:border-r-0">
-                        <p className="tabular text-sm font-bold whitespace-nowrap text-(--accent-strong)">
+                      <td key={op.code} className="border-r border-b border-(--border-strong) px-3 py-3.5 text-center align-middle last:border-r-0">
+                        <p className="tabular text-base font-extrabold whitespace-nowrap text-(--accent-strong)">
                           {totals[op.code] === null
                             ? "—"
                             : mode === "foiz"
@@ -289,7 +261,7 @@ export default function Tablo() {
                             : `${totals[op.code].completed}/${totals[op.code].remaining}`}
                         </p>
                         {totals[op.code] !== null && displayUnit(op, mode) && (
-                          <p className="text-[10px] font-medium text-(--ink-faint)">{displayUnit(op, mode)}</p>
+                          <p className="mt-0.5 text-[10px] font-semibold tracking-wide text-(--ink-faint) uppercase">{displayUnit(op, mode)}</p>
                         )}
                       </td>
                     ))}
@@ -302,70 +274,73 @@ export default function Tablo() {
                     </tr>
                   )}
                   {data.rows.map((row) => (
-                    <tr key={row.order_id} className="group border-b border-(--border-subtle) transition-colors hover:bg-(--accent-soft)">
-                      <td className="sticky left-0 z-10 border-r border-b border-(--border-subtle) bg-(--surface) px-2 py-2 text-center text-xs text-(--ink-soft) group-hover:bg-(--accent-soft)">
+                    <tr key={row.order_id} className="border-b border-(--border-strong)">
+                      <td className="sticky left-0 z-10 border-r border-b border-(--border-strong) bg-(--surface) px-3 py-4 text-center align-middle text-sm text-(--ink-soft)">
                         {row.index}
                       </td>
-                      <td
-                        className="sticky z-10 border-r border-b border-(--border-subtle) bg-(--surface) px-3 py-2 group-hover:bg-(--accent-soft)"
-                        style={{ left: COL_LEFT.product }}
-                      >
-                        <p className="flex items-center gap-1 truncate text-sm font-semibold" title={row.product_name || "Mahsulot ko'rsatilmagan"}>
+                      <td className="border-r border-b border-(--border-strong) bg-(--surface) px-4 py-4 align-middle">
+                        <p className="flex items-center gap-1.5 text-sm leading-snug font-semibold text-wrap" title={row.product_name || "Mahsulot ko'rsatilmagan"}>
                           <PriorityMark priority={row.priority} />
-                          <span className="truncate">{row.product_name || "Mahsulot ko'rsatilmagan"}</span>
+                          <span>{row.product_name || "Mahsulot ko'rsatilmagan"}</span>
                         </p>
                       </td>
-                      <td
-                        className="sticky z-10 truncate border-r border-b border-(--border) bg-(--surface) px-2 py-2 text-center text-xs text-(--ink-soft) shadow-[2px_0_4px_-2px_rgba(0,0,0,0.08)] group-hover:bg-(--accent-soft)"
-                        style={{ left: COL_LEFT.deadline }}
-                      >
+                      <td className="border-r border-b border-(--border-strong) bg-(--surface) px-3 py-4 text-center align-middle text-sm whitespace-nowrap text-(--ink-soft)">
                         {row.deadline ? format(new Date(row.deadline), "dd.MM.yyyy") : "—"}
                       </td>
                       {data.operations.map((op) => {
                         const cell = row.cells[op.code];
                         return (
-                          <td key={op.code} className="border-r border-b border-(--border-subtle) px-1.5 py-1.5 text-center align-middle last:border-r-0">
+                          <td
+                            key={op.code}
+                            className={clsx(
+                              "border-r border-b border-(--border-strong) p-2 text-center align-middle last:border-r-0",
+                              cell.status === "completed" && "bg-status-green",
+                              cell.status === "in_progress" && "bg-status-yellow-bg",
+                              cell.status === "pending" && "bg-status-yellow-bg",
+                              cell.status !== "completed" &&
+                                cell.status !== "in_progress" &&
+                                cell.status !== "pending" &&
+                                cell.status !== "not_required" &&
+                                "bg-status-red"
+                            )}
+                          >
                             {cell.status === "completed" ? (
-                              <div className="flex min-h-11 flex-col items-center justify-center gap-0.5 border-l-2 border-status-green pl-1.5">
-                                <p className="tabular flex items-center gap-1 text-sm font-bold whitespace-nowrap text-status-green">
-                                  <CheckCircle2 size={13} className="shrink-0" />
-                                  {formatCell(cell, op, mode)}
-                                </p>
-                                <p className="text-[10px] font-medium text-status-green/75">{STATUS_LABEL.completed}</p>
+                              <div
+                                className="flex min-h-16 flex-col items-center justify-center gap-1"
+                                title={`${formatCell(cell, op, mode)} — ${STATUS_LABEL.completed}`}
+                              >
+                                <CheckCircle2 size={20} className="shrink-0 text-white" strokeWidth={2.25} />
                               </div>
                             ) : cell.status === "not_required" ? (
-                              <div className="flex min-h-11 flex-col items-center justify-center text-(--ink-faint)">
-                                <span className="text-sm">—</span>
+                              <div className="flex min-h-16 flex-col items-center justify-center text-(--ink-faint)">
+                                <span className="text-base">—</span>
                               </div>
                             ) : cell.status === "pending" ? (
-                              <div className="flex min-h-11 flex-col items-center justify-center gap-0.5 text-(--ink-faint)">
+                              <div className="flex min-h-16 flex-col items-center justify-center gap-1">
                                 {/* Foiz keeps its original dash-only pending display; only Hajm/Soni show 0/total. */}
-                                <p className="tabular text-sm font-semibold whitespace-nowrap">{mode === "foiz" ? "—" : formatCell(cell, op, mode)}</p>
-                                <span className="text-[10px] font-medium">{STATUS_LABEL.pending}</span>
+                                <p className="tabular text-base leading-tight font-bold whitespace-nowrap text-status-yellow">
+                                  {mode === "foiz" ? "—" : formatCell(cell, op, mode)}
+                                </p>
+                                <span className="text-[11px] leading-tight font-semibold text-status-yellow/85">{STATUS_LABEL.pending}</span>
                               </div>
                             ) : (
-                              <div
-                                className={clsx(
-                                  "flex min-h-11 flex-col items-center justify-center gap-0.5 border-l-2 pl-1.5",
-                                  cell.status === "in_progress" ? "border-status-yellow" : "border-status-red"
-                                )}
-                              >
-                                <p className={clsx("tabular text-sm font-bold whitespace-nowrap", cell.status === "in_progress" ? "text-status-yellow" : "text-status-red")}>
+                              <div className="flex min-h-16 flex-col items-center justify-center gap-1">
+                                <p
+                                  className={clsx(
+                                    "tabular text-base leading-tight font-bold whitespace-nowrap",
+                                    cell.status === "in_progress" ? "text-status-yellow" : "text-white"
+                                  )}
+                                >
                                   {formatCell(cell, op, mode)}
                                 </p>
-                                <p className={clsx("text-[10px] font-medium opacity-70", cell.status === "in_progress" ? "text-status-yellow" : "text-status-red")}>
+                                <p
+                                  className={clsx(
+                                    "text-[11px] leading-tight font-semibold",
+                                    cell.status === "in_progress" ? "text-status-yellow/85" : "text-white/85"
+                                  )}
+                                >
                                   {STATUS_LABEL[cell.status]}
                                 </p>
-                                {cell.status === "in_progress" && canCompleteStage && (
-                                  <button
-                                    type="button"
-                                    onClick={() => completeStage(row)}
-                                    disabled={completingId === row.order_id}
-                                    className="focus-ring mt-0.5 min-h-6.5 rounded border border-status-yellow/30 px-1.5 py-0.5 text-[10px] leading-tight font-semibold text-status-yellow transition-colors hover:bg-status-yellow-bg disabled:pointer-events-none disabled:opacity-50"
-                                  >
-                                    {completingId === row.order_id ? "Yakunlanmoqda..." : "Yakunlash"}
-                                  </button>
-                                )}
                               </div>
                             )}
                           </td>

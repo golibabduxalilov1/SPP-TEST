@@ -27,16 +27,6 @@ class GibLabImportError(Exception):
         }
 
 
-class GibLabValidationFailed(Exception):
-    """Raised by `service.import_project_file` when the import plan has
-    blocking errors -- nothing was written to the database."""
-
-    def __init__(self, errors, warnings=None):
-        super().__init__("GibLab import validation failed")
-        self.errors = errors
-        self.warnings = warnings or []
-
-
 def error_dict(code, message, entity_type="", external_id="", xml_path="", details=None):
     """Build the same structured shape as `GibLabImportError.to_dict()`
     without raising -- used by the validator/mapper to collect multiple

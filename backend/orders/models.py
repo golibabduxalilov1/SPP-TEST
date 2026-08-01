@@ -1,5 +1,6 @@
 import random
 import string
+import uuid as uuid_lib
 
 from django.conf import settings
 from django.core.validators import MinValueValidator
@@ -403,21 +404,31 @@ class BOMItem(models.Model):
 
 
 class GibLabImportBatch(models.Model):
-    """Import history/idempotency record for GibLab `.project` file imports."""
+    """GibLab `.project` import session.
+
+    A `validate/` call persists one of these (status VALIDATED) carrying the
+    normalized, server-computed `import_plan` -- `POST /orders/` later
+    builds the Order/Product/Parts/BOM/PartRoutes from `import_plan` via
+    `giblab_import_id` alone (see giblab/service.py), never re-trusting
+    client-supplied product/detail data. `uuid` is the externally-exposed
+    "import_id"; the integer `id` stays internal (FK target only).
+    """
 
     class Status(models.TextChoices):
-        UPLOADED = "uploaded", "Yuklandi"
         VALIDATED = "validated", "Tekshirildi"
-        IMPORTING = "importing", "Import qilinmoqda"
+        CONSUMING = "consuming", "Import qilinmoqda"
         COMPLETED = "completed", "Yakunlandi"
         FAILED = "failed", "Xatolik"
+        EXPIRED = "expired", "Muddati o'tgan"
 
+    uuid = models.UUIDField(default=uuid_lib.uuid4, unique=True, editable=False)
     source_system = models.CharField(max_length=32, default="giblab")
     original_filename = models.CharField(max_length=255, blank=True)
-    file_checksum = models.CharField(max_length=64, unique=True)
+    file_checksum = models.CharField(max_length=64, db_index=True)
     project_uuid = models.CharField(max_length=64, blank=True)
     file_version = models.CharField(max_length=32, blank=True)
-    status = models.CharField(max_length=16, choices=Status.choices, default=Status.UPLOADED)
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.VALIDATED)
+    import_plan = models.JSONField(default=dict, blank=True)
     order = models.ForeignKey(
         Order, on_delete=models.SET_NULL, null=True, blank=True, related_name="giblab_import_batches"
     )
@@ -428,6 +439,8 @@ class GibLabImportBatch(models.Model):
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True
     )
     created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField(null=True, blank=True)
+    consumed_at = models.DateTimeField(null=True, blank=True)
     completed_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:

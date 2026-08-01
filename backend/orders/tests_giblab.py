@@ -1,4 +1,6 @@
-"""Tests for the GibLab `.project` import pipeline (backend/orders/giblab/).
+"""Tests for the GibLab `.project` import pipeline (backend/orders/giblab/)
+and its integration into Order creation (`POST /api/orders/` with
+`giblab_import_id`, see orders/views.py OrderViewSet._create_from_giblab_import).
 
 Uses two kinds of fixtures:
 - small, hand-built XML snippets defined inline for isolated parser/
@@ -54,6 +56,23 @@ MINIMAL_PRODUCT_XML = """<?xml version="1.0"?>
   <operation id="3" typeId="CS">
     <material id="2"/>
     <part id="1"/>
+  </operation>
+</project>
+"""
+
+MULTI_PRODUCT_XML = """<?xml version="1.0"?>
+<project project.uuid="22222222-2222-2222-2222-222222222222" version="23051701" currency="UZS" importBMV="1">
+  <good typeId="product" id="1" name="P1" count="2">
+    <part id="1" code="C1" name="Part1" count="1" usedCount="2" l="500" w="300"/>
+  </good>
+  <good typeId="product" id="2" name="P2" count="3">
+    <part id="2" code="C2" name="Part2" count="1" usedCount="3" l="400" w="200"/>
+  </good>
+  <good typeId="sheet" id="3" code="S1" name="Sheet1" l="2500" w="1800" t="16" count="1"/>
+  <operation id="4" typeId="CS">
+    <material id="3"/>
+    <part id="1"/>
+    <part id="2"/>
   </operation>
 </project>
 """
@@ -190,6 +209,14 @@ class GibLabValidatorTests(APITestCase):
         self.assertFalse(any(e["code"] == "QUANTITY_MISMATCH" for e in errors + berrors))
         self.assertTrue(any(w["code"] == "QUANTITY_MISMATCH" for w in bwarnings))
 
+    def test_multiple_products_rejected(self):
+        root = file_reader.parse_xml_safely(MULTI_PRODUCT_XML)
+        project = parser.parse(root)
+        errors, _warnings = validator.structural_validate(project)
+        error = next(e for e in errors if e["code"] == "MULTIPLE_PRODUCTS_NOT_SUPPORTED")
+        self.assertEqual(error["details"]["count"], 2)
+        self.assertEqual(sorted(error["details"]["names"]), ["P1", "P2"])
+
 
 class GibLabRegressionMappingTests(APITestCase):
     """Reproduces the confirmed statistics from the real sample file (see
@@ -261,7 +288,10 @@ class GibLabRegressionMappingTests(APITestCase):
         self.assertTrue(all(i["part_external_id"] is None and i["target_part_external_id"] for i in edge_items))
 
 
-class GibLabImportIntegrationTests(APITestCase):
+class GibLabValidateSessionApiTests(APITestCase):
+    """`POST /api/giblab-imports/validate/` persists an import session but
+    must never touch Order/Product/Part/BOM domain tables."""
+
     def setUp(self):
         _seed_operations()
         self.manager = User.objects.create_user(
@@ -272,7 +302,7 @@ class GibLabImportIntegrationTests(APITestCase):
         )
         self.data = _load_fixture_bytes()
 
-    def test_validate_makes_no_database_writes(self):
+    def test_validate_creates_a_session_without_domain_writes(self):
         self.client.force_authenticate(user=self.manager)
         before_orders = Order.objects.count()
         before_parts = Part.objects.count()
@@ -281,9 +311,36 @@ class GibLabImportIntegrationTests(APITestCase):
         )
         self.assertEqual(response.status_code, 200, response.data)
         self.assertTrue(response.data["is_valid"])
+        self.assertTrue(response.data["import_id"])
+        self.assertEqual(response.data["file"]["version"], "23051701")
         self.assertEqual(Order.objects.count(), before_orders)
         self.assertEqual(Part.objects.count(), before_parts)
-        self.assertEqual(GibLabImportBatch.objects.count(), 0)
+
+        batch = GibLabImportBatch.objects.get(uuid=response.data["import_id"])
+        self.assertEqual(batch.status, GibLabImportBatch.Status.VALIDATED)
+        self.assertTrue(batch.import_plan)
+        self.assertIsNotNone(batch.expires_at)
+        self.assertEqual(batch.imported_by, self.manager)
+
+        form = response.data["form"]
+        self.assertEqual(form["product_name"], "Test Product A")
+        self.assertEqual(form["product_quantity"], 20)
+        self.assertEqual(len(form["details"]), 30)
+        row = next(d for d in form["details"] if d["code"] == "1 Shkaf_1")
+        self.assertEqual(row["name"], "Shkaf_1-Bok l")
+        self.assertEqual(Decimal(row["length_mm"]), Decimal("2400"))
+        self.assertEqual(Decimal(row["width_mm"]), Decimal("516"))
+        self.assertEqual(row["quantity"], 1)
+        self.assertEqual(row["total_quantity"], 20)
+        self.assertTrue(row["material"])
+
+    def test_revalidating_same_file_reuses_session_row(self):
+        self.client.force_authenticate(user=self.manager)
+        first = self.client.post("/api/giblab-imports/validate/", {"file": _uploaded(self.data)}, format="multipart")
+        second = self.client.post("/api/giblab-imports/validate/", {"file": _uploaded(self.data)}, format="multipart")
+        self.assertEqual(GibLabImportBatch.objects.count(), 1)
+        self.assertNotEqual(first.data["import_id"], None)
+        self.assertEqual(first.data["import_id"], second.data["import_id"])
 
     def test_validate_denied_for_non_management_role(self):
         self.client.force_authenticate(user=self.operator)
@@ -292,16 +349,69 @@ class GibLabImportIntegrationTests(APITestCase):
         )
         self.assertEqual(response.status_code, 403)
 
-    def test_full_import_creates_draft_order(self):
+    def test_invalid_file_session_cannot_be_consumed(self):
         self.client.force_authenticate(user=self.manager)
+        broken = MINIMAL_PRODUCT_XML.replace('<material id="2"/>', '<material id="999"/>')
         response = self.client.post(
-            "/api/giblab-imports/import/", {"file": _uploaded(self.data)}, format="multipart",
+            "/api/giblab-imports/validate/", {"file": _uploaded(broken.encode("utf-8"), name="broken.project")},
+            format="multipart",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.data["is_valid"])
+        import_id = response.data["import_id"]
+
+        create_response = self.client.post("/api/orders/", {
+            "customer_name": "Ali", "customer_phone": "+998901110000", "giblab_import_id": import_id,
+        }, format="json")
+        self.assertEqual(create_response.status_code, 400, create_response.data)
+        self.assertEqual(create_response.data["code"], "IMPORT_SESSION_INVALID")
+
+
+class GibLabOrderCreateApiTests(APITestCase):
+    """`POST /api/orders/` with `giblab_import_id` -- the only place a
+    validated import session turns into real Order/Product/Part/BOM/
+    PartRoute rows (see orders/giblab/service.create_order_from_giblab_import)."""
+
+    def setUp(self):
+        _seed_operations()
+        self.manager = User.objects.create_user(
+            username="giblab-order-manager", phone="+998901114410", password="secret-pass", role=Role.MANAGER,
+        )
+        self.other_manager = User.objects.create_user(
+            username="giblab-order-other", phone="+998901114411", password="secret-pass", role=Role.MANAGER,
+        )
+        self.data = _load_fixture_bytes()
+
+    def _validate(self, user=None, data=None):
+        self.client.force_authenticate(user=user or self.manager)
+        response = self.client.post(
+            "/api/giblab-imports/validate/", {"file": _uploaded(data or self.data)}, format="multipart",
         )
         self.assertEqual(response.status_code, 200, response.data)
-        result = response.data
-        self.assertTrue(result["success"])
-        order = Order.objects.get(pk=result["order_id"])
+        return response.data["import_id"]
+
+    def _create_order(self, import_id, **overrides):
+        payload = {
+            "customer_name": "Ali Valiyev", "customer_phone": "+998901234567",
+            "deadline": "2026-08-15", "priority": "normal", "notes": "Shoshilinch",
+            "giblab_import_id": import_id,
+        }
+        payload.update(overrides)
+        return self.client.post("/api/orders/", payload, format="json")
+
+    def test_full_flow_creates_order_from_server_side_plan(self):
+        import_id = self._validate()
+        self.client.force_authenticate(user=self.manager)
+        response = self._create_order(import_id)
+        self.assertEqual(response.status_code, 201, response.data)
+        order = Order.objects.get(pk=response.data["id"])
+        self.assertEqual(order.customer_name, "Ali Valiyev")
+        self.assertEqual(order.customer_phone, "+998901234567")
+        self.assertEqual(str(order.deadline), "2026-08-15")
+        self.assertEqual(order.priority, "normal")
+        self.assertEqual(order.notes, "Shoshilinch")
         self.assertEqual(order.status, Order.Status.DRAFT)
+        self.assertEqual(order.product_name, "Test Product A")
         self.assertEqual(order.product_quantity, 20)
         self.assertEqual(order.products.count(), 1)
         self.assertEqual(order.parts.count(), 30)
@@ -311,38 +421,162 @@ class GibLabImportIntegrationTests(APITestCase):
         self.assertTrue(PartRoute.objects.filter(part__order=order).exists())
         self.assertTrue(order.parts.filter(current_operation__isnull=False).exists())
 
-        batch = GibLabImportBatch.objects.get(order=order)
+        batch = GibLabImportBatch.objects.get(uuid=import_id)
         self.assertEqual(batch.status, GibLabImportBatch.Status.COMPLETED)
+        self.assertEqual(batch.order, order)
+        self.assertIsNotNone(batch.consumed_at)
 
-        self.assertTrue(AuditLog.objects.filter(action="giblab.import").exists())
+        self.assertTrue(AuditLog.objects.filter(action="order.create_from_giblab").exists())
 
-    def test_duplicate_checksum_returns_409(self):
+    def test_client_supplied_product_fields_are_ignored(self):
+        """Even if the client sends a different product_name/quantity/details
+        alongside giblab_import_id, the server-side plan wins (spec: never
+        trust client-supplied import data)."""
+        import_id = self._validate()
         self.client.force_authenticate(user=self.manager)
-        first = self.client.post(
-            "/api/giblab-imports/import/", {"file": _uploaded(self.data)}, format="multipart",
-        )
-        self.assertEqual(first.status_code, 200, first.data)
+        response = self._create_order(import_id, product_name="Hacked name", product_quantity=999)
+        self.assertEqual(response.status_code, 201, response.data)
+        order = Order.objects.get(pk=response.data["id"])
+        self.assertEqual(order.product_name, "Test Product A")
+        self.assertEqual(order.product_quantity, 20)
 
-        second = self.client.post(
-            "/api/giblab-imports/import/", {"file": _uploaded(self.data)}, format="multipart",
+    def test_extra_manual_details_are_created_alongside_the_import(self):
+        """The user can add extra hand-typed detail rows (e.g. an accessory
+        the GibLab file doesn't cover) on top of the imported ones -- these
+        become real OrderDetail+Part rows, additive to (never replacing)
+        the 30 imported parts."""
+        import_id = self._validate()
+        self.client.force_authenticate(user=self.manager)
+        response = self._create_order(
+            import_id, details=[{"name": "Qo'lda qo'shilgan aksessuar", "quantity": 2, "material_type": "Furnitura"}],
         )
-        self.assertEqual(second.status_code, 409)
-        self.assertEqual(second.data["code"], "DUPLICATE_IMPORT")
+        self.assertEqual(response.status_code, 201, response.data)
+        order = Order.objects.get(pk=response.data["id"])
 
-    def test_rollback_on_error_leaves_no_domain_rows(self):
+        self.assertEqual(OrderDetail.objects.filter(order=order).count(), 1)
+        extra_detail = OrderDetail.objects.get(order=order)
+        self.assertEqual(extra_detail.name, "Qo'lda qo'shilgan aksessuar")
+        self.assertIsNotNone(extra_detail.part_id)
+        # OrderDetail.quantity (2) x Order.product_quantity (20, from the
+        # import) -- same invariant as the plain manual-detail flow.
+        self.assertEqual(extra_detail.part.quantity, 40)
+
+        # The 30 imported parts are untouched -- extra details are additive.
+        self.assertEqual(order.parts.count(), 31)
+
+        response = self.client.get(f"/api/orders/{order.id}/")
+        details = response.data["details"]
+        self.assertEqual(len(details), 31)
+        manual_row = next(d for d in details if d["source"] == "manual")
+        self.assertTrue(manual_row["editable"])
+        self.assertEqual(sum(1 for d in details if d["source"] == "giblab"), 30)
+
+    def test_session_cannot_be_reused_after_consumption(self):
+        import_id = self._validate()
+        self.client.force_authenticate(user=self.manager)
+        first = self._create_order(import_id)
+        self.assertEqual(first.status_code, 201, first.data)
+        second = self._create_order(import_id)
+        self.assertEqual(second.status_code, 409, second.data)
+        self.assertEqual(second.data["code"], "IMPORT_SESSION_CONSUMED")
+        self.assertEqual(Order.objects.count(), 1)
+
+    def test_other_user_cannot_consume_session(self):
+        import_id = self._validate(user=self.manager)
+        self.client.force_authenticate(user=self.other_manager)
+        response = self._create_order(import_id)
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.data["code"], "IMPORT_SESSION_FORBIDDEN")
+
+    def test_unknown_import_id_returns_404(self):
+        self.client.force_authenticate(user=self.manager)
+        response = self._create_order("00000000-0000-0000-0000-000000000000")
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.data["code"], "IMPORT_SESSION_NOT_FOUND")
+
+    def test_expired_session_rejected(self):
+        import_id = self._validate()
+        batch = GibLabImportBatch.objects.get(uuid=import_id)
+        from django.utils import timezone
+        batch.expires_at = timezone.now() - timezone.timedelta(minutes=1)
+        batch.save(update_fields=["expires_at"])
+
+        self.client.force_authenticate(user=self.manager)
+        response = self._create_order(import_id)
+        self.assertEqual(response.status_code, 410)
+        self.assertEqual(response.data["code"], "IMPORT_SESSION_EXPIRED")
+        batch.refresh_from_db()
+        self.assertEqual(batch.status, GibLabImportBatch.Status.EXPIRED)
+
+    def test_rollback_on_error_marks_session_failed_and_leaves_no_domain_rows(self):
+        import_id = self._validate()
         self.client.force_authenticate(user=self.manager)
         before_orders = Order.objects.count()
-        before_parts = Part.objects.count()
         with mock.patch.object(PartRoute.objects, "bulk_create", side_effect=RuntimeError("forced failure")):
-            response = self.client.post(
-                "/api/giblab-imports/import/", {"file": _uploaded(self.data)}, format="multipart",
-            )
+            response = self._create_order(import_id)
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.data["code"], "IMPORT_ROLLED_BACK")
         self.assertEqual(Order.objects.count(), before_orders)
-        self.assertEqual(Part.objects.count(), before_parts)
-        batch = GibLabImportBatch.objects.latest("created_at")
+
+        batch = GibLabImportBatch.objects.get(uuid=import_id)
         self.assertEqual(batch.status, GibLabImportBatch.Status.FAILED)
+        self.assertTrue(batch.errors)
+        self.assertTrue(AuditLog.objects.filter(action="giblab.import_failed").exists())
+
+    def test_same_file_can_be_reimported_to_create_multiple_orders(self):
+        """A GibLab design (e.g. one furniture model) is routinely ordered by
+        several different customers -- re-validating and re-consuming the
+        exact same `.project` file must succeed every time and produce a
+        separate, independent Order each time, not a DUPLICATE_IMPORT error."""
+        self.client.force_authenticate(user=self.manager)
+
+        first_import_id = self._validate()
+        first_create = self._create_order(first_import_id, customer_name="Ali")
+        self.assertEqual(first_create.status_code, 201, first_create.data)
+
+        second_validate = self.client.post(
+            "/api/giblab-imports/validate/", {"file": _uploaded(self.data)}, format="multipart",
+        )
+        self.assertEqual(second_validate.status_code, 200, second_validate.data)
+        self.assertTrue(second_validate.data["is_valid"])
+        self.assertEqual(second_validate.data["errors"], [])
+        self.assertNotEqual(second_validate.data["import_id"], first_import_id)
+
+        second_create = self._create_order(second_validate.data["import_id"], customer_name="Vali")
+        self.assertEqual(second_create.status_code, 201, second_create.data)
+        self.assertNotEqual(second_create.data["id"], first_create.data["id"])
+
+        self.assertEqual(Order.objects.count(), 2)
+        self.assertEqual(GibLabImportBatch.objects.filter(status=GibLabImportBatch.Status.COMPLETED).count(), 2)
+        for order in Order.objects.all():
+            self.assertEqual(order.product_name, "Test Product A")
+            self.assertEqual(order.parts.count(), 30)
+
+    def test_deleting_the_order_does_not_affect_future_reimport(self):
+        """`GibLabImportBatch.order` is SET_NULL -- deleting an Order created
+        from a GibLab import must not disturb later re-imports of the same
+        file (which already succeed regardless, see the test above)."""
+        import_id = self._validate()
+        self.client.force_authenticate(user=self.manager)
+        create_response = self._create_order(import_id)
+        self.assertEqual(create_response.status_code, 201, create_response.data)
+        order_id = create_response.data["id"]
+
+        delete_response = self.client.delete(f"/api/orders/{order_id}/")
+        self.assertEqual(delete_response.status_code, 204, delete_response.data)
+
+        batch = GibLabImportBatch.objects.get(uuid=import_id)
+        self.assertEqual(batch.status, GibLabImportBatch.Status.COMPLETED)
+        self.assertIsNone(batch.order_id)
+
+        revalidate = self.client.post(
+            "/api/giblab-imports/validate/", {"file": _uploaded(self.data)}, format="multipart",
+        )
+        self.assertEqual(revalidate.status_code, 200, revalidate.data)
+        self.assertTrue(revalidate.data["is_valid"])
+
+        second_create = self._create_order(revalidate.data["import_id"])
+        self.assertEqual(second_create.status_code, 201, second_create.data)
 
 
 class GibLabOrderDetailsApiTests(APITestCase):
@@ -356,13 +590,18 @@ class GibLabOrderDetailsApiTests(APITestCase):
             username="giblab-details-manager", phone="+998901114403", password="secret-pass", role=Role.MANAGER,
         )
         self.client.force_authenticate(user=self.manager)
-        response = self.client.post(
-            "/api/giblab-imports/import/",
+        validate_response = self.client.post(
+            "/api/giblab-imports/validate/",
             {"file": _uploaded(MINIMAL_PRODUCT_XML.encode("utf-8"), name="minimal.project")},
             format="multipart",
         )
-        self.assertEqual(response.status_code, 200, response.data)
-        self.order_id = response.data["order_id"]
+        self.assertEqual(validate_response.status_code, 200, validate_response.data)
+        import_id = validate_response.data["import_id"]
+        create_response = self.client.post("/api/orders/", {
+            "customer_name": "Test", "customer_phone": "+998900000000", "giblab_import_id": import_id,
+        }, format="json")
+        self.assertEqual(create_response.status_code, 201, create_response.data)
+        self.order_id = create_response.data["id"]
 
     def test_order_details_endpoint_includes_giblab_part(self):
         response = self.client.get(f"/api/orders/{self.order_id}/")
@@ -427,3 +666,27 @@ class GibLabOrderDetailsApiTests(APITestCase):
             f"/api/order-details/{giblab_part_id}/", {"name": "hacked"}, format="json",
         )
         self.assertEqual(response.status_code, 404)
+
+
+class GibLabManualOrderCreateRegressionTests(APITestCase):
+    """The pre-existing manual (non-GibLab) `POST /api/orders/` flow must be
+    completely unaffected by the giblab_import_id branch in
+    OrderViewSet.create."""
+
+    def setUp(self):
+        self.manager = User.objects.create_user(
+            username="manual-order-manager", phone="+998901114420", password="secret-pass", role=Role.MANAGER,
+        )
+        self.client.force_authenticate(user=self.manager)
+
+    def test_manual_order_create_still_works(self):
+        response = self.client.post("/api/orders/", {
+            "customer_name": "Manual mijoz", "customer_phone": "+998901112233",
+            "product_name": "Qo'lda kiritilgan shkaf", "product_quantity": 3,
+            "details": [{"name": "Panel", "quantity": 2}],
+        }, format="json")
+        self.assertEqual(response.status_code, 201, response.data)
+        order = Order.objects.get(pk=response.data["id"])
+        self.assertEqual(order.product_name, "Qo'lda kiritilgan shkaf")
+        self.assertEqual(OrderDetail.objects.filter(order=order).count(), 1)
+        self.assertEqual(Part.objects.filter(order=order).count(), 1)

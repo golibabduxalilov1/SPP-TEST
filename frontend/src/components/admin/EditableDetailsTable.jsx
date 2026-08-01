@@ -97,7 +97,7 @@ export default function EditableDetailsTable({ rows, onCreate, onUpdate, onDelet
 
   return (
     <div className="space-y-3">
-      <Table>
+      <Table containerClassName={rows.length > 15 ? "max-h-[26rem] overflow-y-auto" : undefined}>
         <Thead>
           <tr>
             <Th>Nomi</Th>

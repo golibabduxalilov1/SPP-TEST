@@ -1,14 +1,24 @@
-"""Transactional GibLab `.project` import service.
+"""GibLab `.project` import pipeline: validate-then-consume.
 
-`validate_project_file` is fully read-only (no database writes at all, not
-even an import-history row). `import_project_file` persists everything in
-one `transaction.atomic()` block -- any failure rolls back all domain
-writes, unlike the existing CSV/XLSX importer's per-row error tolerance
-(explicit spec requirement for this pipeline).
+`validate_project_file` is fully read-only towards *domain* data (no Order/
+Product/Part/BOM/Material writes) but persists a `GibLabImportBatch` import
+session carrying the normalized, JSON-safe import plan -- so a later
+`POST /orders/{..., "giblab_import_id": ...}` can build the Order and all
+its production objects from that server-side plan alone, never re-trusting
+whatever product/detail data the client sends alongside it.
+
+`create_order_from_giblab_import` is the only consumer of an import
+session and the only place that ever turns a plan into real domain rows.
+Session bookkeeping (status transitions) is committed independently of the
+domain-object transaction so a failed import still leaves an accurate,
+queryable failure record instead of silently reverting to "as if nothing
+happened" (see `_lock_session_for_consumption` / the try/except below).
 """
 
 import hashlib
+from datetime import timedelta
 from decimal import Decimal
+from types import SimpleNamespace
 
 from django.db import transaction
 from django.utils import timezone
@@ -18,44 +28,8 @@ from core.audit import log_action
 from manufacturing.models import Operation
 
 from . import file_reader, mapper, parser, validator
-from .constants import SOURCE_SYSTEM
-from .exceptions import GibLabImportError, GibLabValidationFailed
-
-
-def _check_duplicate(checksum, project_uuid, plan):
-    """Mutates `plan.errors`/`plan.is_valid` in place if this file was
-    already imported, or if the same project.uuid completed under a
-    different checksum (spec section 16 -- no silent overwrite)."""
-    from orders.models import GibLabImportBatch
-
-    from .exceptions import error_dict
-
-    existing = GibLabImportBatch.objects.filter(file_checksum=checksum).first()
-    if existing and existing.status == GibLabImportBatch.Status.COMPLETED:
-        plan.errors.append(
-            error_dict(
-                "DUPLICATE_IMPORT", "Ushbu fayl allaqachon import qilingan",
-                entity_type="project", external_id=project_uuid, details={"import_id": existing.pk, "order_id": existing.order_id},
-            )
-        )
-        plan.is_valid = False
-        return
-
-    if project_uuid:
-        conflicting = (
-            GibLabImportBatch.objects.filter(project_uuid=project_uuid, status=GibLabImportBatch.Status.COMPLETED)
-            .exclude(file_checksum=checksum)
-            .first()
-        )
-        if conflicting:
-            plan.errors.append(
-                error_dict(
-                    "IMPORT_CONFLICT",
-                    "Bu project.uuid boshqa fayl checksum bilan allaqachon import qilingan -- revizion siyosati tasdiqlanmagan",
-                    entity_type="project", external_id=project_uuid, details={"import_id": conflicting.pk, "order_id": conflicting.order_id},
-                )
-            )
-            plan.is_valid = False
+from .constants import IMPORT_SESSION_TTL_MINUTES, SOURCE_SYSTEM
+from .exceptions import GibLabImportError
 
 
 def _analyze(uploaded_file):
@@ -71,7 +45,7 @@ def _analyze(uploaded_file):
     structural_errors, structural_warnings = validator.structural_validate(project)
 
     business_errors, business_warnings, part_operation_codes = [], [], {}
-    if project.products and not any(e["code"] == "UNSUPPORTED_GIBLAB_VERSION" for e in structural_errors):
+    if project.products and not any(e["code"] in ("UNSUPPORTED_GIBLAB_VERSION", "MULTIPLE_PRODUCTS_NOT_SUPPORTED") for e in structural_errors):
         existing_operation_codes = set(Operation.objects.filter(is_active=True).values_list("code", flat=True))
         business_errors, business_warnings, part_operation_codes = validator.business_validate(
             project, existing_operation_codes
@@ -83,10 +57,39 @@ def _analyze(uploaded_file):
     return filename, checksum, project, plan
 
 
+def _build_form_preview(plan):
+    """The frontend's auto-fill payload (spec: "Mahsulot nomi"/"Mahsulot
+    soni"/detallar jadvali) -- a flattened view of the single supported
+    product's parts, JSON-safe (Decimal -> str)."""
+    if not plan.products_payload:
+        return {"product_name": "", "product_quantity": 1, "details": []}
+    product = plan.products_payload[0]
+    details = [
+        {
+            "external_id": part["external_id"],
+            "code": part["code"],
+            "name": part["name"],
+            "length_mm": _json_safe(part["length_mm"]),
+            "width_mm": _json_safe(part["width_mm"]),
+            "thickness_mm": _json_safe(part["thickness_mm"]),
+            "quantity": part["quantity_per_product"],
+            "total_quantity": part["quantity"],
+            "material": part["material_name"],
+        }
+        for part in product["parts"]
+    ]
+    return {
+        "product_name": plan.order_payload["product_name"],
+        "product_quantity": plan.order_payload["product_quantity"],
+        "details": details,
+    }
+
+
 def _preview_dict(plan, checksum=None):
     return {
         "is_valid": plan.is_valid,
         "project": plan.project,
+        "form": _build_form_preview(plan),
         "statistics": plan.statistics,
         "operation_mapping": plan.operation_mapping,
         "conflicts": plan.conflicts,
@@ -96,21 +99,138 @@ def _preview_dict(plan, checksum=None):
     }
 
 
-def validate_project_file(uploaded_file, user):
-    _filename, checksum, project, plan = _analyze(uploaded_file)
-    _check_duplicate(checksum, project.uuid, plan)
-    return _preview_dict(plan, checksum)
+# ---------------------------------------------------------------------------
+# Plan <-> JSON session payload (Decimal is not JSON-native; every Decimal
+# field is round-tripped through str explicitly rather than trusting bare
+# str(Decimal)-in/Decimal(str)-out on unknown keys).
+# ---------------------------------------------------------------------------
+
+def _json_safe(value):
+    if isinstance(value, Decimal):
+        return str(value)
+    if isinstance(value, dict):
+        return {k: _json_safe(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(v) for v in value]
+    return value
 
 
-def _create_domain_objects(plan, project, order_no_prefix=""):
-    from orders.models import BOM, BOMItem, Order, Part, PartRoute, Product
+def _plan_to_session_payload(plan, project_uuid):
+    return _json_safe({
+        "project_uuid": project_uuid,
+        "order_payload": plan.order_payload,
+        "products_payload": plan.products_payload,
+        "materials_payload": plan.materials_payload,
+        "bom_items_payload": plan.bom_items_payload,
+        "part_routes_payload": plan.part_routes_payload,
+    })
 
-    order = Order.objects.create(
-        product_name=plan.order_payload["product_name"],
-        product_quantity=plan.order_payload["product_quantity"],
-        status=Order.Status.DRAFT,
-        notes=f"GibLab import (project {project.uuid})",
+
+_PART_DECIMAL_FIELDS = ("length_mm", "width_mm", "thickness_mm", "area_m2", "edge_meter")
+_MATERIAL_DECIMAL_FIELDS = ("length_mm", "width_mm", "thickness_mm", "source_quantity")
+
+
+def _decimal_or_none(value):
+    return None if value is None else Decimal(value)
+
+
+def _decode_part(part):
+    part = dict(part)
+    for field in _PART_DECIMAL_FIELDS:
+        part[field] = _decimal_or_none(part.get(field))
+    return part
+
+
+def _decode_material(material):
+    material = dict(material)
+    for field in _MATERIAL_DECIMAL_FIELDS:
+        material[field] = _decimal_or_none(material.get(field))
+    return material
+
+
+def _decode_bom_item(item):
+    item = dict(item)
+    item["quantity"] = Decimal(item["quantity"])
+    return item
+
+
+def _session_payload_to_plan(payload):
+    """Reverse of `_plan_to_session_payload` -- rebuilds a plan-shaped
+    object (attribute access only, matching what `_populate_domain_objects`
+    needs) with every stored Decimal string converted back to `Decimal`."""
+    products_payload = [
+        {**product, "parts": [_decode_part(part) for part in product["parts"]]}
+        for product in payload["products_payload"]
+    ]
+    plan = SimpleNamespace(
+        order_payload=payload["order_payload"],
+        materials_payload=[_decode_material(m) for m in payload["materials_payload"]],
+        products_payload=products_payload,
+        bom_items_payload=[_decode_bom_item(i) for i in payload["bom_items_payload"]],
+        part_routes_payload=payload["part_routes_payload"],
     )
+    return plan, payload["project_uuid"]
+
+
+def validate_project_file(uploaded_file, user):
+    """Same `.project` file (or the same `project.uuid`) may be validated
+    and consumed any number of times -- each becomes its own independent
+    import session/Order (e.g. the same furniture design ordered by
+    several different customers). No cross-session duplicate check here;
+    the only per-session guard is single-use consumption (see
+    `_lock_session_for_consumption`)."""
+    from orders.models import GibLabImportBatch
+
+    filename, checksum, project, plan = _analyze(uploaded_file)
+
+    imported_by = user if getattr(user, "is_authenticated", False) else None
+    now = timezone.now()
+    fields = dict(
+        original_filename=filename,
+        project_uuid=project.uuid,
+        file_version=project.version,
+        statistics=plan.statistics,
+        warnings=plan.warnings,
+        errors=plan.errors,
+        imported_by=imported_by,
+        expires_at=now + timedelta(minutes=IMPORT_SESSION_TTL_MINUTES),
+        consumed_at=None,
+        order=None,
+    )
+    if plan.is_valid:
+        fields["status"] = GibLabImportBatch.Status.VALIDATED
+        fields["import_plan"] = _plan_to_session_payload(plan, project.uuid)
+    else:
+        fields["status"] = GibLabImportBatch.Status.FAILED
+        fields["import_plan"] = {}
+
+    # Re-validating the same file (new upload, or the user clicking
+    # "Tekshirish" again) reuses/refreshes any not-yet-completed session for
+    # this checksum+user instead of piling up abandoned rows.
+    batch = (
+        GibLabImportBatch.objects.filter(file_checksum=checksum, imported_by=imported_by)
+        .exclude(status=GibLabImportBatch.Status.COMPLETED)
+        .order_by("-created_at")
+        .first()
+    )
+    if batch:
+        for name, value in fields.items():
+            setattr(batch, name, value)
+        batch.save()
+    else:
+        batch = GibLabImportBatch.objects.create(file_checksum=checksum, **fields)
+
+    result = _preview_dict(plan, checksum)
+    result["import_id"] = str(batch.uuid)
+    result["file"] = {"name": filename, "checksum": checksum, "version": project.version}
+    return result
+
+
+def _populate_domain_objects(order, plan, project_uuid):
+    """Create Product/Material/Part/BOM/BOMItem/PartRoute rows for an
+    already-created `order`, from a (decoded) import plan. Caller is
+    responsible for the surrounding transaction."""
+    from orders.models import BOM, BOMItem, Part, PartRoute, Product
 
     materials_by_external_id = {}
     for m in plan.materials_payload:
@@ -137,7 +257,7 @@ def _create_domain_objects(plan, project, order_no_prefix=""):
     for p in plan.products_payload:
         product = Product.objects.create(order=order, name=p["name"])
         products_by_external_id[p["external_id"]] = product
-        bom = BOM.objects.create(product=product, source_system=SOURCE_SYSTEM, source_project_uuid=project.uuid)
+        bom = BOM.objects.create(product=product, source_system=SOURCE_SYSTEM, source_project_uuid=project_uuid)
         boms_by_product_external_id[p["external_id"]] = bom
 
         for part_dict in p["parts"]:
@@ -209,8 +329,7 @@ def _create_domain_objects(plan, project, order_no_prefix=""):
             part.current_operation = operation
             part.save(update_fields=["current_operation"])
 
-    created = {
-        "orders": 1,
+    return {
         "products": len(products_by_external_id),
         "parts": len(parts_by_external_id),
         "materials": len(materials_by_external_id),
@@ -218,65 +337,114 @@ def _create_domain_objects(plan, project, order_no_prefix=""):
         "bom_items": len(bom_item_objs),
         "part_routes": len(route_objs),
     }
-    return order, created
 
 
-def import_project_file(uploaded_file, user):
+def _lock_session_for_consumption(import_id, user):
+    """Own top-level transaction: locks the session row, checks
+    ownership/expiry/consumed state and flips it to CONSUMING. Committing
+    this independently of the domain-object transaction is what lets a
+    concurrent double-submit see CONSUMING (not VALIDATED) and get
+    rejected, and what lets a later domain-write failure still record
+    FAILED instead of the whole session reverting as if nothing happened."""
     from orders.models import GibLabImportBatch
 
-    filename, checksum, project, plan = _analyze(uploaded_file)
-    _check_duplicate(checksum, project.uuid, plan)
+    # The status-transition save (EXPIRED or CONSUMING) must be committed
+    # before any error is raised: raising *inside* the atomic block would
+    # roll that save back too (Django rolls back the whole block on an
+    # escaping exception), silently reverting the session to VALIDATED as
+    # if the expiry/guard check never happened.
+    error = None
+    with transaction.atomic():
+        batch = GibLabImportBatch.objects.select_for_update().filter(uuid=import_id).first()
+        if batch is None:
+            error = GibLabImportError("IMPORT_SESSION_NOT_FOUND", "Import sessiyasi topilmadi")
+        elif batch.imported_by_id != getattr(user, "id", None):
+            error = GibLabImportError("IMPORT_SESSION_FORBIDDEN", "Bu import sessiyasi boshqa foydalanuvchiga tegishli")
+        elif batch.status == GibLabImportBatch.Status.COMPLETED or batch.consumed_at:
+            error = GibLabImportError("IMPORT_SESSION_CONSUMED", "Import sessiyasi allaqachon ishlatilgan")
+        elif batch.status == GibLabImportBatch.Status.CONSUMING:
+            error = GibLabImportError("IMPORT_SESSION_CONSUMED", "Import sessiyasi hozir ishlatilmoqda")
+        elif batch.status == GibLabImportBatch.Status.EXPIRED or (batch.expires_at and batch.expires_at < timezone.now()):
+            if batch.status != GibLabImportBatch.Status.EXPIRED:
+                batch.status = GibLabImportBatch.Status.EXPIRED
+                batch.save(update_fields=["status"])
+            error = GibLabImportError("IMPORT_SESSION_EXPIRED", "Import sessiyasining muddati tugagan, faylni qayta yuklang")
+        elif batch.status != GibLabImportBatch.Status.VALIDATED:
+            error = GibLabImportError("IMPORT_SESSION_INVALID", "Import sessiyasi ishlatib bo'lmaydi (tekshiruvdan o'tmagan)")
+        else:
+            batch.status = GibLabImportBatch.Status.CONSUMING
+            batch.save(update_fields=["status"])
 
-    conflict_error = next((e for e in plan.errors if e["code"] in ("DUPLICATE_IMPORT", "IMPORT_CONFLICT")), None)
-    if conflict_error is not None:
-        raise GibLabImportError(
-            conflict_error["code"], conflict_error["message"],
-            entity_type=conflict_error["entity_type"], external_id=conflict_error["external_id"],
-            details=conflict_error["details"],
-        )
+    if error is not None:
+        raise error
+    return batch
 
-    if not plan.is_valid:
-        raise GibLabValidationFailed(plan.errors, plan.warnings)
 
-    batch = GibLabImportBatch.objects.create(
-        original_filename=filename,
-        file_checksum=checksum,
-        project_uuid=project.uuid,
-        file_version=project.version,
-        status=GibLabImportBatch.Status.IMPORTING,
-        statistics=plan.statistics,
-        warnings=plan.warnings,
-        imported_by=user if getattr(user, "is_authenticated", False) else None,
-    )
+def _create_extra_details(order, extra_details):
+    """Manual "Qo'shimcha detal" rows entered alongside a GibLab import --
+    same OrderDetail+Part creation path as the plain manual flow
+    (orders.services.create_part_for_order_detail), so they get their own
+    trackable Part/route just like a hand-typed detail would. These are
+    additive: the GibLab-derived parts stay the read-only source of truth
+    for the imported product, these are simply extra rows on top."""
+    from orders.models import OrderDetail
+    from orders.services import create_part_for_order_detail
+
+    for detail_data in extra_details:
+        detail = OrderDetail.objects.create(order=order, **detail_data)
+        create_part_for_order_detail(detail)
+    return len(extra_details)
+
+
+def create_order_from_giblab_import(import_id, user, order_fields, extra_details=None):
+    """The only place a GibLab import session turns into real domain rows.
+    `order_fields` carries the user-entered customer/deadline/priority/notes
+    -- product name/quantity/parts/materials/BOM/routes always come from the
+    session's stored server-side plan, never from the request. `extra_details`
+    (optional) are additional manually-entered detail rows created alongside
+    the imported ones (see _create_extra_details)."""
+    from orders.models import GibLabImportBatch, Order
+
+    batch = _lock_session_for_consumption(import_id, user)
+    plan, project_uuid = _session_payload_to_plan(batch.import_plan)
 
     try:
         with transaction.atomic():
-            order, created = _create_domain_objects(plan, project)
-    except Exception as exc:  # noqa: BLE001 -- must not leak internals; batch record must still be marked FAILED
+            order = Order.objects.create(
+                customer_name=order_fields.get("customer_name") or "",
+                customer_phone=order_fields.get("customer_phone") or "",
+                deadline=order_fields.get("deadline"),
+                priority=order_fields.get("priority") or Order.Priority.NORMAL,
+                notes=order_fields.get("notes") or "",
+                product_name=plan.order_payload["product_name"],
+                product_quantity=plan.order_payload["product_quantity"],
+                status=Order.Status.DRAFT,
+                created_by=user if getattr(user, "is_authenticated", False) else None,
+            )
+            created = _populate_domain_objects(order, plan, project_uuid)
+            created["manual_details"] = _create_extra_details(order, extra_details or [])
+    except Exception as exc:  # noqa: BLE001 - must not leak internals; session record must still be marked FAILED
         batch.status = GibLabImportBatch.Status.FAILED
         batch.errors = [{"code": "DATABASE_ERROR", "message": "Import vaqtida xatolik yuz berdi, barcha o'zgarishlar bekor qilindi"}]
         batch.save(update_fields=["status", "errors"])
-        log_action(user, "giblab.import_failed", details={"checksum": checksum, "project_uuid": project.uuid, "error": str(exc)})
+        log_action(
+            user, "giblab.import_failed",
+            details={"import_id": str(batch.uuid), "checksum": batch.file_checksum, "project_uuid": project_uuid, "error": str(exc)},
+        )
         raise GibLabImportError("IMPORT_ROLLED_BACK", "Import vaqtida xatolik yuz berdi, barcha o'zgarishlar bekor qilindi") from exc
 
     batch.status = GibLabImportBatch.Status.COMPLETED
     batch.order = order
-    batch.completed_at = timezone.now()
-    batch.save(update_fields=["status", "order", "completed_at"])
+    batch.consumed_at = timezone.now()
+    batch.completed_at = batch.consumed_at
+    batch.save(update_fields=["status", "order", "consumed_at", "completed_at"])
 
-    result = {
-        "success": True,
-        "import_id": str(batch.pk),
-        "order_id": order.id,
-        "project_uuid": project.uuid,
-        "version": project.version,
-        "created": created,
-        "statistics": plan.statistics,
-        "warnings": plan.warnings,
-        "errors": [],
-    }
     log_action(
-        user, "giblab.import", entity_type="Order", entity_id=order.id,
-        details={"checksum": checksum, "project_uuid": project.uuid, "created": created},
+        user, "order.create_from_giblab", entity_type="Order", entity_id=order.id,
+        details={
+            "import_id": str(batch.uuid), "checksum": batch.file_checksum, "project_uuid": project_uuid,
+            "version": batch.file_version, "created": created, "statistics": batch.statistics,
+            "warning_count": len(batch.warnings), "error_count": len(batch.errors),
+        },
     )
-    return result
+    return order

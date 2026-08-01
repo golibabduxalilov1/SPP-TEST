@@ -10,10 +10,11 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from accounts.permissions import IsManagementRole, IsSuperAdmin
+from customers.models import Customer
 from core.audit import log_action, push_live_log
 from .export import render_orders_excel, render_orders_pdf
 from .giblab import service as giblab_service
-from .giblab.exceptions import GibLabImportError, GibLabValidationFailed
+from .giblab.exceptions import GibLabImportError
 from .labels import render_labels_pdf
 from .models import GibLabImportBatch, Label, Order, OrderDetail, OrderStageProgress, Part
 from .production_workflow import (
@@ -26,14 +27,20 @@ from .serializers import (
 from .services import import_parts_from_file
 
 
-_CONFLICT_ERROR_CODES = {"DUPLICATE_IMPORT", "IMPORT_CONFLICT"}
+_CONFLICT_ERROR_CODES = {"IMPORT_SESSION_CONSUMED"}
+_STATUS_BY_GIBLAB_ERROR_CODE = {
+    "FILE_TOO_LARGE": status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+    "IMPORT_SESSION_NOT_FOUND": status.HTTP_404_NOT_FOUND,
+    "IMPORT_SESSION_FORBIDDEN": status.HTTP_403_FORBIDDEN,
+    "IMPORT_SESSION_EXPIRED": status.HTTP_410_GONE,
+}
 
 
 def _status_for_giblab_error(code):
+    if code in _STATUS_BY_GIBLAB_ERROR_CODE:
+        return _STATUS_BY_GIBLAB_ERROR_CODE[code]
     if code in _CONFLICT_ERROR_CODES:
         return status.HTTP_409_CONFLICT
-    if code == "FILE_TOO_LARGE":
-        return status.HTTP_413_REQUEST_ENTITY_TOO_LARGE
     return status.HTTP_400_BAD_REQUEST
 
 
@@ -89,6 +96,51 @@ class OrderViewSet(viewsets.ModelViewSet):
         if self.request.method not in ("GET", "HEAD", "OPTIONS"):
             return [IsAuthenticated(), IsManagementRole()]
         return [IsAuthenticated()]
+
+    def create(self, request, *args, **kwargs):
+        # A GibLab-backed order is created by `giblab_service` in its own
+        # top-level transaction(s) (see service.create_order_from_giblab_import)
+        # so the import session's CONSUMING/FAILED/COMPLETED bookkeeping
+        # survives independently of the domain-object write -- it must NOT be
+        # nested inside `perform_create`'s atomic block below, so this branch
+        # bypasses the normal ModelSerializer.create() path entirely.
+        if request.data.get("giblab_import_id"):
+            return self._create_from_giblab_import(request)
+        return super().create(request, *args, **kwargs)
+
+    def _create_from_giblab_import(self, request):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        validated = serializer.validated_data
+        import_id = validated["giblab_import_id"]
+        order_fields = {
+            "customer_name": validated.get("customer_name", ""),
+            "customer_phone": validated.get("customer_phone", ""),
+            "deadline": validated.get("deadline"),
+            "priority": validated.get("priority", Order.Priority.NORMAL),
+            "notes": validated.get("notes", ""),
+        }
+        # Extra manually-entered rows the user added on top of the imported
+        # ones (e.g. an accessory the GibLab file doesn't cover) -- created
+        # alongside the imported Parts, never replacing them.
+        extra_details = validated.get("details", [])
+        try:
+            order = giblab_service.create_order_from_giblab_import(
+                str(import_id), request.user, order_fields, extra_details=extra_details,
+            )
+        except GibLabImportError as exc:
+            return Response(exc.to_dict(), status=_status_for_giblab_error(exc.code))
+
+        phone = (order.customer_phone or "").strip()
+        if phone:
+            Customer.objects.get_or_create(phone=phone, defaults={"name": order.customer_name or ""})
+
+        log_action(request.user, "order.create", "Order", order.id, {"order_no": order.order_no, "giblab_import_id": str(import_id)})
+        push_live_log("order", f"Yangi buyurtma qabul qilindi: #{order.order_no}")
+
+        output = self.get_serializer(order)
+        headers = self.get_success_headers(output.data)
+        return Response(output.data, status=status.HTTP_201_CREATED, headers=headers)
 
     def perform_create(self, serializer):
         try:
@@ -231,21 +283,8 @@ class GibLabImportViewSet(mixins.RetrieveModelMixin, viewsets.GenericViewSet):
             return Response(exc.to_dict(), status=_status_for_giblab_error(exc.code))
         log_action(
             request.user, "giblab.validate",
-            details={"is_valid": result["is_valid"], "statistics": result["statistics"]},
+            details={"is_valid": result["is_valid"], "import_id": result["import_id"], "statistics": result["statistics"]},
         )
-        return Response(result)
-
-    @action(detail=False, methods=["post"], url_path="import", parser_classes=[MultiPartParser])
-    def import_project(self, request):
-        uploaded = request.FILES.get("file")
-        if not uploaded:
-            return Response({"detail": "Fayl topilmadi"}, status=status.HTTP_400_BAD_REQUEST)
-        try:
-            result = giblab_service.import_project_file(uploaded, request.user)
-        except GibLabValidationFailed as exc:
-            return Response({"success": False, "errors": exc.errors, "warnings": exc.warnings}, status=status.HTTP_400_BAD_REQUEST)
-        except GibLabImportError as exc:
-            return Response(exc.to_dict(), status=_status_for_giblab_error(exc.code))
         return Response(result)
 
 

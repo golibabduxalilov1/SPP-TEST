@@ -198,14 +198,19 @@ class OrderListSerializer(serializers.ModelSerializer):
     current_stage_name = serializers.CharField(source="current_stage.name", read_only=True)
     details = OrderDetailItemCreateSerializer(many=True, write_only=True, required=False)
     display_status = serializers.SerializerMethodField()
+    # Present only for the GibLab-backed create path (see
+    # OrderViewSet._create_from_giblab_import) -- product_name/quantity and
+    # every Part/Material/BOM row then come from the server-side import
+    # plan, never from this request's `product_name`/`details`.
+    giblab_import_id = serializers.UUIDField(write_only=True, required=False)
 
     class Meta:
         model = Order
         fields = [
             "id", "order_no", "customer_name", "customer_phone", "product_name",
-            "product_quantity", "deadline", "priority", "status", "created_at",
+            "product_quantity", "notes", "deadline", "priority", "status", "created_at",
             "parts_total", "parts_completed", "details", "current_stage", "current_stage_name", "stage_status",
-            "display_status",
+            "display_status", "giblab_import_id",
         ]
         read_only_fields = ["current_stage", "stage_status"]
 
@@ -290,11 +295,13 @@ class LabelSerializer(serializers.ModelSerializer):
 
 class GibLabImportBatchSerializer(serializers.ModelSerializer):
     order_no = serializers.CharField(source="order.order_no", read_only=True)
+    import_id = serializers.UUIDField(source="uuid", read_only=True)
 
     class Meta:
         model = GibLabImportBatch
         fields = [
-            "id", "original_filename", "file_checksum", "project_uuid", "file_version", "status",
-            "order", "order_no", "statistics", "errors", "warnings", "created_at", "completed_at",
+            "id", "import_id", "original_filename", "file_checksum", "project_uuid", "file_version", "status",
+            "order", "order_no", "statistics", "errors", "warnings", "created_at", "expires_at", "consumed_at",
+            "completed_at",
         ]
         read_only_fields = fields

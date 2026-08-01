@@ -31,6 +31,15 @@ def structural_validate(project: GibLabProjectDTO):
 
     if not project.products:
         errors.append(error_dict("MISSING_REQUIRED_FIELD", "Faylda hech qanday product topilmadi", entity_type="project"))
+    elif len(project.products) > 1:
+        errors.append(
+            error_dict(
+                "MULTIPLE_PRODUCTS_NOT_SUPPORTED",
+                "Faylda bir nechta product topildi -- hozircha faqat bitta product qo'llab-quvvatlanadi",
+                entity_type="project",
+                details={"count": len(project.products), "names": [p.name for p in project.products]},
+            )
+        )
 
     for product in project.products:
         path = f"/project/good[@typeId='product'][@id='{product.external_id}']"

@@ -1,10 +1,13 @@
-import { useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Save, Search, Truck, User, PackageSearch, X } from "lucide-react";
+import {
+  ArrowLeft, Loader2, PackageSearch, Save, Search, Truck, UploadCloud, User, X, XCircle, TriangleAlert,
+} from "lucide-react";
 import clsx from "clsx";
 import toast from "react-hot-toast";
 import { adminApi } from "../../api/client";
 import Button from "../../components/ui/Button";
+import Badge from "../../components/ui/Badge";
 import { Field, Input, Select, Textarea, Label } from "../../components/ui/Input";
 import EditableDetailsTable from "../../components/admin/EditableDetailsTable";
 import { formatUzPhone, normalizeUzPhone, isValidUzPhone } from "../../lib/phone";
@@ -17,17 +20,20 @@ function nextTempDetailId() {
   return tempDetailIdCounter;
 }
 
-function SectionCard({ icon: Icon, tone, title, subtitle, children, className }) {
+function SectionCard({ icon: Icon, tone, title, subtitle, headerAction, children, className }) {
   return (
     <div className={clsx("rounded-xl border border-(--border-subtle) bg-(--surface) p-4 sm:p-5", className)}>
-      <div className="mb-4 flex items-center gap-3">
-        <span className={clsx("flex h-9 w-9 shrink-0 items-center justify-center rounded-lg", tone)}>
-          <Icon size={17} />
-        </span>
-        <div className="min-w-0">
-          <p className="font-display text-sm font-semibold text-(--ink)">{title}</p>
-          {subtitle && <p className="text-xs text-(--ink-soft)">{subtitle}</p>}
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <span className={clsx("flex h-9 w-9 shrink-0 items-center justify-center rounded-lg", tone)}>
+            <Icon size={17} />
+          </span>
+          <div className="min-w-0">
+            <p className="font-display text-sm font-semibold text-(--ink)">{title}</p>
+            {subtitle && <p className="text-xs text-(--ink-soft)">{subtitle}</p>}
+          </div>
         </div>
+        {headerAction}
       </div>
       <div className="space-y-4">{children}</div>
     </div>
@@ -45,6 +51,32 @@ export default function NewOrder() {
   const [lookingUp, setLookingUp] = useState(false);
   const [details, setDetails] = useState([]);
 
+  // GibLab `.project` import: `giblab` holds the last validate() response
+  // (or an error shape) once a file has been uploaded; `giblabStatus` tracks
+  // the state machine (idle -> validating -> valid|invalid). While a valid
+  // import is active, Mahsulot nomi/soni/Detallar are driven by the
+  // server-validated `giblab.form` instead of manual entry (see
+  // giblabActive below) -- the actual Order is created from the stored
+  // import session (`giblab_import_id`), never from these display values.
+  const [giblab, setGiblab] = useState(null);
+  const [giblabStatus, setGiblabStatus] = useState("idle");
+  const fileInputRef = useRef(null);
+  const giblabActive = giblabStatus === "valid" && Boolean(giblab?.is_valid);
+
+  const giblabDetailRows = useMemo(() => {
+    if (!giblab?.form?.details) return [];
+    return giblab.form.details.map((d) => ({
+      id: `giblab-${d.external_id}-${d.code}`,
+      name: d.name,
+      length_mm: d.length_mm,
+      width_mm: d.width_mm,
+      thickness_mm: d.thickness_mm,
+      quantity: d.quantity,
+      material_type: d.material,
+      editable: false,
+    }));
+  }, [giblab]);
+
   async function addLocalDetail(payload) {
     setDetails((d) => [...d, { ...payload, id: nextTempDetailId() }]);
   }
@@ -55,6 +87,44 @@ export default function NewOrder() {
 
   async function removeLocalDetail(id) {
     setDetails((d) => d.filter((row) => row.id !== id));
+  }
+
+  function clearGiblabImport() {
+    setGiblab(null);
+    setGiblabStatus("idle");
+    setForm((f) => ({ ...f, product_name: "", product_quantity: "1" }));
+  }
+
+  async function handleGiblabFile(e) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setGiblabStatus("validating");
+    setGiblab(null);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const { data } = await adminApi.post("/giblab-imports/validate/", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      setGiblab(data);
+      setGiblabStatus(data.is_valid ? "valid" : "invalid");
+      if (data.is_valid) {
+        setForm((f) => ({
+          ...f,
+          product_name: data.form.product_name,
+          product_quantity: String(data.form.product_quantity),
+        }));
+        toast.success("GibLab fayli tasdiqlandi — forma to'ldirildi");
+      } else {
+        toast.error("Faylda xatoliklar topildi, pastda ko'ring");
+      }
+    } catch (err) {
+      const data = err.response?.data;
+      setGiblab({ is_valid: false, errors: data?.message ? [data] : [], warnings: [] });
+      setGiblabStatus("invalid");
+      toast.error(data?.message || "Faylni tekshirishda xatolik yuz berdi");
+    }
   }
 
   async function lookupCustomer() {
@@ -101,17 +171,23 @@ export default function NewOrder() {
     }
     setSaving(true);
     try {
-      await adminApi.post("/orders/", {
+      const payload = {
         ...form,
         customer_phone: isValidUzPhone(form.customer_phone) ? normalizeUzPhone(form.customer_phone) : "",
         product_quantity: productQuantity,
         deadline: form.deadline || null,
-        details: details.map(({ id, ...rest }) => rest),
-      });
+        // Imported Product/Parts/Materials/BOM/Routes are rebuilt server-side
+        // from the import session, never from client data -- `details` here
+        // is only the hand-typed rows added on top (manual flow, or extra
+        // rows alongside a GibLab import), so it's always sent as-is.
+        details: details.map(({ id: _id, ...rest }) => rest),
+      };
+      if (giblabActive) payload.giblab_import_id = giblab.import_id;
+      const { data } = await adminApi.post("/orders/", payload);
       toast.success("Buyurtma yaratildi");
-      navigate("/orders");
-    } catch {
-      toast.error("Xatolik yuz berdi");
+      navigate(`/orders/${data.id}`);
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Xatolik yuz berdi");
     } finally {
       setSaving(false);
     }
@@ -181,16 +257,115 @@ export default function NewOrder() {
             </Field>
           </SectionCard>
 
-          <SectionCard className="lg:col-span-2" icon={PackageSearch} tone="bg-(--accent-soft) text-(--accent-strong)" title="Mebel parametrlari" subtitle="Mahsulot va detallar ma'lumotlari">
+          <SectionCard
+            className="lg:col-span-2"
+            icon={PackageSearch}
+            tone="bg-(--accent-soft) text-(--accent-strong)"
+            title="Mebel parametrlari"
+            subtitle="Mahsulot va detallar ma'lumotlari"
+            headerAction={
+              <div className="flex flex-wrap items-center gap-2">
+                {giblabActive ? (
+                  <>
+                    <Button type="button" variant="secondary" size="sm" onClick={() => fileInputRef.current?.click()}>
+                      <UploadCloud size={14} /> Boshqa fayl yuklash
+                    </Button>
+                    <Button type="button" variant="ghost" size="sm" onClick={clearGiblabImport}>
+                      <X size={14} /> Importni tozalash
+                    </Button>
+                  </>
+                ) : (
+                  <Button
+                    type="button" variant="secondary" size="sm"
+                    onClick={() => fileInputRef.current?.click()}
+                    loading={giblabStatus === "validating"}
+                  >
+                    <UploadCloud size={14} /> GibLab .project yuklash
+                  </Button>
+                )}
+                <input
+                  ref={fileInputRef} type="file" accept=".project,.xml,.zip" className="hidden"
+                  onChange={handleGiblabFile}
+                />
+              </div>
+            }
+          >
+            {giblabStatus === "idle" && (
+              <p className="text-xs text-(--ink-soft)">
+                Mahsulot nomi, soni va detallarni avtomatik to'ldirish uchun GibLab <code>.project</code> faylini yuklashingiz mumkin, yoki quyida qo'lda kiriting.
+              </p>
+            )}
+
+            {giblabStatus === "validating" && (
+              <div className="flex items-center gap-2 text-sm text-(--ink-soft)">
+                <Loader2 size={16} className="animate-spin" /> Fayl tekshirilmoqda...
+              </div>
+            )}
+
+            {giblab && giblabStatus !== "validating" && (
+              <div className="space-y-2.5 rounded-lg border border-(--border-subtle) bg-(--surface-muted) p-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  {giblab.is_valid ? (
+                    <Badge tone="green" dot>Fayl tayyor</Badge>
+                  ) : (
+                    <Badge tone="red" dot>Xatoliklar mavjud</Badge>
+                  )}
+                  {giblab.file?.name && <Badge tone="gray">{giblab.file.name}</Badge>}
+                  {giblab.file?.version && <Badge tone="gray">GibLab v{giblab.file.version}</Badge>}
+                </div>
+
+                {giblab.errors?.length > 0 && (
+                  <div className="rounded-lg border border-status-red/30 bg-status-red-bg px-3 py-2 text-xs text-status-red">
+                    <p className="mb-1 flex items-center gap-1.5 font-semibold">
+                      <XCircle size={14} /> Xatoliklar ({giblab.errors.length})
+                    </p>
+                    <ul className="max-h-32 list-inside list-disc space-y-0.5 overflow-y-auto">
+                      {giblab.errors.map((err, idx) => (
+                        <li key={idx}>{err.message}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {giblab.warnings?.length > 0 && (
+                  <div className="rounded-lg border border-status-yellow/30 bg-status-yellow-bg px-3 py-2 text-xs text-status-yellow">
+                    <p className="mb-1 flex items-center gap-1.5 font-semibold">
+                      <TriangleAlert size={14} /> Ogohlantirishlar ({giblab.warnings.length})
+                    </p>
+                    <ul className="max-h-32 list-inside list-disc space-y-0.5 overflow-y-auto">
+                      {giblab.warnings.map((warn, idx) => (
+                        <li key={idx}>{warn.message}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {!giblab.is_valid && (
+                  <Button type="button" variant="secondary" size="sm" onClick={() => fileInputRef.current?.click()}>
+                    <UploadCloud size={14} /> Boshqa fayl yuklash
+                  </Button>
+                )}
+              </div>
+            )}
+
             <Field label="Mahsulot nomi" required>
-              <Input required value={form.product_name} onChange={(e) => setForm({ ...form, product_name: e.target.value })} />
+              <Input
+                required
+                disabled={giblabActive}
+                value={form.product_name}
+                onChange={(e) => setForm({ ...form, product_name: e.target.value })}
+              />
             </Field>
-            <Field label="Mahsulot soni" required hint="Nechta bir xil shkaf buyurtma qilinmoqda">
+            <Field
+              label="Mahsulot soni" required
+              hint={giblabActive ? "GibLab fayldan olindi" : "Nechta bir xil shkaf buyurtma qilinmoqda"}
+            >
               <Input
                 type="number"
                 required
                 min="1"
                 step="1"
+                disabled={giblabActive}
                 value={form.product_quantity}
                 onChange={(e) => setForm({ ...form, product_quantity: e.target.value })}
               />
@@ -198,13 +373,18 @@ export default function NewOrder() {
             <div>
               <Label>Detallar</Label>
               <EditableDetailsTable
-                rows={details}
+                rows={giblabActive ? [...giblabDetailRows, ...details] : details}
                 onCreate={addLocalDetail}
                 onUpdate={updateLocalDetail}
                 onDelete={removeLocalDetail}
                 productQuantity={Number(form.product_quantity) || 1}
                 emptyMessage="Detallar yo'q — qo'lda qo'shing"
               />
+              {giblabActive && (
+                <p className="mt-1.5 text-xs text-(--ink-soft)">
+                  GibLab'dan import qilingan detallar tahrirlanmaydi. Qo'shimcha detal (masalan, aksessuar) qo'shishingiz mumkin.
+                </p>
+              )}
             </div>
           </SectionCard>
         </div>
@@ -213,7 +393,7 @@ export default function NewOrder() {
           <Button type="button" variant="secondary" onClick={() => navigate("/orders")} disabled={saving}>
             <X size={16} /> Bekor qilish
           </Button>
-          <Button type="submit" disabled={saving} loading={saving}>
+          <Button type="submit" disabled={saving || giblabStatus === "validating"} loading={saving}>
             <Save size={16} /> Buyurtmani saqlash
           </Button>
         </div>

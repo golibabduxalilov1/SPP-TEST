@@ -18,6 +18,10 @@ MAX_ZIP_UNCOMPRESSED_SIZE = 100 * 1024 * 1024  # zip-bomb guard
 MAX_ZIP_COMPRESSION_RATIO = 100  # zip-bomb guard
 MAX_ZIP_MEMBER_COUNT = 50
 
+# How long a validated import session stays consumable by `POST /orders/`
+# before it must be re-validated (spec: import sessions expire).
+IMPORT_SESSION_TTL_MINUTES = 30
+
 GOOD_TYPE_PRODUCT = "product"
 GOOD_TYPE_SHEET = "sheet"
 GOOD_TYPE_BAND = "band"
