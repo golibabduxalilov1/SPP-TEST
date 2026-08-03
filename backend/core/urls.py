@@ -4,7 +4,7 @@ from rest_framework.routers import DefaultRouter
 from .views import (
     AuditLogViewSet, DashboardLeaderboardView, DashboardLiveLogsView, DashboardMachinesView,
     DashboardMachineSeriesView, DashboardOverviewView, DashboardSummaryView, OrdersReportExportView,
-    OrdersReportOverviewView, OrdersReportWorkerCompletedView, ProductionTableView,
+    OrdersReportOverviewView, OrdersReportWorkerCompletedView, ProductionStageDetailView, ProductionTableView,
     ReportMachinesView, ReportOrdersView, ReportProductionView, ReportScansView, ReportWarehouseView,
 )
 
@@ -13,6 +13,7 @@ router.register("audit-logs", AuditLogViewSet)
 
 urlpatterns = [
     path("production/table", ProductionTableView.as_view(), name="production-table"),
+    path("production/table/<str:code>", ProductionStageDetailView.as_view(), name="production-stage-detail"),
     path("dashboard/summary", DashboardSummaryView.as_view(), name="dashboard-summary"),
     path("dashboard/live-logs", DashboardLiveLogsView.as_view(), name="dashboard-live-logs"),
     path("dashboard/overview", DashboardOverviewView.as_view(), name="dashboard-overview"),

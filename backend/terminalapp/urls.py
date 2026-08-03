@@ -2,7 +2,7 @@ from django.urls import path
 from rest_framework.routers import DefaultRouter
 
 from .views import (
-    ConflictViewSet, OrderQRLookupView, OrderQRStatusUpdateView, SyncStatusView,
+    ConflictViewSet, OrderQRLookupView, OrderQRStatusUpdateView, ScanUndoView, SyncStatusView,
     TerminalBootstrapView, TerminalOperationsView, TerminalScanView, TerminalSyncView,
 )
 
@@ -13,6 +13,7 @@ urlpatterns = [
     path("terminal/operations", TerminalOperationsView.as_view(), name="terminal-operations"),
     path("terminal/bootstrap", TerminalBootstrapView.as_view(), name="terminal-bootstrap"),
     path("terminal/scan", TerminalScanView.as_view(), name="terminal-scan"),
+    path("terminal/scan/<int:pk>/undo", ScanUndoView.as_view(), name="terminal-scan-undo"),
     path("terminal/sync", TerminalSyncView.as_view(), name="terminal-sync"),
     path("terminal/sync-status/<str:batch_id>", SyncStatusView.as_view(), name="terminal-sync-status"),
     path("terminal/order-qr/lookup", OrderQRLookupView.as_view(), name="terminal-order-qr-lookup"),

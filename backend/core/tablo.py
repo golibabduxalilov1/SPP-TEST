@@ -1,9 +1,12 @@
 from decimal import Decimal
 
+from django.db.models import Case, IntegerField, Value, When
+
 from manufacturing.models import Operation
 from manufacturing.units import MEASURE_UNIT_LABELS
 from manufacturing.units import stage_value as _stage_value_for_unit
 from orders.models import Order, OrderStageProgress, PartRoute
+from terminalapp.models import ScanEvent
 
 
 TABLO_STATUSES = [
@@ -13,6 +16,17 @@ TABLO_STATUSES = [
     Order.Status.WAREHOUSE,
     Order.Status.COMPLETED,
 ]
+
+# Hard priority ranking for the tablo: every Urgent order outranks every
+# High order, which outranks every Normal order. Newest-first is only ever
+# a tiebreaker *within* one of these groups, never across them.
+PRIORITY_RANK = Case(
+    When(priority=Order.Priority.URGENT, then=Value(0)),
+    When(priority=Order.Priority.HIGH, then=Value(1)),
+    When(priority=Order.Priority.NORMAL, then=Value(2)),
+    default=Value(3),
+    output_field=IntegerField(),
+)
 
 
 def detail_contribution(detail, product_quantity=1):
@@ -163,6 +177,71 @@ def _cells(order, operations):
     return cells
 
 
+def _employee_label(user):
+    if not user:
+        return None
+    return user.get_full_name() or user.username
+
+
+def _scan_payload(scan):
+    return {
+        "id": scan.id,
+        "part_code": scan.part.code if scan.part else None,
+        "part_name": scan.part.name if scan.part else None,
+        "order_no": scan.order.order_no if scan.order else None,
+        "employee_name": _employee_label(scan.employee),
+        "status": scan.status,
+        "error_code": scan.error_code,
+        "received_at": scan.received_at_server,
+    }
+
+
+def build_stage_detail(operation, history_limit=100):
+    """Per-Part drilldown for one operation column of the tablo — unlike
+    build_production_table, which aggregates order-level totals, this works
+    directly off Part/PartRoute since that's the granularity the tablo's
+    "click a column" page (backlog list, last scan, scan history) needs."""
+
+    routes = (
+        PartRoute.objects.filter(
+            operation=operation,
+            status__in=[PartRoute.Status.PENDING, PartRoute.Status.IN_PROGRESS],
+            part__order__status__in=TABLO_STATUSES,
+        )
+        .select_related("part", "part__order")
+        .order_by("part__order__priority", "part__order__deadline", "part__code")
+    )
+    parts = [
+        {
+            "id": route.part.id,
+            "code": route.part.code,
+            "name": route.part.name,
+            "length_mm": route.part.length_mm,
+            "width_mm": route.part.width_mm,
+            "quantity": route.part.quantity,
+            "order_no": route.part.order.order_no,
+            "route_status": route.status,
+        }
+        for route in routes
+    ]
+
+    scans = ScanEvent.objects.filter(operation=operation).select_related("part", "order", "employee")
+    last_scan = scans.filter(status=ScanEvent.Status.ACCEPTED).order_by("-received_at_server").first()
+    history = scans.order_by("-received_at_server")[:history_limit]
+
+    return {
+        "operation": {
+            "code": operation.code,
+            "name": operation.name,
+            "measure_unit": operation.measure_unit,
+            "unit_label": MEASURE_UNIT_LABELS.get(operation.measure_unit, operation.measure_unit),
+        },
+        "parts": parts,
+        "last_scan": _scan_payload(last_scan) if last_scan else None,
+        "history": [_scan_payload(scan) for scan in history],
+    }
+
+
 def build_production_table(mode="hajm"):
     if mode not in {"hajm", "soni", "foiz"}:
         mode = "hajm"
@@ -172,7 +251,8 @@ def build_production_table(mode="hajm"):
         Order.objects.filter(status__in=TABLO_STATUSES)
         .select_related("current_stage")
         .prefetch_related("details__part__routes", "parts__routes", "stage_progress")
-        .order_by("priority", "deadline", "id")
+        .annotate(_priority_rank=PRIORITY_RANK)
+        .order_by("_priority_rank", "-created_at", "-id")
     )
 
     rows = []

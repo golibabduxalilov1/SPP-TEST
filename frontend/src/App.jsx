@@ -13,6 +13,7 @@ import NewOrder from "./pages/admin/NewOrder";
 import OrderDetail from "./pages/admin/OrderDetail";
 import Customers from "./pages/admin/Customers";
 import Tablo from "./pages/admin/Tablo";
+import TabloStage from "./pages/admin/TabloStage";
 import Machines from "./pages/admin/Machines";
 import Employees from "./pages/admin/Employees";
 import Conflicts from "./pages/admin/Conflicts";
@@ -72,6 +73,7 @@ export default function App() {
           <Route path="orders/:id" element={<OrderDetail />} />
           <Route path="customers" element={<Customers />} />
           <Route path="tablo" element={<Tablo />} />
+          <Route path="tablo/:code" element={<TabloStage />} />
           <Route path="labels" element={<Labels />} />
           <Route path="machines" element={<Machines />} />
           <Route path="employees" element={<Employees />} />

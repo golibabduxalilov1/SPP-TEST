@@ -57,8 +57,6 @@ def structural_validate(project: GibLabProjectDTO):
             part_path = part.xml_path or f"{path}/part[@id='{part.external_id}']"
             if not part.external_id:
                 errors.append(error_dict("MISSING_REQUIRED_FIELD", "Part id mavjud emas", entity_type="part", xml_path=part_path))
-            if not part.code:
-                errors.append(error_dict("MISSING_REQUIRED_FIELD", "Part code mavjud emas", entity_type="part", external_id=part.external_id, xml_path=part_path))
             if not part.name:
                 errors.append(error_dict("MISSING_REQUIRED_FIELD", "Part name mavjud emas", entity_type="part", external_id=part.external_id, xml_path=part_path))
             if part.quantity_per_product <= 0:

@@ -5,6 +5,7 @@ from core.models import AuditLog
 from manufacturing.models import Machine, Operation, Tsex
 from orders.models import Order, Part, PartRoute
 from orders.production_workflow import approve_order
+from terminalapp.models import ScanEvent
 
 
 class OrderQRStatusTests(APITestCase):
@@ -204,3 +205,108 @@ class TerminalBootstrapMachineScopingTests(APITestCase):
         response = self.client.get("/api/terminal/bootstrap", {"operation_id": self.arra.id})
         self.assertEqual(response.status_code, 200, response.data)
         self.assertEqual({m["id"] for m in response.data["machines"]}, {self.arra_1.id, self.arra_2.id})
+
+
+class ScanUndoTests(APITestCase):
+    """POST /api/terminal/scan/<id>/undo — the tablo stage page's "Bekor
+    qilish" action. Symmetric inverse of process_scan's accept branch."""
+
+    def setUp(self):
+        Operation.objects.all().delete()
+        self.stage1 = Operation.objects.create(code="ARRA", name="Arra", measure_unit="m2", order_index=1, is_active=True)
+        self.stage2 = Operation.objects.create(code="QADOQLASH", name="Qadoqlash", measure_unit="package", order_index=2, is_active=True)
+        self.operator = User.objects.create_user(
+            username="undo-operator", phone="+998901113701", password="secret-pass", role=Role.OPERATOR,
+        )
+        self.manager = User.objects.create_user(
+            username="undo-manager", phone="+998901113702", password="secret-pass", role=Role.MANAGER,
+        )
+        self.order = Order.objects.create(order_no="U-100", product_name="Undo test", created_by=self.operator)
+
+    def _make_part(self, code, order=None):
+        order = order or self.order
+        part = Part.objects.create(order=order, code=code, name="Panel", quantity=3)
+        PartRoute.objects.create(part=part, operation=self.stage1, sequence_index=1, status=PartRoute.Status.PENDING)
+        PartRoute.objects.create(part=part, operation=self.stage2, sequence_index=2, status=PartRoute.Status.PENDING)
+        part.current_operation = self.stage1
+        part.save(update_fields=["current_operation"])
+        return part
+
+    def _scan(self, part, scan_id, operation=None):
+        self.client.force_authenticate(user=self.operator)
+        return self.client.post(
+            "/api/terminal/scan",
+            {"client_scan_id": scan_id, "qr_token": part.qr_token, "operation_code": (operation or self.stage1).code},
+            format="json",
+        )
+
+    def test_undo_reverts_route_part_and_scan_state(self):
+        part = self._make_part("U-100-1")
+        self._make_part("U-100-2")  # keeps the order-level stage in progress so undo stays legal
+        approve_order(self.order.id)
+        response = self._scan(part, "undo-scan-1")
+        self.assertEqual(response.status_code, 200, response.data)
+        scan = ScanEvent.objects.get(client_scan_id="undo-scan-1")
+
+        self.client.force_authenticate(user=self.manager)
+        response = self.client.post(f"/api/terminal/scan/{scan.id}/undo")
+
+        self.assertEqual(response.status_code, 200, response.data)
+        route = PartRoute.objects.get(part=part, operation=self.stage1)
+        self.assertEqual(route.status, PartRoute.Status.PENDING)
+        self.assertIsNone(route.completed_at)
+        self.assertIsNone(route.completed_by)
+
+        part.refresh_from_db()
+        self.assertEqual(part.current_operation, self.stage1)
+        self.assertEqual(part.status, Part.Status.PENDING, "no other route was ever completed, so it reverts to PENDING")
+
+        scan.refresh_from_db()
+        self.assertEqual(scan.status, ScanEvent.Status.UNDONE)
+        self.assertTrue(AuditLog.objects.filter(action="scan.undo", entity_id=str(scan.id)).exists())
+
+    def test_operator_role_cannot_undo(self):
+        part = self._make_part("U-100-3")
+        approve_order(self.order.id)
+        response = self._scan(part, "undo-scan-2")
+        self.assertEqual(response.status_code, 200, response.data)
+        scan = ScanEvent.objects.get(client_scan_id="undo-scan-2")
+
+        self.client.force_authenticate(user=self.operator)
+        response = self.client.post(f"/api/terminal/scan/{scan.id}/undo")
+        self.assertEqual(response.status_code, 403)
+
+    def test_cannot_undo_a_scan_twice(self):
+        part = self._make_part("U-100-4")
+        self._make_part("U-100-5")
+        approve_order(self.order.id)
+        response = self._scan(part, "undo-scan-3")
+        self.assertEqual(response.status_code, 200, response.data)
+        scan = ScanEvent.objects.get(client_scan_id="undo-scan-3")
+
+        self.client.force_authenticate(user=self.manager)
+        first = self.client.post(f"/api/terminal/scan/{scan.id}/undo")
+        self.assertEqual(first.status_code, 200, first.data)
+        second = self.client.post(f"/api/terminal/scan/{scan.id}/undo")
+        self.assertEqual(second.status_code, 400)
+
+    def test_cannot_undo_once_order_level_stage_is_completed(self):
+        # A single-part order: scanning it finishes everyone the board is
+        # waiting on for stage1, so process_scan auto-advances the order
+        # (see ScanAdvancesBoardStageTests) — that scan must no longer be
+        # undoable, since reverting the route alone would leave
+        # OrderStageProgress out of sync with it.
+        part = self._make_part("U-100-6")
+        approve_order(self.order.id)
+        response = self._scan(part, "undo-scan-4")
+        self.assertEqual(response.status_code, 200, response.data)
+        self.order.refresh_from_db()
+        self.assertEqual(self.order.current_stage, self.stage2, "stage1 must have auto-completed at the order level")
+        scan = ScanEvent.objects.get(client_scan_id="undo-scan-4")
+
+        self.client.force_authenticate(user=self.manager)
+        response = self.client.post(f"/api/terminal/scan/{scan.id}/undo")
+
+        self.assertEqual(response.status_code, 400, response.data)
+        route = PartRoute.objects.get(part=part, operation=self.stage1)
+        self.assertEqual(route.status, PartRoute.Status.COMPLETED, "must be left untouched")

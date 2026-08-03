@@ -16,7 +16,7 @@ from orders.status_flow import next_allowed_statuses
 
 from .models import Conflict, OfflineSyncBatch, ScanEvent
 from .serializers import ConflictSerializer, ScanEventSerializer, SingleScanSerializer, SyncBatchSerializer
-from .services import process_scan
+from .services import UndoScanError, process_scan, undo_scan
 
 
 class TerminalOperationsView(APIView):
@@ -95,6 +95,20 @@ class TerminalScanView(APIView):
         )
         http_status = status.HTTP_200_OK if result["status"] == "synced" else status.HTTP_409_CONFLICT
         return Response(result, status=http_status)
+
+
+class ScanUndoView(APIView):
+    """Reverses one accepted scan — an admin/master correction action, so it
+    carries the same permission bar as conflict resolution."""
+
+    permission_classes = [IsAuthenticated, IsManagementRole]
+
+    def post(self, request, pk):
+        try:
+            scan = undo_scan(pk, actor=request.user)
+        except UndoScanError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(ScanEventSerializer(scan).data)
 
 
 class TerminalSyncView(APIView):

@@ -8,7 +8,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from manufacturing.models import Machine
+from manufacturing.models import Machine, Operation
 
 from . import dashboard_metrics
 from . import reports as reports_service
@@ -17,7 +17,7 @@ from .audit import log_action
 from .dashboard import build_summary
 from .models import AuditLog, LiveLogEvent
 from .serializers import AuditLogSerializer, LiveLogEventSerializer
-from .tablo import build_production_table
+from .tablo import build_production_table, build_stage_detail
 
 
 def _parse_report_date(value, default):
@@ -44,6 +44,15 @@ class ProductionTableView(APIView):
     def get(self, request):
         mode = request.query_params.get("mode", "hajm")
         return Response(build_production_table(mode))
+
+
+class ProductionStageDetailView(APIView):
+    def get(self, request, code):
+        operation = Operation.objects.filter(code=code, is_active=True).first()
+        if not operation:
+            return Response({"detail": "Bosqich topilmadi"}, status=404)
+        limit = int(request.query_params.get("limit", 100))
+        return Response(build_stage_detail(operation, history_limit=limit))
 
 
 class DashboardSummaryView(APIView):

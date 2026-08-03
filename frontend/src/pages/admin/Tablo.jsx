@@ -401,7 +401,13 @@ export default function Tablo() {
                   </th>
                   {data.operations.map((op) => (
                     <th key={op.code} className="border-r border-b border-(--border-strong) px-1.5 py-4 text-center align-middle last:border-r-0">
-                      <span className="leading-snug whitespace-nowrap" title={op.name}>{op.name}</span>
+                      <Link
+                        to={`/tablo/${op.code}`}
+                        className="focus-ring rounded-sm leading-snug whitespace-nowrap underline decoration-dotted decoration-(--border-strong) underline-offset-4 hover:text-(--accent-strong) hover:decoration-(--accent-strong)"
+                        title={op.name}
+                      >
+                        {op.name}
+                      </Link>
                     </th>
                   ))}
                 </tr>

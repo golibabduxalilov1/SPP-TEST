@@ -7,6 +7,7 @@ registries described in the spec (`materials_by_id`, `operations_by_id`,
 unique within their own element type, never globally.
 """
 
+import re
 from decimal import Decimal, InvalidOperation
 
 from .constants import (
@@ -60,10 +61,27 @@ def _operation_ref(ref):
     return None
 
 
-def _parse_product_part(part_el, xml_path_prefix):
+def _fallback_part_code(external_id, name):
+    """Deterministic stand-in for a missing `code`, built from the fields
+    that GibLab does reliably send (spec: code is human-readable-only, never
+    used for identification -- qr_token owns that). Prefers name (kept short
+    for label/log readability) with id appended for uniqueness; falls back to
+    id alone if name is blank."""
+    slug = re.sub(r"[^A-Za-z0-9]+", "-", name).strip("-").upper()[:32] if name else ""
+    if slug:
+        return f"{slug}-{external_id}" if external_id else slug
+    return str(external_id)
+
+
+def _parse_product_part(part_el, xml_path_prefix, warnings):
     attrs = part_el.attrib
     external_id = attrs.get("id")
+    name = attrs.get("name", "")
     code = attrs.get("code") or attrs.get("part.code") or ""
+    fallback_code_used = False
+    if not code and (external_id or name):
+        code = _fallback_part_code(external_id, name)
+        fallback_code_used = True
     count = _int(attrs.get("count"), 1)
     used_count = _int(attrs.get("usedCount"), count)
     length_mm = _dec(attrs.get("l"), Decimal("0"))
@@ -72,7 +90,7 @@ def _parse_product_part(part_el, xml_path_prefix):
     part = GibLabPartDTO(
         external_id=external_id,
         code=code,
-        name=attrs.get("name", ""),
+        name=name,
         quantity_per_product=count,
         total_quantity=used_count,
         length_mm=length_mm,
@@ -87,6 +105,16 @@ def _parse_product_part(part_el, xml_path_prefix):
         minus_count=_int(attrs.get("minusCount"), 0),
         xml_path=f"{xml_path_prefix}/part[@id='{external_id}']",
     )
+
+    if fallback_code_used:
+        warnings.append(
+            error_dict(
+                "PART_CODE_FALLBACK_GENERATED",
+                "Part code mavjud emas, name/id asosida o'rinbosar kod avtomatik yaratildi",
+                entity_type="part", external_id=external_id, xml_path=part.xml_path,
+                details={"generated_code": code},
+            )
+        )
 
     for attr_name, (side, mat_attr) in EDGE_SIDE_ATTRS.items():
         ref = attrs.get(attr_name)
@@ -119,7 +147,7 @@ def _parse_good(elem, project: GibLabProjectDTO, warnings):
         )
         xml_path_prefix = f"/project/good[@typeId='product'][@id='{external_id}']"
         for part_el in _children(elem, "part"):
-            part = _parse_product_part(part_el, xml_path_prefix)
+            part = _parse_product_part(part_el, xml_path_prefix, warnings)
             if part.external_id in project.product_parts_by_id:
                 warnings.append(
                     error_dict(

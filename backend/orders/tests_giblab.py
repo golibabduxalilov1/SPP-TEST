@@ -191,6 +191,58 @@ class GibLabParserTests(APITestCase):
         berrors, _bwarnings, _codes = validator.business_validate(project, set())
         self.assertTrue(any(e["code"] == "MATERIAL_NOT_FOUND" for e in berrors))
 
+    def test_missing_code_gets_deterministic_fallback_and_warns(self):
+        xml = MINIMAL_PRODUCT_XML.replace(
+            '<part id="1" code="C1" name="Part1" count="1" usedCount="2" l="500" w="300"/>',
+            '<part id="1" name="Part1" count="1" usedCount="2" l="500" w="300"/>',
+        )
+        root = file_reader.parse_xml_safely(xml)
+        project = parser.parse(root)
+        part = project.products[0].parts[0]
+        self.assertTrue(part.code)
+        self.assertIn("1", part.code)
+        self.assertIn("PART1", part.code)
+
+        errors, _warnings = validator.structural_validate(project)
+        self.assertFalse(any(e["code"] == "MISSING_REQUIRED_FIELD" and e["external_id"] == "1" for e in errors))
+        self.assertTrue(any(w["code"] == "PART_CODE_FALLBACK_GENERATED" for w in project.warnings))
+
+        # Re-parsing the same input always yields the same fallback code.
+        project2 = parser.parse(file_reader.parse_xml_safely(xml))
+        self.assertEqual(part.code, project2.products[0].parts[0].code)
+
+    def test_missing_code_without_name_falls_back_to_id(self):
+        xml = MINIMAL_PRODUCT_XML.replace(
+            '<part id="1" code="C1" name="Part1" count="1" usedCount="2" l="500" w="300"/>',
+            '<part id="1" count="1" usedCount="2" l="500" w="300"/>',
+        )
+        root = file_reader.parse_xml_safely(xml)
+        project = parser.parse(root)
+        part = project.products[0].parts[0]
+        self.assertEqual(part.code, "1")  # id-only fallback -- still usable, id is present
+
+        errors, _warnings = validator.structural_validate(project)
+        self.assertTrue(any(e["code"] == "MISSING_REQUIRED_FIELD" and "name" in e["message"] for e in errors))
+
+    def test_missing_code_id_and_name_leaves_import_fatal(self):
+        """Boundary case: with neither id nor name, there is nothing to build
+        a fallback code from -- the pre-existing id/name fatal errors should
+        still stand, unaffected by the fallback-code logic."""
+        xml = MINIMAL_PRODUCT_XML.replace(
+            '<part id="1" code="C1" name="Part1" count="1" usedCount="2" l="500" w="300"/>',
+            '<part count="1" usedCount="2" l="500" w="300"/>',
+        )
+        root = file_reader.parse_xml_safely(xml)
+        project = parser.parse(root)
+        part = project.products[0].parts[0]
+        self.assertEqual(part.code, "")
+
+        errors, _warnings = validator.structural_validate(project)
+        error_codes = [e["code"] for e in errors if e["entity_type"] == "part"]
+        self.assertIn("MISSING_REQUIRED_FIELD", error_codes)
+        self.assertTrue(any("id" in e["message"] for e in errors if e["entity_type"] == "part"))
+        self.assertTrue(any("name" in e["message"] for e in errors if e["entity_type"] == "part"))
+
 
 class GibLabValidatorTests(APITestCase):
     def test_unsupported_version_rejected(self):

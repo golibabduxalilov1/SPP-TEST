@@ -1,4 +1,5 @@
 from datetime import timedelta
+from decimal import Decimal
 
 from django.test import TestCase
 from django.utils import timezone
@@ -7,7 +8,7 @@ from rest_framework.test import APITestCase
 from accounts.models import Role, User
 from manufacturing.models import Machine, Operation, Tsex
 from orders.constants import DEFAULT_ROUTE_KEY, OPERATION_SEEDS, ROUTE_TEMPLATES
-from orders.models import Order, OrderDetail, PartRoute
+from orders.models import Order, OrderDetail, Part, PartRoute
 from orders.production_workflow import approve_order, complete_current_stage
 from packaging.models import Package
 from orders.services import create_part_for_order_detail
@@ -584,3 +585,79 @@ class DashboardPackageMetricsTests(APITestCase):
         series_response = self.client.get(f"/api/dashboard/machines/{self.machine.id}/series", self.window)
         self.assertEqual(series_response.data["period_volume"], 1.0)
         self.assertEqual(series_response.data["unit_label"], "qadoq")
+
+
+class ProductionStageDetailViewTests(APITestCase):
+    """GET /api/production/table/<code> — the per-Part drilldown behind a
+    tablo column click: backlog list, last accepted scan, scan history."""
+
+    def setUp(self):
+        Operation.objects.all().delete()
+        self.stage1 = Operation.objects.create(code="ARRA", name="Arra", measure_unit="m2", order_index=1, is_active=True)
+        self.stage2 = Operation.objects.create(code="QADOQLASH", name="Qadoqlash", measure_unit="package", order_index=2, is_active=True)
+        self.user = User.objects.create_user(
+            username="stage-detail-viewer", phone="+998901113801", password="secret-pass", role=Role.MANAGER,
+        )
+        self.client.force_authenticate(user=self.user)
+        self.order = Order.objects.create(order_no="S-100", product_name="Stage detail test")
+
+    def _make_part(self, code):
+        part = Part.objects.create(order=self.order, code=code, name="Panel", quantity=2, length_mm=800, width_mm=400)
+        PartRoute.objects.create(part=part, operation=self.stage1, sequence_index=1, status=PartRoute.Status.PENDING)
+        PartRoute.objects.create(part=part, operation=self.stage2, sequence_index=2, status=PartRoute.Status.PENDING)
+        part.current_operation = self.stage1
+        part.save(update_fields=["current_operation"])
+        return part
+
+    def test_unknown_stage_code_returns_404(self):
+        response = self.client.get("/api/production/table/NOPE")
+        self.assertEqual(response.status_code, 404)
+
+    def test_backlog_lists_only_parts_not_yet_completed_at_the_stage(self):
+        part = self._make_part("S-100-1")
+        approve_order(self.order.id)
+
+        response = self.client.get(f"/api/production/table/{self.stage1.code}")
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data["operation"]["code"], self.stage1.code)
+        codes = [row["code"] for row in response.data["parts"]]
+        self.assertEqual(codes, [part.code])
+        self.assertEqual(response.data["parts"][0]["quantity"], 2)
+        self.assertEqual(Decimal(response.data["parts"][0]["length_mm"]), Decimal("800.0"))
+        self.assertIsNone(response.data["last_scan"])
+        self.assertEqual(response.data["history"], [])
+
+    def test_scanned_part_drops_off_the_backlog_and_appears_as_last_scan(self):
+        part = self._make_part("S-100-2")
+        self._make_part("S-100-3")  # keeps stage1 in progress at the order level
+        approve_order(self.order.id)
+        process_scan(
+            client_scan_id="stage-detail-scan-1", qr_token=part.qr_token, operation_code=self.stage1.code,
+            employee=self.user, device_id="dev-1",
+        )
+
+        response = self.client.get(f"/api/production/table/{self.stage1.code}")
+
+        self.assertEqual(response.status_code, 200, response.data)
+        codes = [row["code"] for row in response.data["parts"]]
+        self.assertNotIn(part.code, codes, "scanned part must have left the stage1 backlog")
+        self.assertEqual(response.data["last_scan"]["part_code"], part.code)
+        self.assertEqual(len(response.data["history"]), 1)
+        self.assertEqual(response.data["history"][0]["status"], ScanEvent.Status.ACCEPTED)
+
+    def test_history_includes_conflicts(self):
+        part = self._make_part("S-100-4")
+        approve_order(self.order.id)
+        process_scan(
+            client_scan_id="stage-detail-conflict-1", qr_token=part.qr_token, operation_code=self.stage2.code,
+            employee=self.user, device_id="dev-1",
+        )
+
+        response = self.client.get(f"/api/production/table/{self.stage2.code}")
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertIsNone(response.data["last_scan"], "the rejected scan must not count as a last accepted scan")
+        self.assertEqual(len(response.data["history"]), 1)
+        self.assertEqual(response.data["history"][0]["status"], ScanEvent.Status.CONFLICT)
+        self.assertEqual(response.data["history"][0]["error_code"], "previous_not_completed")

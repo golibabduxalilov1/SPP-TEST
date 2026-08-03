@@ -11,6 +11,7 @@ class ScanEvent(models.Model):
         ACCEPTED = "accepted", "Qabul qilindi"
         REJECTED = "rejected", "Rad etildi"
         CONFLICT = "conflict", "Muammoli holat"
+        UNDONE = "undone", "Bekor qilindi"
 
     client_scan_id = models.CharField(max_length=128, unique=True)
     qr_token = models.CharField(max_length=64)
