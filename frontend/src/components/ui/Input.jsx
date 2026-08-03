@@ -3,13 +3,21 @@ import clsx from "clsx";
 import { Check, AlertCircle, ChevronDown } from "lucide-react";
 
 const FIELD_STRUCTURE =
-  "w-full rounded-lg border transition-[border-color,box-shadow,background-color] duration-[220ms] ease-out " +
+  "w-full rounded-lg border transition-[border-color,box-shadow,background-color] duration-150 ease-in-out " +
   "focus:outline-none disabled:cursor-not-allowed disabled:opacity-50";
 
-const FIELD_LIGHT =
-  "bg-(--surface) px-3.5 py-2.5 text-sm text-(--ink) " +
+// md = compact default (admin forms/filters); lg = original comfortable sizing,
+// kept for terminal/touch contexts and reused verbatim by table-embedded inputs
+// (via explicit size="lg") so Table.jsx stays pixel-identical.
+const SIZE_LIGHT = {
+  md: "min-h-[38px] px-3 py-2 text-sm",
+  lg: "px-3.5 py-2.5 text-sm",
+};
+
+const FIELD_LIGHT_BASE =
+  "bg-(--surface-raised) text-(--ink) " +
   "shadow-[inset_0_1px_2px_rgba(74,50,35,0.05)] " +
-  "placeholder:text-(--ink-faint) transition-[border-color,box-shadow,background-color] duration-[220ms] ease-out " +
+  "placeholder:text-(--ink-faint) " +
   "disabled:hover:border-(--border-strong)!";
 
 const FIELD_DARK =
@@ -17,12 +25,14 @@ const FIELD_DARK =
   "placeholder:text-white/35 hover:border-white/20 focus:border-(--accent-bright) " +
   "focus:shadow-[0_0_0_3px_rgba(99,102,241,0.30)]";
 
-const FIELD_BASE = `${FIELD_STRUCTURE} ${FIELD_LIGHT}`;
+function fieldLightClasses(size) {
+  return `${FIELD_STRUCTURE} ${FIELD_LIGHT_BASE} ${SIZE_LIGHT[size] || SIZE_LIGHT.md}`;
+}
 
 const STATE_CLASSES = {
   default:
     "border-(--border-strong) hover:border-(--ink-faint) " +
-    "focus:border-(--accent) focus:shadow-[inset_0_1px_2px_rgba(74,50,35,0.05),0_0_0_3px_color-mix(in_srgb,var(--accent)_16%,transparent)]",
+    "focus:border-(--accent) focus:shadow-[inset_0_1px_2px_rgba(74,50,35,0.05),0_0_0_3px_color-mix(in_srgb,var(--accent)_12%,transparent)]",
   error:
     "border-status-red hover:border-status-red field-shake " +
     "focus:border-status-red focus:shadow-[inset_0_1px_2px_rgba(74,50,35,0.05),0_0_0_3px_color-mix(in_srgb,var(--color-status-red)_16%,transparent)]",
@@ -60,12 +70,13 @@ export const Input = forwardRef(function Input({
   containerClassName,
   state = "default",
   appearance = "light",
+  size = "md",
   leadingIcon,
   trailing,
   ...props
 }, ref) {
   const showIcon = state === "error" || state === "success";
-  const appearanceClasses = appearance === "dark" ? `${FIELD_STRUCTURE} ${FIELD_DARK}` : FIELD_BASE;
+  const appearanceClasses = appearance === "dark" ? `${FIELD_STRUCTURE} ${FIELD_DARK}` : fieldLightClasses(size);
   return (
     <div className={clsx("relative", containerClassName)}>
       <input
@@ -94,13 +105,13 @@ export const Input = forwardRef(function Input({
   );
 });
 
-export function Select({ className, containerClassName, children, state = "default", ...props }) {
+export function Select({ className, containerClassName, children, state = "default", size = "md", ...props }) {
   return (
     <div className={clsx("relative", containerClassName)}>
       <select
         aria-invalid={state === "error" || undefined}
         className={clsx(
-          FIELD_BASE,
+          fieldLightClasses(size),
           STATE_CLASSES[state] || STATE_CLASSES.default,
           "cursor-pointer appearance-none pr-9",
           className
@@ -118,12 +129,12 @@ export function Select({ className, containerClassName, children, state = "defau
   );
 }
 
-export function Textarea({ className, containerClassName, state = "default", ...props }) {
+export function Textarea({ className, containerClassName, state = "default", size = "md", ...props }) {
   return (
     <div className={clsx("relative", containerClassName)}>
       <textarea
         aria-invalid={state === "error" || undefined}
-        className={clsx(FIELD_BASE, STATE_CLASSES[state] || STATE_CLASSES.default, className)}
+        className={clsx(fieldLightClasses(size), STATE_CLASSES[state] || STATE_CLASSES.default, className)}
         {...props}
       />
     </div>

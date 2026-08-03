@@ -194,23 +194,23 @@ function EditRow({ draft, setDraft, busy, onSave, onCancel, showTotalColumn }) {
   return (
     <Tr>
       <Td>
-        <Input autoFocus value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="Nomi" className="min-h-9!" />
+        <Input size="lg" autoFocus value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="Nomi" className="min-h-9!" />
       </Td>
       <Td>
-        <Input type="number" step="0.1" min="0" value={draft.length_mm} onChange={(e) => setDraft({ ...draft, length_mm: e.target.value })} className="min-h-9! w-20!" />
+        <Input size="lg" type="number" step="0.1" min="0" value={draft.length_mm} onChange={(e) => setDraft({ ...draft, length_mm: e.target.value })} className="min-h-9! w-20!" />
       </Td>
       <Td>
-        <Input type="number" step="0.1" min="0" value={draft.width_mm} onChange={(e) => setDraft({ ...draft, width_mm: e.target.value })} className="min-h-9! w-20!" />
+        <Input size="lg" type="number" step="0.1" min="0" value={draft.width_mm} onChange={(e) => setDraft({ ...draft, width_mm: e.target.value })} className="min-h-9! w-20!" />
       </Td>
       <Td>
-        <Input type="number" step="0.1" min="0" value={draft.thickness_mm} onChange={(e) => setDraft({ ...draft, thickness_mm: e.target.value })} className="min-h-9! w-20!" />
+        <Input size="lg" type="number" step="0.1" min="0" value={draft.thickness_mm} onChange={(e) => setDraft({ ...draft, thickness_mm: e.target.value })} className="min-h-9! w-20!" />
       </Td>
       <Td>
-        <Input type="number" min="1" value={draft.quantity} onChange={(e) => setDraft({ ...draft, quantity: e.target.value })} className="min-h-9! w-16!" />
+        <Input size="lg" type="number" min="1" value={draft.quantity} onChange={(e) => setDraft({ ...draft, quantity: e.target.value })} className="min-h-9! w-16!" />
       </Td>
       {showTotalColumn && <Td className="text-(--ink-faint)">—</Td>}
       <Td>
-        <Input value={draft.material_type} onChange={(e) => setDraft({ ...draft, material_type: e.target.value })} placeholder="LDSP" className="min-h-9! w-24!" />
+        <Input size="lg" value={draft.material_type} onChange={(e) => setDraft({ ...draft, material_type: e.target.value })} placeholder="LDSP" className="min-h-9! w-24!" />
       </Td>
       <Td>
         <div className="ml-auto flex w-fit items-center gap-1.5">

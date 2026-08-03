@@ -27,8 +27,8 @@ const VARIANTS = {
 };
 
 const SIZES = {
-  sm: "min-h-11 rounded-lg px-[18px] py-2.5 text-sm",
-  md: "min-h-11 rounded-lg px-5 py-2.5 text-sm",
+  sm: "min-h-[32px] rounded-lg px-3 py-1.5 text-[0.8125rem]",
+  md: "min-h-[38px] rounded-lg px-4 py-2 text-sm",
   lg: "min-h-11 rounded-[10px] px-5 py-3 text-[15px]",
   xl: "min-h-14 rounded-[10px] px-5 py-3 text-[15px]",
   icon: "min-h-11 min-w-11 rounded-lg p-0",
@@ -62,7 +62,7 @@ export default function Button({
       aria-busy={loading || undefined}
       className={clsx(
         "group relative isolate inline-flex items-center justify-center gap-2 overflow-hidden border font-medium tracking-normal",
-        "transition-[background,border-color,color,box-shadow,filter] duration-300 ease-out",
+        "transition-[background,border-color,color,box-shadow,filter] duration-150 ease-in-out",
         "focus-ring disabled:pointer-events-none disabled:opacity-50 disabled:shadow-none",
         VARIANTS[variant],
         SIZES[size],

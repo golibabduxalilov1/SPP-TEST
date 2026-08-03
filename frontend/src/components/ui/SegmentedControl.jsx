@@ -1,16 +1,17 @@
 import { useId } from "react";
 import clsx from "clsx";
-import { motion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import Button from "./Button";
 
 export default function SegmentedControl({ options, value, onChange, className }) {
   const groupId = useId();
+  const prefersReducedMotion = useReducedMotion();
 
   return (
     <div
       className={clsx(
-        "flex w-fit max-w-full flex-wrap gap-1 rounded-xl border border-(--border-subtle) bg-(--surface-muted) p-1",
-        "shadow-[inset_0_1px_2px_rgba(74,50,35,0.06)]",
+        "flex w-fit max-w-full flex-wrap gap-1 rounded-[10px] border border-(--border-subtle) bg-(--surface-muted) p-0.75",
+        "shadow-[inset_0_1px_2px_rgb(0_0_0/0.04)]",
         className
       )}
     >
@@ -26,16 +27,16 @@ export default function SegmentedControl({ options, value, onChange, className }
             onClick={() => onChange(opt.value)}
             aria-pressed={active}
             className={clsx(
-              "relative min-h-11! rounded-lg! border-transparent! px-[18px]! py-2.5! text-sm! font-medium!",
+              "relative min-h-8.25! rounded-lg! border-transparent! px-3.5! py-1.5! text-[0.8125rem]!",
               active
-                ? "text-(--ink)! hover:bg-transparent!"
-                : "text-(--ink-soft)! hover:bg-black/[0.03]! hover:text-(--ink)!"
+                ? "text-(--ink)! font-semibold! hover:bg-transparent!"
+                : "text-(--ink-soft)! font-medium! hover:bg-black/2! hover:text-(--ink)!"
             )}
           >
             {active && (
               <motion.span
                 layoutId={`${groupId}-active-pill`}
-                transition={{ type: "spring", stiffness: 420, damping: 34 }}
+                transition={prefersReducedMotion ? { duration: 0 } : { type: "spring", stiffness: 500, damping: 35 }}
                 className="absolute inset-0 -z-0 rounded-lg bg-(--surface) elevation-sm"
               />
             )}

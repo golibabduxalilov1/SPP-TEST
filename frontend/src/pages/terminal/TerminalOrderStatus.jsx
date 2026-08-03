@@ -157,6 +157,7 @@ export default function TerminalOrderStatus() {
 
           <form onSubmit={submitManual} className="mt-4 flex flex-col gap-2 sm:flex-row">
             <Input
+              size="lg"
               value={manualToken}
               onChange={(e) => setManualToken(e.target.value)}
               placeholder="Yoki QR tokenni qo'lda kiriting..."

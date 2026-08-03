@@ -100,7 +100,7 @@ export default function TerminalPackaging() {
           <CardBody>
             <form onSubmit={startOrder} className="space-y-4">
               <Field label="Buyurtma raqami">
-                <Input value={orderNo} onChange={(e) => setOrderNo(e.target.value)} autoFocus className="terminal-tap" />
+                <Input size="lg" value={orderNo} onChange={(e) => setOrderNo(e.target.value)} autoFocus className="terminal-tap" />
               </Field>
               <Button type="submit" size="xl" className="w-full">Boshlash</Button>
             </form>

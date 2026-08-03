@@ -208,6 +208,7 @@ export default function TerminalLogin() {
           </p>
           <Field label={<span className="text-white/70">Bosqich</span>}>
             <Select
+              size="lg"
               value={fallbackStageId}
               onChange={(e) => setFallbackStageId(e.target.value)}
               className="border-white/15 bg-white/10 text-white [&>option]:text-(--ink)"

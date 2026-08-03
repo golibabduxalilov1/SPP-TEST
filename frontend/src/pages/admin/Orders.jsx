@@ -107,7 +107,7 @@ export default function Orders() {
           actions={
             <div data-tutorial="orders-filters" className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
               <div className="relative w-full sm:w-auto">
-                <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-(--ink-soft)" />
+                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-(--ink-faint)" />
                 <Input className="pl-8 w-full sm:w-56" placeholder="Qidirish..." value={search} onChange={(e) => setSearch(e.target.value)} />
               </div>
               <Select
