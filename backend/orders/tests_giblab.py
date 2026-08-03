@@ -24,6 +24,7 @@ from accounts.models import Role, User
 from core.models import AuditLog
 from manufacturing.models import Operation
 
+from .constants import STANDARD_OPERATION_CODES
 from .giblab import file_reader, mapper, parser, validator
 from .giblab.exceptions import GibLabImportError
 from .models import BOM, BOMItem, GibLabImportBatch, Order, OrderDetail, Part, PartRoute, Product
@@ -188,7 +189,7 @@ class GibLabParserTests(APITestCase):
         root = file_reader.parse_xml_safely(xml)
         project = parser.parse(root)
         errors, _warnings = validator.structural_validate(project)
-        berrors, _bwarnings, _codes = validator.business_validate(project, set())
+        berrors, _bwarnings, _codes = validator.business_validate(project, set(), [])
         self.assertTrue(any(e["code"] == "MATERIAL_NOT_FOUND" for e in berrors))
 
     def test_missing_code_gets_deterministic_fallback_and_warns(self):
@@ -257,7 +258,7 @@ class GibLabValidatorTests(APITestCase):
         root = file_reader.parse_xml_safely(xml)
         project = parser.parse(root)
         errors, _w = validator.structural_validate(project)
-        berrors, bwarnings, _codes = validator.business_validate(project, {"ARRA"})
+        berrors, bwarnings, _codes = validator.business_validate(project, {"ARRA"}, ["ARRA"])
         self.assertFalse(any(e["code"] == "QUANTITY_MISMATCH" for e in errors + berrors))
         self.assertTrue(any(w["code"] == "QUANTITY_MISMATCH" for w in bwarnings))
 
@@ -268,6 +269,24 @@ class GibLabValidatorTests(APITestCase):
         error = next(e for e in errors if e["code"] == "MULTIPLE_PRODUCTS_NOT_SUPPORTED")
         self.assertEqual(error["details"]["count"], 2)
         self.assertEqual(sorted(error["details"]["names"]), ["P1", "P2"])
+
+    def test_every_active_operation_is_appended_to_the_route_regardless_of_giblab_data(self):
+        """A Part's route must include every active MES operation -- not just
+        the ones GibLab positively identified (CS/EL/XNC_BORE) -- mirroring
+        assign_active_stages_route() in the manual order flow, so Tablo's
+        per-operation columns are always fillable."""
+        root = file_reader.parse_xml_safely(MINIMAL_PRODUCT_XML)
+        project = parser.parse(root)
+        active_codes = list(STANDARD_OPERATION_CODES)
+        validator.structural_validate(project)
+        _berrors, _bwarnings, part_operation_codes = validator.business_validate(
+            project, set(active_codes), active_codes,
+        )
+        part_external_id = project.products[0].parts[0].external_id
+        # CS was actually present in the XML, so ARRA is pinned to the front
+        # by resolve_part_operation_codes -- here it's already first in
+        # active_codes, so the result equals the full active list untouched.
+        self.assertEqual(part_operation_codes[part_external_id], active_codes)
 
 
 class GibLabRegressionMappingTests(APITestCase):
@@ -284,7 +303,7 @@ class GibLabRegressionMappingTests(APITestCase):
         root = file_reader.parse_xml_safely(xml_text)
         project = parser.parse(root)
         errors, warnings = validator.structural_validate(project)
-        berrors, bwarnings, codes = validator.business_validate(project, existing_codes)
+        berrors, bwarnings, codes = validator.business_validate(project, existing_codes, sorted(existing_codes))
         plan = mapper.build_import_plan(project, errors + berrors, warnings + bwarnings, codes)
         return project, plan
 

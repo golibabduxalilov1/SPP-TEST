@@ -110,7 +110,7 @@ def _resolve_edge_material(project: GibLabProjectDTO, edge, errors, warnings, pa
         )
 
 
-def business_validate(project: GibLabProjectDTO, existing_operation_codes: set):
+def business_validate(project: GibLabProjectDTO, existing_operation_codes: set, active_operation_codes: list):
     errors = []
     warnings = []
 
@@ -177,7 +177,7 @@ def business_validate(project: GibLabProjectDTO, existing_operation_codes: set):
     part_operation_codes = {}
     for product in project.products:
         for part in product.parts:
-            codes = operation_mapping.resolve_part_operation_codes(part, project.materials_by_id, warnings)
+            codes = operation_mapping.resolve_part_operation_codes(part, project.materials_by_id, warnings, active_operation_codes)
             part_operation_codes[part.external_id] = codes
             for code in codes:
                 if code not in existing_operation_codes:

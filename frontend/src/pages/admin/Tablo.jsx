@@ -15,8 +15,8 @@ import { format } from "date-fns";
 
 // Icon + label for each priority. "normal" renders nothing.
 const PRIORITY_ICONS = {
-  high: { Icon: Zap, label: "Yuqori", className: "fill-status-orange text-status-orange" },
-  urgent: { Icon: CircleAlert, label: "Shoshilinch", className: "text-status-red" },
+  high: { Icon: CircleAlert, label: "Yuqori", className: "text-status-orange" },
+  urgent: { Icon: Zap, label: "Shoshilinch", className: "fill-status-red text-status-red" },
 };
 
 // Compact priority marker shown left of the product name. Click/tap toggles a

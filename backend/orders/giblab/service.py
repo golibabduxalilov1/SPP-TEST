@@ -46,9 +46,14 @@ def _analyze(uploaded_file):
 
     business_errors, business_warnings, part_operation_codes = [], [], {}
     if project.products and not any(e["code"] in ("UNSUPPORTED_GIBLAB_VERSION", "MULTIPLE_PRODUCTS_NOT_SUPPORTED") for e in structural_errors):
-        existing_operation_codes = set(Operation.objects.filter(is_active=True).values_list("code", flat=True))
+        # Fetched once per import (not per part) to avoid an N+1 query --
+        # every Part's route needs the same full active-operation list.
+        active_operation_codes = list(
+            Operation.objects.filter(is_active=True).order_by("order_index", "id").values_list("code", flat=True)
+        )
+        existing_operation_codes = set(active_operation_codes)
         business_errors, business_warnings, part_operation_codes = validator.business_validate(
-            project, existing_operation_codes
+            project, existing_operation_codes, active_operation_codes
         )
 
     errors = structural_errors + business_errors

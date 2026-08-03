@@ -1,10 +1,15 @@
 """GibLab operation type -> MES `manufacturing.Operation.code` mapping.
 
-Only what the business has actually confirmed is mapped here (spec section
-9). `CL` and `XNC` mill/cut are deliberately left unmapped: guessing a
-production route for an undecided business rule is worse than skipping
-that route step and surfacing a warning so the mapping below can be
-extended once the rule is confirmed.
+Business decision: every currently active MES operation belongs on a
+GibLab-imported Part's route, mirroring `orders.services.
+assign_active_stages_route()` in the manual "Yangi buyurtma" flow -- so
+Tablo's per-operation columns are always fillable, regardless of what the
+GibLab XML happened to record. What the XML *does* positively identify
+(CS/EL/XNC_BORE, spec section 9) only decides where those specific
+operations land at the front of the route; every other active operation is
+appended after them in `order_index` order. `CL` and XNC mill/cut counts
+still have no confirmed MES mapping of their own -- they no longer gate
+anything, they just emit a diagnostic warning.
 """
 
 from .exceptions import error_dict
@@ -27,9 +32,15 @@ def is_oval_material_name(name: str) -> bool:
     return any(keyword in lowered for keyword in OVAL_KEYWORDS)
 
 
-def resolve_part_operation_codes(part_dto, materials_by_id, warnings):
+def resolve_part_operation_codes(part_dto, materials_by_id, warnings, active_operation_codes):
     """Ordered, de-duplicated list of MES Operation codes this Part's route
-    must include, derived only from what the XML actually recorded."""
+    must include: every currently active operation, with whatever the XML
+    positively identified (CS/EL/XNC_BORE) pinned to the front in that
+    order, followed by every other active operation in `order_index` order.
+
+    `active_operation_codes` must already be ordered (`order_index`, `id`)
+    -- the caller fetches it once per import, not per part, to avoid an
+    N+1 query."""
     codes = []
 
     if part_dto.primary_cut_operation_type == "CS":
@@ -38,7 +49,8 @@ def resolve_part_operation_codes(part_dto, materials_by_id, warnings):
         warnings.append(
             error_dict(
                 "UNKNOWN_OPERATION",
-                "CL (chiziqli kesish) uchun MES operatsiya mappingi biznes tomonidan tasdiqlanmagan",
+                "CL (chiziqli kesish) uchun MES operatsiya mappingi biznes tomonidan tasdiqlanmagan "
+                "(operatsiya baribir umumiy faol marshrutga qo'shiladi)",
                 entity_type="part", external_id=part_dto.external_id,
             )
         )
@@ -65,7 +77,8 @@ def resolve_part_operation_codes(part_dto, materials_by_id, warnings):
             warnings.append(
                 error_dict(
                     "UNKNOWN_OPERATION",
-                    "XNC frezerlash (countMill) uchun MES operatsiya mappingi biznes tomonidan tasdiqlanmagan",
+                    "XNC frezerlash (countMill) uchun MES operatsiya mappingi biznes tomonidan tasdiqlanmagan "
+                    "(operatsiya baribir umumiy faol marshrutga qo'shiladi)",
                     entity_type="part", external_id=part_dto.external_id,
                 )
             )
@@ -73,7 +86,8 @@ def resolve_part_operation_codes(part_dto, materials_by_id, warnings):
             warnings.append(
                 error_dict(
                     "UNKNOWN_OPERATION",
-                    "XNC kesish (countCut) uchun MES operatsiya mappingi biznes tomonidan tasdiqlanmagan",
+                    "XNC kesish (countCut) uchun MES operatsiya mappingi biznes tomonidan tasdiqlanmagan "
+                    "(operatsiya baribir umumiy faol marshrutga qo'shiladi)",
                     entity_type="part", external_id=part_dto.external_id,
                 )
             )
@@ -84,4 +98,10 @@ def resolve_part_operation_codes(part_dto, materials_by_id, warnings):
         if code not in seen:
             seen.add(code)
             ordered.append(code)
+
+    for code in active_operation_codes:
+        if code not in seen:
+            seen.add(code)
+            ordered.append(code)
+
     return ordered
