@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Printer, Search } from "lucide-react";
+import { Printer, Search, X } from "lucide-react";
 import toast from "react-hot-toast";
 import { adminApi } from "../../api/client";
 import { Card, CardBody, CardHeader } from "../../components/ui/Card";
@@ -51,28 +51,48 @@ export default function Labels() {
       <PageHeader eyebrow="Chop etish" title="QR / Birka chop etish" subtitle="Buyurtma yoki detal kodi bo'yicha qidirib, birka chop eting" />
 
       <Card>
-        <CardBody data-tutorial="labels-search-card" className="flex flex-wrap items-end gap-3">
-          <Field label="Buyurtma raqami yoki detal kodi/nomi" className="w-full sm:w-auto">
-            <div className="relative w-full sm:w-72">
-              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-(--ink-faint)" />
-              <Input className="pl-8" value={search} onChange={(e) => setSearch(e.target.value)} onKeyDown={(e) => e.key === "Enter" && find()} />
+        <CardBody data-tutorial="labels-search-card" className="flex flex-wrap items-end gap-4">
+          <Field label="Buyurtma raqami yoki detal kodi/nomi" className="min-w-65 flex-1">
+            <div className="relative">
+              <Search size={18} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-(--ink-faint)" />
+              <Input
+                className="h-12 pl-11 text-[15px]"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && find()}
+                placeholder="Masalan: #1024 yoki DET-2201"
+                trailing={
+                  search ? (
+                    <button
+                      type="button"
+                      onClick={() => setSearch("")}
+                      aria-label="Qidiruvni tozalash"
+                      className="mr-1.5 flex h-7 w-7 items-center justify-center rounded-full text-(--ink-faint) transition-colors duration-150 hover:bg-(--surface-muted) hover:text-(--ink)"
+                    >
+                      <X size={15} />
+                    </button>
+                  ) : null
+                }
+              />
             </div>
           </Field>
           <Field label="Kenglik (mm)" className="w-full sm:w-auto">
-            <Select value={width} onChange={(e) => setWidth(Number(e.target.value))} className="w-full sm:w-28">
+            <Select value={width} onChange={(e) => setWidth(Number(e.target.value))} className="h-12 w-full text-[15px] sm:w-32">
               <option value={58}>58</option>
               <option value={70}>70</option>
               <option value={100}>100</option>
             </Select>
           </Field>
           <Field label="Balandlik (mm)" className="w-full sm:w-auto">
-            <Select value={height} onChange={(e) => setHeight(Number(e.target.value))} className="w-full sm:w-28">
+            <Select value={height} onChange={(e) => setHeight(Number(e.target.value))} className="h-12 w-full text-[15px] sm:w-32">
               <option value={40}>40</option>
               <option value={50}>50</option>
               <option value={60}>60</option>
             </Select>
           </Field>
-          <Button onClick={find} disabled={loading} className="w-full sm:w-auto">Qidirish</Button>
+          <Button onClick={find} disabled={loading} className="h-12 w-full px-6 text-[15px] sm:w-auto">
+            <Search size={16} /> Qidirish
+          </Button>
         </CardBody>
       </Card>
 
