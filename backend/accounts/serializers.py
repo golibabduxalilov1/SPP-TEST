@@ -40,7 +40,7 @@ class UserSerializer(serializers.ModelSerializer):
             "multi_stage_enabled", "assigned_operation",
             "assigned_operation_name", "assigned_operations", "assigned_operations_detail",
             "assigned_machines", "assigned_machines_detail", "needs_assignment_warning",
-            "specialization", "specialization_display", "uses_terminal", "badge_token",
+            "specialization", "specialization_display", "uses_terminal", "badge_token", "photo",
         ]
         # badge_token is also editable=False on the model (belt-and-braces —
         # it must never be settable through this API, only auto-generated once

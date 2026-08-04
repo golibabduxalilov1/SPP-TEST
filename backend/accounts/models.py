@@ -150,6 +150,8 @@ class User(AbstractUser):
     # Omborchi terminaldan foydalanadimi — shunga qarab PIN majburiy bo'ladi.
     uses_terminal = models.BooleanField(default=False)
 
+    photo = models.ImageField(upload_to="employee_photos/", blank=True, null=True)
+
     def __str__(self):
         return f"{self.get_full_name() or self.phone} ({self.get_role_display()})"
 

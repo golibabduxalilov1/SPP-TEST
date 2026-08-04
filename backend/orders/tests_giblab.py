@@ -213,6 +213,9 @@ class GibLabParserTests(APITestCase):
         self.assertEqual(part.code, project2.products[0].parts[0].code)
 
     def test_missing_code_without_name_falls_back_to_id(self):
+        """The id=21 bug case: no name, no code, no part.code -- only id.
+        Both the pre-existing code fallback and the new name fallback fire,
+        so the part is no longer blocked by a missing-name error."""
         xml = MINIMAL_PRODUCT_XML.replace(
             '<part id="1" code="C1" name="Part1" count="1" usedCount="2" l="500" w="300"/>',
             '<part id="1" count="1" usedCount="2" l="500" w="300"/>',
@@ -220,10 +223,65 @@ class GibLabParserTests(APITestCase):
         root = file_reader.parse_xml_safely(xml)
         project = parser.parse(root)
         part = project.products[0].parts[0]
-        self.assertEqual(part.code, "1")  # id-only fallback -- still usable, id is present
+        self.assertEqual(part.code, "1")  # id-only code fallback -- unchanged
+        self.assertEqual(part.name, "GibLab Part #1")  # id-only name fallback
 
         errors, _warnings = validator.structural_validate(project)
-        self.assertTrue(any(e["code"] == "MISSING_REQUIRED_FIELD" and "name" in e["message"] for e in errors))
+        self.assertFalse(any(e["code"] == "MISSING_REQUIRED_FIELD" and "name" in e["message"] for e in errors))
+
+        name_warnings = [w for w in project.warnings if w["code"] == "PART_NAME_FALLBACK_GENERATED"]
+        self.assertEqual(len(name_warnings), 1)
+        self.assertEqual(name_warnings[0]["external_id"], "1")
+        self.assertEqual(name_warnings[0]["details"]["generated_name"], "GibLab Part #1")
+        self.assertEqual(name_warnings[0]["details"]["source"], "external_id")
+        self.assertTrue(any(w["code"] == "PART_CODE_FALLBACK_GENERATED" for w in project.warnings))
+
+    def test_name_and_code_present_no_fallback_triggered(self):
+        root = file_reader.parse_xml_safely(MINIMAL_PRODUCT_XML)
+        project = parser.parse(root)
+        part = project.products[0].parts[0]
+        self.assertEqual(part.name, "Part1")
+        self.assertEqual(part.code, "C1")
+        fallback_codes = {"PART_NAME_FALLBACK_GENERATED", "PART_CODE_FALLBACK_GENERATED"}
+        self.assertFalse(any(w["code"] in fallback_codes for w in project.warnings))
+
+    def test_missing_name_falls_back_to_original_code(self):
+        xml = MINIMAL_PRODUCT_XML.replace(
+            '<part id="1" code="C1" name="Part1" count="1" usedCount="2" l="500" w="300"/>',
+            '<part id="1" code="C1" count="1" usedCount="2" l="500" w="300"/>',
+        )
+        root = file_reader.parse_xml_safely(xml)
+        project = parser.parse(root)
+        part = project.products[0].parts[0]
+        self.assertEqual(part.name, "C1")
+        self.assertEqual(part.code, "C1")
+
+        errors, _warnings = validator.structural_validate(project)
+        self.assertFalse(any(e["code"] == "MISSING_REQUIRED_FIELD" and "name" in e["message"] for e in errors))
+        # `code` was present on the XML -- the pre-existing code fallback must not fire.
+        self.assertFalse(any(w["code"] == "PART_CODE_FALLBACK_GENERATED" for w in project.warnings))
+
+        name_warnings = [w for w in project.warnings if w["code"] == "PART_NAME_FALLBACK_GENERATED"]
+        self.assertEqual(len(name_warnings), 1)
+        self.assertEqual(name_warnings[0]["details"]["generated_name"], "C1")
+        self.assertEqual(name_warnings[0]["details"]["source"], "code")
+
+    def test_missing_name_falls_back_to_part_dot_code(self):
+        xml = MINIMAL_PRODUCT_XML.replace(
+            '<part id="1" code="C1" name="Part1" count="1" usedCount="2" l="500" w="300"/>',
+            '<part id="1" part.code="PC1" count="1" usedCount="2" l="500" w="300"/>',
+        )
+        root = file_reader.parse_xml_safely(xml)
+        project = parser.parse(root)
+        part = project.products[0].parts[0]
+        self.assertEqual(part.name, "PC1")
+        self.assertEqual(part.code, "PC1")
+
+        name_warnings = [w for w in project.warnings if w["code"] == "PART_NAME_FALLBACK_GENERATED"]
+        self.assertEqual(len(name_warnings), 1)
+        self.assertEqual(name_warnings[0]["details"]["generated_name"], "PC1")
+        self.assertEqual(name_warnings[0]["details"]["source"], "part.code")
+        self.assertFalse(any(w["code"] == "PART_CODE_FALLBACK_GENERATED" for w in project.warnings))
 
     def test_missing_code_id_and_name_leaves_import_fatal(self):
         """Boundary case: with neither id nor name, there is nothing to build

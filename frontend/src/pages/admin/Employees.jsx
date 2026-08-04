@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Ban, CheckCircle2, Pencil, Plus, Printer, QrCode, Trash2 } from "lucide-react";
-import { QRCodeCanvas } from "qrcode.react";
+import { Ban, Camera, CheckCircle2, IdCard, Pencil, Plus, Trash2, User as UserIcon } from "lucide-react";
 import toast from "react-hot-toast";
 import { adminApi } from "../../api/client";
 import { useAuthStore } from "../../store/authStore";
@@ -15,6 +14,8 @@ import Modal from "../../components/ui/Modal";
 import Toggle from "../../components/ui/Toggle";
 import { Checkbox } from "../../components/ui/Checkbox";
 import { formatUzPhone, normalizeUzPhone } from "../../lib/phone";
+import { departmentLabel } from "../../lib/employees";
+import EmployeeBadge from "../../components/employees/EmployeeBadge";
 
 const ROLE_OPTIONS = [
   ["super_admin", "Super Admin"], ["admin", "Admin"], ["director", "Rahbar"], ["manager", "Ishlab chiqarish menejeri"],
@@ -117,15 +118,6 @@ export default function Employees() {
     }
   }
 
-  function departmentLabel(employee) {
-    if (employee.role === "operator") return employee.department_name || "—";
-    if (employee.role === "manager") {
-      const names = (employee.managed_departments_detail || []).map((t) => t.name);
-      return names.length ? names.join(", ") : "—";
-    }
-    return "—";
-  }
-
   if (loading) return <PageLoader />;
 
   return (
@@ -174,9 +166,21 @@ export default function Employees() {
                     </div>
                   </Td>
                   <Td className="whitespace-nowrap">
-                    {employee.id === currentUser?.id ? (
-                      currentUser?.role === "super_admin" ? (
-                        <div className="ml-auto flex w-fit items-center gap-1.5">
+                    <div className="ml-auto flex w-fit items-center gap-1.5">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        magnetic={false}
+                        onClick={() => setQrEmployee(employee)}
+                        aria-label={`${employee.username} xodimining beyjigi`}
+                        title="Beyjik"
+                        className="min-h-9! min-w-9! rounded-lg! border-(--border-strong)! px-0! text-(--accent-strong)! hover:bg-(--accent-soft)!"
+                      >
+                        <IdCard size={14} strokeWidth={2.2} />
+                      </Button>
+                      {employee.id === currentUser?.id ? (
+                        currentUser?.role === "super_admin" && (
                           <Button
                             type="button"
                             variant="ghost"
@@ -189,65 +193,49 @@ export default function Employees() {
                           >
                             <Pencil size={14} strokeWidth={2.2} />
                           </Button>
-                        </div>
-                      ) : (
-                        <span className="ml-auto block w-fit text-xs text-(--ink-soft)">—</span>
-                      )
-                    ) : employee.role === "super_admin" ? (
-                      <span className="ml-auto block w-fit text-xs text-(--ink-soft)">—</span>
-                    ) : (
-                      <div className="ml-auto flex w-fit items-center gap-1.5">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          magnetic={false}
-                          onClick={() => setQrEmployee(employee)}
-                          aria-label={`${employee.username} xodimining QR kodi`}
-                          title="QR kod"
-                          className="min-h-9! min-w-9! rounded-lg! border-(--border-strong)! px-0! text-(--accent-strong)! hover:bg-(--accent-soft)!"
-                        >
-                          <QrCode size={14} strokeWidth={2.2} />
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          magnetic={false}
-                          onClick={() => toggleActive(employee)}
-                          loading={togglingId === employee.id}
-                          aria-label={`${employee.username} xodimini ${employee.is_active_employee ? "nofaol" : "faol"} qilish`}
-                          title={employee.is_active_employee ? "Nofaol qilish" : "Faol qilish"}
-                          className={`min-h-9! min-w-9! rounded-lg! border-(--border-strong)! px-0! ${employee.is_active_employee ? "text-(--ink-soft)! hover:bg-(--surface-muted)!" : "text-emerald-600! hover:bg-(--surface-muted)!"}`}
-                        >
-                          {employee.is_active_employee ? <Ban size={14} strokeWidth={2.2} /> : <CheckCircle2 size={14} strokeWidth={2.2} />}
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          magnetic={false}
-                          onClick={() => openEditModal(employee)}
-                          aria-label={`${employee.username} xodimini tahrirlash`}
-                          title="Tahrirlash"
-                          className="min-h-9! min-w-9! rounded-lg! border-(--border-strong)! px-0! text-(--accent-strong)! hover:bg-(--accent-soft)!"
-                        >
-                          <Pencil size={14} strokeWidth={2.2} />
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          magnetic={false}
-                          onClick={() => setDeletingEmployee(employee)}
-                          aria-label={`${employee.username} xodimini o'chirish`}
-                          title="O'chirish"
-                          className="min-h-9! min-w-9! rounded-lg! border-(--border-strong)! px-0! text-status-red! hover:bg-(--color-status-red-bg)!"
-                        >
-                          <Trash2 size={14} strokeWidth={2.2} />
-                        </Button>
-                      </div>
-                    )}
+                        )
+                      ) : employee.role === "super_admin" ? null : (
+                        <>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            magnetic={false}
+                            onClick={() => toggleActive(employee)}
+                            loading={togglingId === employee.id}
+                            aria-label={`${employee.username} xodimini ${employee.is_active_employee ? "nofaol" : "faol"} qilish`}
+                            title={employee.is_active_employee ? "Nofaol qilish" : "Faol qilish"}
+                            className={`min-h-9! min-w-9! rounded-lg! border-(--border-strong)! px-0! ${employee.is_active_employee ? "text-(--ink-soft)! hover:bg-(--surface-muted)!" : "text-emerald-600! hover:bg-(--surface-muted)!"}`}
+                          >
+                            {employee.is_active_employee ? <Ban size={14} strokeWidth={2.2} /> : <CheckCircle2 size={14} strokeWidth={2.2} />}
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            magnetic={false}
+                            onClick={() => openEditModal(employee)}
+                            aria-label={`${employee.username} xodimini tahrirlash`}
+                            title="Tahrirlash"
+                            className="min-h-9! min-w-9! rounded-lg! border-(--border-strong)! px-0! text-(--accent-strong)! hover:bg-(--accent-soft)!"
+                          >
+                            <Pencil size={14} strokeWidth={2.2} />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            magnetic={false}
+                            onClick={() => setDeletingEmployee(employee)}
+                            aria-label={`${employee.username} xodimini o'chirish`}
+                            title="O'chirish"
+                            className="min-h-9! min-w-9! rounded-lg! border-(--border-strong)! px-0! text-status-red! hover:bg-(--color-status-red-bg)!"
+                          >
+                            <Trash2 size={14} strokeWidth={2.2} />
+                          </Button>
+                        </>
+                      )}
+                    </div>
                   </Td>
                 </Tr>
               ))}
@@ -269,59 +257,18 @@ export default function Employees() {
         onClose={() => setDeletingEmployee(null)}
         onDeleted={load}
       />
-      <EmployeeQRModal employee={qrEmployee} onClose={() => setQrEmployee(null)} />
+      <EmployeeBadgeModal employee={qrEmployee} onClose={() => setQrEmployee(null)} />
     </div>
   );
 }
 
-function EmployeeQRModal({ employee, onClose }) {
-  const canvasRef = useRef(null);
-
-  function download() {
-    const canvas = canvasRef.current;
-    if (!canvas || !employee) return;
-    const link = document.createElement("a");
-    link.href = canvas.toDataURL("image/png");
-    link.download = `xodim-${employee.id}-qr.png`;
-    link.click();
-  }
-
-  function print() {
-    const canvas = canvasRef.current;
-    if (!canvas || !employee) return;
-    const dataUrl = canvas.toDataURL("image/png");
-    const win = window.open("", "_blank", "width=420,height=520");
-    if (!win) return;
-    const fullName = [employee.first_name, employee.last_name].filter(Boolean).join(" ") || employee.username;
-    win.document.write(
-      `<title>QR — ${fullName}</title>` +
-        `<body style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;margin:0;font-family:sans-serif;gap:12px;">` +
-        `<img src="${dataUrl}" style="width:280px;height:280px" onload="window.print()" />` +
-        `<p style="font-size:14px;font-weight:600;color:#222;">${fullName}</p>` +
-        `</body>`
-    );
-    win.document.close();
-  }
-
+function EmployeeBadgeModal({ employee, onClose }) {
   if (!employee) return null;
   const fullName = [employee.first_name, employee.last_name].filter(Boolean).join(" ") || employee.username;
 
   return (
-    <Modal open={Boolean(employee)} onClose={onClose} title={`Xodim QR kodi — ${fullName}`} size="sm">
-      <div className="flex flex-col items-center gap-4">
-        <div className="rounded-2xl border border-(--border-subtle) bg-white p-4">
-          <QRCodeCanvas ref={canvasRef} value={employee.badge_token} size={200} level="M" />
-        </div>
-        <p className="text-center text-sm text-(--ink-soft)">{fullName}</p>
-        <div className="flex w-full flex-col gap-2 sm:flex-row">
-          <Button className="flex-1" variant="secondary" onClick={download}>
-            Yuklab olish
-          </Button>
-          <Button className="flex-1" onClick={print}>
-            <Printer size={15} /> Chop etish
-          </Button>
-        </div>
-      </div>
+    <Modal open={Boolean(employee)} onClose={onClose} title={`Xodim beyjigi — ${fullName}`} size="lg">
+      <EmployeeBadge employee={employee} />
     </Modal>
   );
 }
@@ -332,6 +279,9 @@ function EmployeeModal({ open, employee, currentUser, onClose, onSaved, onCreate
   const [tsexes, setTsexes] = useState([]);
   const [machines, setMachines] = useState([]);
   const [operations, setOperations] = useState([]);
+  const [photoFile, setPhotoFile] = useState(null);
+  const [photoPreview, setPhotoPreview] = useState(null);
+  const photoInputRef = useRef(null);
   const isEditing = Boolean(employee);
   const isEditingSelf = isEditing && employee?.id === currentUser?.id;
   const roleOptions = currentUser?.role === "admin"
@@ -394,7 +344,23 @@ function EmployeeModal({ open, employee, currentUser, onClose, onSaved, onCreate
     } else {
       setForm({ ...EMPTY_FORM });
     }
+    setPhotoFile(null);
+    setPhotoPreview((prev) => {
+      if (prev && prev.startsWith("blob:")) URL.revokeObjectURL(prev);
+      return employee?.photo || null;
+    });
   }, [employee, open]);
+
+  function handlePhotoChange(event) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    setPhotoFile(file);
+    setPhotoPreview((prev) => {
+      if (prev && prev.startsWith("blob:")) URL.revokeObjectURL(prev);
+      return URL.createObjectURL(file);
+    });
+  }
 
   // Tsex tanlanmaguncha stanoklar ro'yxati chiqmaydi; tanlangandan keyin ham
   // faqat shu tsexga tegishli stanoklar ko'rsatiladi.
@@ -523,14 +489,25 @@ function EmployeeModal({ open, employee, currentUser, onClose, onSaved, onCreate
       if (isManager) {
         payload.managed_departments = form.managed_departments;
       }
+      let savedEmployee;
       if (isEditing) {
-        await adminApi.patch(`/employees/${employee.id}/`, payload);
+        const { data } = await adminApi.patch(`/employees/${employee.id}/`, payload);
+        savedEmployee = data;
         toast.success("Xodim ma'lumotlari yangilandi");
       } else {
         const { data } = await adminApi.post("/employees/", payload);
+        savedEmployee = data;
         toast.success("Xodim qo'shildi");
-        onCreated?.(data);
       }
+      if (photoFile) {
+        const photoData = new FormData();
+        photoData.append("photo", photoFile);
+        const { data } = await adminApi.patch(`/employees/${savedEmployee.id}/`, photoData, {
+          headers: { "Content-Type": "multipart/form-data" },
+        });
+        savedEmployee = data;
+      }
+      if (!isEditing) onCreated?.(savedEmployee);
       await onSaved();
       onClose();
     } catch (error) {
@@ -543,6 +520,33 @@ function EmployeeModal({ open, employee, currentUser, onClose, onSaved, onCreate
   return (
     <Modal open={open} onClose={onClose} title={isEditing ? "Xodimni tahrirlash" : "Yangi xodim"}>
       <form onSubmit={submit} className="space-y-4">
+        {/* 0. Rasm */}
+        <div className="flex justify-center">
+          <input
+            ref={photoInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={handlePhotoChange}
+          />
+          <button
+            type="button"
+            onClick={() => photoInputRef.current?.click()}
+            className="group relative h-24 w-24 overflow-hidden rounded-full border-2 border-(--border-strong) bg-(--surface-muted)"
+            aria-label="Xodim rasmini yuklash"
+            title="Rasm yuklash uchun bosing"
+          >
+            {photoPreview ? (
+              <img src={photoPreview} alt="Xodim rasmi" className="h-full w-full object-cover" />
+            ) : (
+              <UserIcon size={36} className="absolute inset-0 m-auto text-(--ink-faint)" />
+            )}
+            <span className="absolute inset-0 flex items-center justify-center bg-black/50 text-white opacity-0 transition group-hover:opacity-100">
+              <Camera size={20} />
+            </span>
+          </button>
+        </div>
+
         {/* 1. Shaxsiy ma'lumotlar */}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field label="Ism"><Input required value={form.first_name} onChange={(e) => setForm({ ...form, first_name: e.target.value })} /></Field>

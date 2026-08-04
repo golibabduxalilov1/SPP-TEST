@@ -1,0 +1,79 @@
+@import url("https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Cinzel:wght@700&display=swap");
+
+.employee-badge {
+  font-family: "Plus Jakarta Sans", sans-serif;
+}
+
+.employee-badge-brand {
+  font-family: "Cinzel", serif;
+}
+
+.employee-badge-wood {
+  background-color: #2a1810;
+  background-image: radial-gradient(#3e2318 1px, transparent 0);
+  background-size: 16px 16px;
+}
+
+.employee-badge-lanyard-strap {
+  background: linear-gradient(90deg, #1e293b 0%, #475569 50%, #1e293b 100%);
+  box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.2), 0 4px 8px rgba(0, 0, 0, 0.5);
+}
+
+.employee-badge-clip-metallic {
+  background: linear-gradient(135deg, #e2e8f0 0%, #94a3b8 50%, #475569 100%);
+}
+
+.employee-badge-perspective {
+  perspective: 1000px;
+}
+
+.employee-badge-card-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transition: transform 0.6s ease-in-out;
+  transform-style: preserve-3d;
+  will-change: transform;
+}
+
+.employee-badge-card-flipped {
+  transform: rotateY(180deg);
+}
+
+.employee-badge-card-front,
+.employee-badge-card-back {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  top: 0;
+  left: 0;
+  /* backface-visibility alone isn't reliable in every Chrome/GPU combo for a
+     subtree this complex (gradients, shadows, rounded corners) — it can fail
+     to cull the away-facing side, letting its (mirrored) content bleed
+     through onto the other face. `visibility` is the deterministic backstop:
+     each face is only visible during the half of the 0.6s rotation where it
+     actually faces the viewer, regardless of whether backface culling works.
+     The 0.3s delay is intentionally symmetric for both the visible->hidden
+     and hidden->visible transition so it behaves the same flipping either
+     direction. */
+  transition: transform 0.6s ease-in-out, visibility 0s linear 0.3s;
+}
+
+.employee-badge-card-front {
+  visibility: visible;
+}
+
+.employee-badge-card-back {
+  visibility: hidden;
+  transform: rotateY(180deg);
+}
+
+.employee-badge-card-flipped .employee-badge-card-front {
+  visibility: hidden;
+}
+
+.employee-badge-card-flipped .employee-badge-card-back {
+  visibility: visible;
+}

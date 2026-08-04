@@ -76,12 +76,34 @@ def _fallback_part_code(external_id, name):
 def _parse_product_part(part_el, xml_path_prefix, warnings):
     attrs = part_el.attrib
     external_id = attrs.get("id")
-    name = attrs.get("name", "")
-    code = attrs.get("code") or attrs.get("part.code") or ""
+    original_name = attrs.get("name", "")
+    original_code = attrs.get("code") or ""
+    original_part_code = attrs.get("part.code") or ""
+
+    code = original_code or original_part_code
     fallback_code_used = False
-    if not code and (external_id or name):
-        code = _fallback_part_code(external_id, name)
+    if not code and (external_id or original_name):
+        code = _fallback_part_code(external_id, original_name)
         fallback_code_used = True
+
+    # Name fallback order (spec): original name > original `code` > original
+    # `part.code` > deterministic "GibLab Part #ID". Sourced from the *raw*
+    # code/part.code attributes only -- never from the auto-generated
+    # fallback `code` above, so a code-less, name-less part (e.g. id=21)
+    # still gets "GibLab Part #21" rather than echoing its own generated code.
+    name = original_name
+    name_fallback_source = None
+    if not name:
+        if original_code:
+            name = original_code
+            name_fallback_source = "code"
+        elif original_part_code:
+            name = original_part_code
+            name_fallback_source = "part.code"
+        elif external_id:
+            name = f"GibLab Part #{external_id}"
+            name_fallback_source = "external_id"
+
     count = _int(attrs.get("count"), 1)
     used_count = _int(attrs.get("usedCount"), count)
     length_mm = _dec(attrs.get("l"), Decimal("0"))
@@ -113,6 +135,16 @@ def _parse_product_part(part_el, xml_path_prefix, warnings):
                 "Part code mavjud emas, name/id asosida o'rinbosar kod avtomatik yaratildi",
                 entity_type="part", external_id=external_id, xml_path=part.xml_path,
                 details={"generated_code": code},
+            )
+        )
+
+    if name_fallback_source:
+        warnings.append(
+            error_dict(
+                "PART_NAME_FALLBACK_GENERATED",
+                "Part nomi mavjud emas, o'rinbosar nom avtomatik yaratildi",
+                entity_type="part", external_id=external_id, xml_path=part.xml_path,
+                details={"generated_name": name, "source": name_fallback_source},
             )
         )
 
