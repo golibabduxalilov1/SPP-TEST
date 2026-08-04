@@ -171,7 +171,6 @@ export default function EmployeeBadge({ employee }) {
                         <img
                           src={employee.photo}
                           alt={fullName}
-                          crossOrigin="anonymous"
                           className="h-full w-full object-cover"
                         />
                       ) : (
